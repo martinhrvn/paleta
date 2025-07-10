@@ -63,8 +63,7 @@ func (s *TUISelector) initUI() {
 		SetPlaceholder("Type to filter commands...")
 
 	s.searchInput.SetBorder(true).
-		SetTitle(" Fuzzy Search ").
-		SetTitleAlign(tview.AlignLeft)
+		SetBorderColor(tcell.ColorDarkGray)
 
 	// Create command list
 	s.commandList = tview.NewList().
@@ -74,8 +73,7 @@ func (s *TUISelector) initUI() {
 		SetSelectedTextColor(tcell.ColorWhite)
 
 	s.commandList.SetBorder(true).
-		SetTitle(" Commands ").
-		SetTitleAlign(tview.AlignLeft)
+		SetBorderColor(tcell.ColorDarkGray)
 
 	// Create location list
 	s.locationList = tview.NewList().
@@ -85,8 +83,7 @@ func (s *TUISelector) initUI() {
 		SetSelectedTextColor(tcell.ColorWhite)
 
 	s.locationList.SetBorder(true).
-		SetTitle(" Locations (Space to toggle) ").
-		SetTitleAlign(tview.AlignLeft)
+		SetBorderColor(tcell.ColorDarkGray)
 
 	// Create status text
 	s.statusText = tview.NewTextView().
@@ -94,8 +91,7 @@ func (s *TUISelector) initUI() {
 		SetTextAlign(tview.AlignCenter)
 
 	s.statusText.SetBorder(true).
-		SetTitle(" Filter Status ").
-		SetTitleAlign(tview.AlignLeft)
+		SetBorderColor(tcell.ColorDarkGray)
 
 	// Create help text
 	s.helpText = tview.NewTextView().
@@ -103,8 +99,7 @@ func (s *TUISelector) initUI() {
 		SetText("[yellow]↑/↓[white]: Navigate | [yellow]Tab[white]: Switch panels | [yellow]Enter[white]: Select | [yellow]Ctrl+U[white]: Clear search | [yellow]Ctrl+L[white]: Clear all | [yellow]Esc/Ctrl+C[white]: Cancel")
 
 	s.helpText.SetBorder(true).
-		SetTitle(" Help ").
-		SetTitleAlign(tview.AlignLeft)
+		SetBorderColor(tcell.ColorDarkGray)
 
 	// Set up search input handler
 	s.searchInput.SetChangedFunc(func(text string) {
