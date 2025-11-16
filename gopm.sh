@@ -18,6 +18,12 @@ fi
 
 # Function to find gopm binary
 find_gopm_binary() {
+    # First check if GOPM_BINARY is already set and exists
+    if [ -n "$GOPM_BINARY" ] && [ -f "$GOPM_BINARY" ] && [ -x "$GOPM_BINARY" ]; then
+        echo "$GOPM_BINARY"
+        return 0
+    fi
+    
     # Try different locations in order of preference
     local candidates=(
         "$SCRIPT_DIR/gopm"               # Same directory as script
