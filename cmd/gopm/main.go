@@ -17,6 +17,8 @@ func main() {
 	command := os.Args[1]
 
 	switch command {
+	case "init":
+		handleInitCommand()
 	case "list":
 		handleListCommand()
 	case "select":
@@ -28,6 +30,34 @@ func main() {
 		showUsage()
 		os.Exit(1)
 	}
+}
+
+func handleInitCommand() {
+	// Check for force flag
+	force := false
+	for _, arg := range os.Args[2:] {
+		if arg == "--force" || arg == "-f" {
+			force = true
+			break
+		}
+	}
+
+	// Default config path
+	configPath := ".gopmrc"
+
+	// Create the config file
+	err := commands.CreateDefaultConfigWithForce(configPath, force)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating config: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Created default config file: %s\n", configPath)
+	fmt.Println()
+	fmt.Println("Next steps:")
+	fmt.Println("  1. Edit .gopmrc to configure your project locations")
+	fmt.Println("  2. Run 'gopm list' to see available commands")
+	fmt.Println("  3. Run 'gopm select' to interactively select and run commands")
 }
 
 func handleListCommand() {
@@ -100,6 +130,8 @@ func showUsage() {
 	fmt.Println("    gopm <command> [options]")
 	fmt.Println()
 	fmt.Println("COMMANDS:")
+	fmt.Println("    init                     Create a default .gopmrc configuration file")
+	fmt.Println("    init --force             Overwrite existing .gopmrc file")
 	fmt.Println("    list                     List all available location:command pairs")
 	fmt.Println("    list --format=fzf        List commands in fzf format")
 	fmt.Println("    select                   Interactive command selection with fzf")
@@ -107,6 +139,8 @@ func showUsage() {
 	fmt.Println("    help                     Show this help message")
 	fmt.Println()
 	fmt.Println("EXAMPLES:")
+	fmt.Println("    gopm init")
+	fmt.Println("    gopm init --force")
 	fmt.Println("    gopm list")
 	fmt.Println("    gopm list --format=fzf")
 	fmt.Println("    gopm select")
