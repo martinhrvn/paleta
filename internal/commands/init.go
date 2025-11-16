@@ -27,6 +27,19 @@ locations:
       - "npm test"
       - "npm run build"
 
+  # Example: Filtering auto-discovered commands with include/exclude
+  # - name: "app"
+  #   location: "app"
+  #   type: "npm"
+  #   include:           # Only include commands matching these patterns
+  #     - "npm run dev"
+  #     - "npm run build*"
+  #     - "npm run test"
+  #   exclude:           # Exclude commands matching these patterns
+  #     - "npm run test:watch"
+  #   commands:
+  #     - "custom-command"
+
   # Example: Using glob patterns to match multiple directories
   # - location: "packages/*"
   #   type: "npm"
@@ -42,9 +55,18 @@ locations:
 #
 # location fields:
 #   name:     (optional) Display name shown in selection UI
-#   location: (required) Path to project directory (supports glob patterns like "packages/*")
+#   location: (optional) Path to project directory (supports glob patterns like "packages/*")
+#                        If omitted, defaults to current directory "."
 #   type:     (optional) Project type for automatic command detection (npm, yarn, pnpm, go)
 #   commands: (optional) List of commands to make available
+#   include:  (optional) Glob patterns to filter auto-discovered commands (whitelist)
+#   exclude:  (optional) Glob patterns to exclude from auto-discovered commands (blacklist)
+#
+# include/exclude notes:
+#   - Only applies to auto-discovered commands (from type), not manual commands
+#   - Patterns support glob syntax (e.g., "npm run test*" matches "npm run test:ci")
+#   - Include is applied first (whitelist), then exclude (blacklist)
+#   - Commands must match the format shown in the UI (e.g., "npm run dev", not "dev")
 #
 # Supported project types:
 #   npm, yarn, pnpm: Automatically discovers scripts from package.json

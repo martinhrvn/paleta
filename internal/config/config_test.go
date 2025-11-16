@@ -417,3 +417,226 @@ func TestLoadConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestFilterCommands(t *testing.T) {
+	tests := []struct {
+		name     string
+		commands []string
+		include  []string
+		exclude  []string
+		expected []string
+	}{
+		{
+			name:     "no filters - return all commands",
+			commands: []string{"dev", "build", "test", "lint"},
+			include:  nil,
+			exclude:  nil,
+			expected: []string{"dev", "build", "test", "lint"},
+		},
+		{
+			name:     "include exact match",
+			commands: []string{"dev", "build", "test", "lint"},
+			include:  []string{"dev", "build"},
+			exclude:  nil,
+			expected: []string{"dev", "build"},
+		},
+		{
+			name:     "include with glob pattern",
+			commands: []string{"dev", "build", "build:prod", "build:dev", "test", "test:watch"},
+			include:  []string{"build*"},
+			exclude:  nil,
+			expected: []string{"build", "build:prod", "build:dev"},
+		},
+		{
+			name:     "exclude exact match",
+			commands: []string{"dev", "build", "test", "lint"},
+			include:  nil,
+			exclude:  []string{"lint"},
+			expected: []string{"dev", "build", "test"},
+		},
+		{
+			name:     "exclude with glob pattern",
+			commands: []string{"test", "test:watch", "test:ci", "build"},
+			include:  nil,
+			exclude:  []string{"test:*"},
+			expected: []string{"test", "build"},
+		},
+		{
+			name:     "include then exclude",
+			commands: []string{"dev", "build", "build:prod", "test", "test:watch", "lint"},
+			include:  []string{"build*", "test*"},
+			exclude:  []string{"test:watch"},
+			expected: []string{"build", "build:prod", "test"},
+		},
+		{
+			name:     "multiple include patterns",
+			commands: []string{"dev", "start", "build", "build:prod", "test", "test:ci"},
+			include:  []string{"dev", "start", "build*"},
+			exclude:  nil,
+			expected: []string{"dev", "start", "build", "build:prod"},
+		},
+		{
+			name:     "multiple exclude patterns",
+			commands: []string{"dev", "build", "test", "test:watch", "lint", "format"},
+			include:  nil,
+			exclude:  []string{"test:*", "lint", "format"},
+			expected: []string{"dev", "build", "test"},
+		},
+		{
+			name:     "include all with wildcard",
+			commands: []string{"dev", "build", "test"},
+			include:  []string{"*"},
+			exclude:  nil,
+			expected: []string{"dev", "build", "test"},
+		},
+		{
+			name:     "exclude all matching pattern",
+			commands: []string{"test:unit", "test:integration", "test:e2e", "build"},
+			include:  nil,
+			exclude:  []string{"test:*"},
+			expected: []string{"build"},
+		},
+		{
+			name:     "no commands match include",
+			commands: []string{"dev", "build", "test"},
+			include:  []string{"deploy*"},
+			exclude:  nil,
+			expected: []string{},
+		},
+		{
+			name:     "empty commands list",
+			commands: []string{},
+			include:  []string{"dev"},
+			exclude:  []string{"test"},
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterCommands(tt.commands, tt.include, tt.exclude)
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("filterCommands() returned %d commands, expected %d\nGot: %v\nExpected: %v",
+					len(result), len(tt.expected), result, tt.expected)
+				return
+			}
+
+			for i, cmd := range result {
+				if cmd != tt.expected[i] {
+					t.Errorf("filterCommands()[%d] = %q, expected %q", i, cmd, tt.expected[i])
+				}
+			}
+		})
+	}
+}
+
+func TestLoadConfigWithIncludeExclude(t *testing.T) {
+	// Create a temp directory with package.json
+	tmpDir, err := os.MkdirTemp("", "gopm-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Change to the temp directory
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	defer os.Chdir(oldDir)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Create a package.json with many scripts
+	packageJSON := `{
+  "name": "test-project",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:prod": "vite build --mode production",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:ci": "jest --ci",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  }
+}`
+	err = os.WriteFile("package.json", []byte(packageJSON), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write package.json: %v", err)
+	}
+
+	// Test config with include/exclude
+	// Note: npm commands are formatted as "npm run <script>" so patterns need to match that
+	configYAML := `locations:
+  - name: "test"
+    location: "."
+    type: "npm"
+    include:
+      - "npm run dev"
+      - "npm run build*"
+      - "npm run test"
+    exclude:
+      - "npm run build:prod"
+    commands:
+      - "custom-command"`
+
+	configPath := filepath.Join(tmpDir, ".gopmrc")
+	err = os.WriteFile(configPath, []byte(configYAML), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	// Load the config
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() failed: %v", err)
+	}
+
+	// Verify commands were filtered
+	if len(config.Locations) != 1 {
+		t.Fatalf("Expected 1 location, got %d", len(config.Locations))
+	}
+
+	location := config.Locations[0]
+
+	// Manual command should be present
+	hasCustom := false
+	for _, cmd := range location.Commands {
+		if cmd == "custom-command" {
+			hasCustom = true
+			break
+		}
+	}
+	if !hasCustom {
+		t.Errorf("Manual command 'custom-command' should not be filtered")
+	}
+
+	// Check that included commands are present (with npm run prefix)
+	expectedPresent := []string{"npm run dev", "npm run build", "npm run test"}
+	for _, expectedCmd := range expectedPresent {
+		found := false
+		for _, cmd := range location.Commands {
+			if cmd == expectedCmd {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected command %q to be present after filtering", expectedCmd)
+		}
+	}
+
+	// Check that excluded commands are not present (with npm run prefix)
+	excludedCommands := []string{"npm run build:prod", "npm run test:watch", "npm run test:ci", "npm run lint", "npm run format"}
+	for _, excludedCmd := range excludedCommands {
+		for _, cmd := range location.Commands {
+			if cmd == excludedCmd {
+				t.Errorf("Command %q should have been filtered out", excludedCmd)
+			}
+		}
+	}
+}

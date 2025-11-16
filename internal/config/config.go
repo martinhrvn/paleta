@@ -18,6 +18,8 @@ type Location struct {
 	Location string   `yaml:"location,omitempty"`
 	Type     string   `yaml:"type,omitempty"`
 	Commands []string `yaml:"commands,omitempty"`
+	Include  []string `yaml:"include,omitempty"`
+	Exclude  []string `yaml:"exclude,omitempty"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {
@@ -59,6 +61,60 @@ func normalizeEmptyPaths(config *Config) {
 	}
 }
 
+// filterCommands filters commands based on include and exclude patterns
+// Include patterns act as a whitelist (if specified)
+// Exclude patterns act as a blacklist (applied after include)
+// Both support glob patterns using filepath.Match syntax
+func filterCommands(commands []string, include []string, exclude []string) []string {
+	if len(commands) == 0 {
+		return []string{}
+	}
+
+	// If no filters specified, return all commands
+	if len(include) == 0 && len(exclude) == 0 {
+		return commands
+	}
+
+	var result []string
+
+	// Apply include filter (whitelist)
+	if len(include) > 0 {
+		for _, cmd := range commands {
+			for _, pattern := range include {
+				matched, err := filepath.Match(pattern, cmd)
+				if err == nil && matched {
+					result = append(result, cmd)
+					break // Command matched, no need to check other patterns
+				}
+			}
+		}
+	} else {
+		// No include filter, start with all commands
+		result = append(result, commands...)
+	}
+
+	// Apply exclude filter (blacklist)
+	if len(exclude) > 0 {
+		filtered := make([]string, 0, len(result))
+		for _, cmd := range result {
+			shouldExclude := false
+			for _, pattern := range exclude {
+				matched, err := filepath.Match(pattern, cmd)
+				if err == nil && matched {
+					shouldExclude = true
+					break
+				}
+			}
+			if !shouldExclude {
+				filtered = append(filtered, cmd)
+			}
+		}
+		result = filtered
+	}
+
+	return result
+}
+
 // processProjectTypes processes project types and adds their commands to locations
 func processProjectTypes(config *Config) error {
 	for i, location := range config.Locations {
@@ -93,8 +149,11 @@ func processProjectTypes(config *Config) error {
 				commandList = append(commandList, cmd)
 			}
 
-			// Merge with existing commands
-			allCommands := append(location.Commands, commandList...)
+			// Filter discovered commands based on include/exclude patterns
+			filteredCommands := filterCommands(commandList, location.Include, location.Exclude)
+
+			// Merge filtered auto-discovered commands with manual commands (manual first)
+			allCommands := append(location.Commands, filteredCommands...)
 			config.Locations[i].Commands = allCommands
 		} else {
 			// Fallback to old behavior for backward compatibility
@@ -114,8 +173,11 @@ func processProjectTypes(config *Config) error {
 				}
 			}
 
-			// Merge with existing commands
-			allCommands := append(location.Commands, prefixedCommands...)
+			// Filter discovered commands based on include/exclude patterns
+			filteredCommands := filterCommands(prefixedCommands, location.Include, location.Exclude)
+
+			// Merge filtered auto-discovered commands with manual commands
+			allCommands := append(location.Commands, filteredCommands...)
 			config.Locations[i].Commands = allCommands
 		}
 	}
