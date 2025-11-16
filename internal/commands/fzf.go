@@ -48,6 +48,10 @@ func FindLocationByDisplayName(cfg *config.Config, displayName string) (*config.
 		if location.Name == "" && location.Location == displayName {
 			return &location, nil
 		}
+		// Handle "(root)" as a display name for "." location
+		if location.Name == "" && location.Location == "." && displayName == "(root)" {
+			return &location, nil
+		}
 	}
 
 	return nil, fmt.Errorf("location not found: %q", displayName)
@@ -90,6 +94,10 @@ func PrepareCommandInfo(cfg *config.Config) []CommandInfo {
 		displayName := location.Name
 		if displayName == "" {
 			displayName = location.Location
+			// Use a more user-friendly name for root directory
+			if displayName == "." {
+				displayName = "(root)"
+			}
 		}
 
 		for _, command := range location.Commands {

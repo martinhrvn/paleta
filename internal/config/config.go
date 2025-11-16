@@ -15,7 +15,7 @@ type Config struct {
 
 type Location struct {
 	Name     string   `yaml:"name,omitempty"`
-	Location string   `yaml:"location"`
+	Location string   `yaml:"location,omitempty"`
 	Type     string   `yaml:"type,omitempty"`
 	Commands []string `yaml:"commands,omitempty"`
 }
@@ -32,6 +32,9 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	// Normalize empty paths to current directory
+	normalizeEmptyPaths(&config)
+
 	// Expand glob patterns in locations
 	expandedLocations, err := ExpandGlobPatterns(config.Locations)
 	if err != nil {
@@ -45,6 +48,15 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+// normalizeEmptyPaths normalizes empty location paths to "." (current directory)
+func normalizeEmptyPaths(config *Config) {
+	for i := range config.Locations {
+		if config.Locations[i].Location == "" {
+			config.Locations[i].Location = "."
+		}
+	}
 }
 
 // processProjectTypes processes project types and adds their commands to locations

@@ -132,6 +132,24 @@ func TestConfigYAMLParsing(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "location without path (root directory)",
+			yaml: `locations:
+  - name: "root"
+    commands:
+      - "go test"
+      - "go build"`,
+			expected: Config{
+				Locations: []Location{
+					{
+						Name:     "root",
+						Location: "",
+						Commands: []string{"go test", "go build"},
+					},
+				},
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -172,6 +190,114 @@ func TestConfigYAMLParsing(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestProcessProjectTypesWithEmptyLocation(t *testing.T) {
+	// Create a temp directory with a package.json in the root
+	tmpDir, err := os.MkdirTemp("", "gopm-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Change to the temp directory
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	defer os.Chdir(oldDir)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	// Create a package.json in the current directory
+	packageJSON := `{
+  "name": "test-project",
+  "scripts": {
+    "start": "node index.js",
+    "test": "jest"
+  }
+}`
+	err = os.WriteFile("package.json", []byte(packageJSON), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write package.json: %v", err)
+	}
+
+	// Test config with empty location (before normalization)
+	config := &Config{
+		Locations: []Location{
+			{
+				Name:     "root",
+				Location: "",
+				Type:     "npm",
+				Commands: []string{"custom"},
+			},
+		},
+	}
+
+	// Normalize empty paths (this is what LoadConfig does)
+	normalizeEmptyPaths(config)
+
+	// Verify location was normalized to "."
+	if config.Locations[0].Location != "." {
+		t.Errorf("Expected location to be normalized to \".\", got %q", config.Locations[0].Location)
+	}
+
+	// Process project types
+	err = processProjectTypes(config)
+	if err != nil {
+		t.Errorf("processProjectTypes() failed with empty location: %v", err)
+	}
+
+	// Verify commands were added
+	if len(config.Locations[0].Commands) < 2 {
+		t.Errorf("Expected at least 2 commands (1 custom + discovered), got %d", len(config.Locations[0].Commands))
+	}
+}
+
+func TestLoadConfigWithEmptyLocation(t *testing.T) {
+	// Create a temp directory
+	tmpDir, err := os.MkdirTemp("", "gopm-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create a config with empty location
+	configYAML := `locations:
+  - name: "root"
+    commands:
+      - "go test"
+      - "go build"`
+
+	configPath := filepath.Join(tmpDir, ".gopmrc")
+	err = os.WriteFile(configPath, []byte(configYAML), 0644)
+	if err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	// Load the config
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() failed: %v", err)
+	}
+
+	// Verify the location was normalized to "."
+	if len(config.Locations) != 1 {
+		t.Fatalf("Expected 1 location, got %d", len(config.Locations))
+	}
+
+	location := config.Locations[0]
+	if location.Name != "root" {
+		t.Errorf("Expected name 'root', got %q", location.Name)
+	}
+	if location.Location != "." {
+		t.Errorf("Expected location to be normalized to '.', got %q", location.Location)
+	}
+	if len(location.Commands) != 2 {
+		t.Errorf("Expected 2 commands, got %d", len(location.Commands))
 	}
 }
 

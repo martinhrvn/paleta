@@ -95,6 +95,10 @@ func TestFindLocationByDisplayName(t *testing.T) {
 				Location: "scripts",
 				Commands: []string{"deploy.sh"},
 			},
+			{
+				Location: ".",
+				Commands: []string{"go test", "go build"},
+			},
 		},
 	}
 
@@ -120,6 +124,12 @@ func TestFindLocationByDisplayName(t *testing.T) {
 			name:         "find by name when location differs",
 			displayName:  "scripts",
 			expectedPath: "scripts",
+			wantErr:      false,
+		},
+		{
+			name:         "find root location by (root) display name",
+			displayName:  "(root)",
+			expectedPath: ".",
 			wantErr:      false,
 		},
 		{
