@@ -18,7 +18,7 @@
           
           src = ./.;
           
-          vendorHash = "sha256-Lh/yde3GkhNDd/IH0rFj80hpkwLbLzE5N1bAUKpHMEQ=";
+          vendorHash = "sha256-BsXrgPn95qZESXs1eJFe65X9HEuzHv8r529dShCqxQ8=";
           
           # Build flags
           ldflags = [

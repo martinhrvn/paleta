@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	fuzzyfinder "github.com/ktr0731/go-fuzzyfinder"
-	
+	"github.com/martin/go-pm/internal/config"
 )
 
 // SelectionResult represents the result of a user selection
