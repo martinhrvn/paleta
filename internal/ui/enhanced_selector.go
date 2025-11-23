@@ -23,6 +23,7 @@ type CommandInfo struct {
 	Directory   string
 	Command     string
 	DisplayName string
+	Type        string // Project type (npm, go, etc.)
 }
 
 // EnhancedSelector provides command selection with location filtering
@@ -89,7 +90,16 @@ func (s *EnhancedSelector) runCommandSelector() (*SelectionResult, error) {
 				return "Select this to change location filter\n\nCurrently selected: " + s.getLocationString()
 			}
 			info := commandInfos[i]
-			preview := fmt.Sprintf("Directory: %s\nCommand: %s", info.Directory, info.Command)
+			preview := fmt.Sprintf("Location: %s\nPath:     %s\nCommand:  %s",
+				info.DisplayName,
+				info.Directory,
+				info.Command)
+
+			// Add type if available
+			if info.Type != "" {
+				preview = fmt.Sprintf("%s\nType:     %s", preview, info.Type)
+			}
+
 			return preview
 		}),
 		fuzzyfinder.WithHeader(s.getHeaderString()),
@@ -136,6 +146,7 @@ func (s *EnhancedSelector) prepareFilteredCommands() []CommandInfo {
 				Directory:   location.Location,
 				Command:     command,
 				DisplayName: displayName,
+				Type:        location.Type,
 			}
 			infos = append(infos, info)
 		}

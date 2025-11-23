@@ -91,27 +91,31 @@ func TestExpandGlobPatterns(t *testing.T) {
 				},
 				{
 					Location: "packages/*",
-					Type:     "npm", 
+					Type:     "npm",
 					Commands: []string{"build"},
 				},
 			},
 			expected: []Location{
 				{
+					Name:     "mobile",
 					Location: "apps/mobile",
 					Type:     "npm",
 					Commands: []string{"start"},
 				},
 				{
+					Name:     "web",
 					Location: "apps/web",
 					Type:     "npm",
 					Commands: []string{"start"},
 				},
 				{
+					Name:     "ui",
 					Location: "packages/ui",
 					Type:     "npm",
 					Commands: []string{"build"},
 				},
 				{
+					Name:     "utils",
 					Location: "packages/utils",
 					Type:     "npm",
 					Commands: []string{"build"},
@@ -153,11 +157,13 @@ func TestExpandGlobPatterns(t *testing.T) {
 			},
 			expected: []Location{
 				{
+					Name:     "backend",
 					Location: "packages/backend",
 					Type:     "npm",
 					Commands: []string{"test"},
 				},
 				{
+					Name:     "frontend",
 					Location: "packages/frontend",
 					Type:     "npm",
 					Commands: []string{"test"},
@@ -213,11 +219,13 @@ func TestExpandGlobPatterns(t *testing.T) {
 			},
 			expected: []Location{
 				{
+					Name:     "mobile",
 					Location: "apps/mobile",
 					Type:     "npm",
 					Commands: []string{"start"},
 				},
 				{
+					Name:     "web",
 					Location: "apps/web",
 					Type:     "npm",
 					Commands: []string{"start"},

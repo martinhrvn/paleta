@@ -52,10 +52,10 @@ func TestPrepareCommandInfo_WithLocations(t *testing.T) {
 
 	// Test that display names are formatted correctly
 	expectedDisplays := []string{
-		"[frontend] npm start",
-		"[frontend] npm test",
-		"[backend] go run main.go",
-		"[/path/to/scripts] ./deploy.sh",
+		"frontend: npm start",
+		"frontend: npm test",
+		"backend: go run main.go",
+		"/path/to/scripts: ./deploy.sh",
 	}
 
 	for i, expected := range expectedDisplays {

@@ -13,11 +13,13 @@ func TestEnhancedSelector_prepareFilteredCommands(t *testing.T) {
 			{
 				Name:     "frontend",
 				Location: "/path/to/frontend",
+				Type:     "npm",
 				Commands: []string{"npm start", "npm test", "npm build"},
 			},
 			{
 				Name:     "backend",
 				Location: "/path/to/backend",
+				Type:     "go",
 				Commands: []string{"go run main.go", "go test ./..."},
 			},
 			{
@@ -38,13 +40,13 @@ func TestEnhancedSelector_prepareFilteredCommands(t *testing.T) {
 			selectedLocations: []string{},
 			expectedCount:     7, // 3 + 2 + 2
 			expectedCommands: []string{
-				"[frontend] npm start",
-				"[frontend] npm test",
-				"[frontend] npm build",
-				"[backend] go run main.go",
-				"[backend] go test ./...",
-				"[/path/to/unnamed] make",
-				"[/path/to/unnamed] make test",
+				"frontend: npm start",
+				"frontend: npm test",
+				"frontend: npm build",
+				"backend: go run main.go",
+				"backend: go test ./...",
+				"/path/to/unnamed: make",
+				"/path/to/unnamed: make test",
 			},
 		},
 		{
@@ -52,9 +54,9 @@ func TestEnhancedSelector_prepareFilteredCommands(t *testing.T) {
 			selectedLocations: []string{"frontend"},
 			expectedCount:     3,
 			expectedCommands: []string{
-				"[frontend] npm start",
-				"[frontend] npm test",
-				"[frontend] npm build",
+				"frontend: npm start",
+				"frontend: npm test",
+				"frontend: npm build",
 			},
 		},
 		{
@@ -62,11 +64,11 @@ func TestEnhancedSelector_prepareFilteredCommands(t *testing.T) {
 			selectedLocations: []string{"frontend", "backend"},
 			expectedCount:     5,
 			expectedCommands: []string{
-				"[frontend] npm start",
-				"[frontend] npm test",
-				"[frontend] npm build",
-				"[backend] go run main.go",
-				"[backend] go test ./...",
+				"frontend: npm start",
+				"frontend: npm test",
+				"frontend: npm build",
+				"backend: go run main.go",
+				"backend: go test ./...",
 			},
 		},
 		{
@@ -74,8 +76,8 @@ func TestEnhancedSelector_prepareFilteredCommands(t *testing.T) {
 			selectedLocations: []string{"/path/to/unnamed"},
 			expectedCount:     2,
 			expectedCommands: []string{
-				"[/path/to/unnamed] make",
-				"[/path/to/unnamed] make test",
+				"/path/to/unnamed: make",
+				"/path/to/unnamed: make test",
 			},
 		},
 	}
@@ -100,6 +102,55 @@ func TestEnhancedSelector_prepareFilteredCommands(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestEnhancedSelector_CommandInfoMetadata tests that CommandInfo contains all necessary metadata
+func TestEnhancedSelector_CommandInfoMetadata(t *testing.T) {
+	cfg := &config.Config{
+		Locations: []config.Location{
+			{
+				Name:     "frontend",
+				Location: "/path/to/frontend",
+				Type:     "npm",
+				Commands: []string{"npm start", "npm build"},
+			},
+			{
+				Location: "/path/to/backend",
+				Type:     "go",
+				Commands: []string{"go test ./..."},
+			},
+		},
+	}
+
+	selector := &EnhancedSelector{
+		config:            cfg,
+		selectedLocations: []string{},
+	}
+
+	commands := selector.prepareFilteredCommands()
+
+	// Test first command metadata
+	if commands[0].DisplayName != "frontend" {
+		t.Errorf("expected DisplayName 'frontend', got %q", commands[0].DisplayName)
+	}
+	if commands[0].Directory != "/path/to/frontend" {
+		t.Errorf("expected Directory '/path/to/frontend', got %q", commands[0].Directory)
+	}
+	if commands[0].Command != "npm start" {
+		t.Errorf("expected Command 'npm start', got %q", commands[0].Command)
+	}
+	if commands[0].Type != "npm" {
+		t.Errorf("expected Type 'npm', got %q", commands[0].Type)
+	}
+
+	// Test backend command (unnamed location)
+	backendCmd := commands[2] // Third command should be backend
+	if backendCmd.DisplayName != "/path/to/backend" {
+		t.Errorf("expected DisplayName '/path/to/backend', got %q", backendCmd.DisplayName)
+	}
+	if backendCmd.Type != "go" {
+		t.Errorf("expected Type 'go', got %q", backendCmd.Type)
 	}
 }
 

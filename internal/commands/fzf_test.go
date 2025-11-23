@@ -16,38 +16,33 @@ func TestParseFzfSelection(t *testing.T) {
 	}{
 		{
 			name:        "valid selection with name",
-			selection:   "[frontend] start",
+			selection:   "frontend: start",
 			expectedCmd: "start",
 			expectedLoc: "frontend",
 			wantErr:     false,
 		},
 		{
 			name:        "valid selection with path",
-			selection:   "[packages/backend] run", 
+			selection:   "packages/backend: run",
 			expectedCmd: "run",
 			expectedLoc: "packages/backend",
 			wantErr:     false,
 		},
 		{
 			name:        "selection with spaces in command",
-			selection:   "[scripts] npm run build:prod",
+			selection:   "scripts: npm run build:prod",
 			expectedCmd: "npm run build:prod",
 			expectedLoc: "scripts",
 			wantErr:     false,
 		},
 		{
-			name:      "invalid format - no brackets",
+			name:      "invalid format - no colon",
 			selection: "frontend start",
 			wantErr:   true,
 		},
 		{
-			name:      "invalid format - no closing bracket",
-			selection: "[frontend start",
-			wantErr:   true,
-		},
-		{
 			name:      "invalid format - no command",
-			selection: "[frontend]",
+			selection: "frontend:",
 			wantErr:   true,
 		},
 		{
@@ -182,7 +177,7 @@ func TestSelectionResult(t *testing.T) {
 	}{
 		{
 			name:             "valid selection with name",
-			fzfSelection:     "[frontend] start",
+			fzfSelection:     "frontend: start",
 			expectedDir:      "packages/frontend",
 			expectedCommand:  "start",
 			expectedDisplay:  "frontend",
@@ -190,9 +185,9 @@ func TestSelectionResult(t *testing.T) {
 		},
 		{
 			name:             "valid selection with path as display",
-			fzfSelection:     "[packages/backend] run",
+			fzfSelection:     "packages/backend: run",
 			expectedDir:      "packages/backend",
-			expectedCommand:  "run", 
+			expectedCommand:  "run",
 			expectedDisplay:  "packages/backend",
 			wantErr:          false,
 		},
@@ -203,7 +198,7 @@ func TestSelectionResult(t *testing.T) {
 		},
 		{
 			name:         "location not found in config",
-			fzfSelection: "[nonexistent] command",
+			fzfSelection: "nonexistent: command",
 			wantErr:      true,
 		},
 	}
