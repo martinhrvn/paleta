@@ -6,6 +6,15 @@ import (
 	"github.com/martin/go-pm/internal/config"
 )
 
+// Helper to convert strings to Commands for tests
+func stringsToCommands(strs []string) []config.Command {
+	cmds := make([]config.Command, len(strs))
+	for i, s := range strs {
+		cmds[i] = config.Command{Name: "", Command: s}
+	}
+	return cmds
+}
+
 func TestEnhancedSelector_prepareFilteredCommands(t *testing.T) {
 	// Create test config
 	cfg := &config.Config{
@@ -14,17 +23,17 @@ func TestEnhancedSelector_prepareFilteredCommands(t *testing.T) {
 				Name:     "frontend",
 				Location: "/path/to/frontend",
 				Type:     "npm",
-				Commands: []string{"npm start", "npm test", "npm build"},
+				Commands: stringsToCommands([]string{"npm start", "npm test", "npm build"}),
 			},
 			{
 				Name:     "backend",
 				Location: "/path/to/backend",
 				Type:     "go",
-				Commands: []string{"go run main.go", "go test ./..."},
+				Commands: stringsToCommands([]string{"go run main.go", "go test ./..."}),
 			},
 			{
 				Location: "/path/to/unnamed",
-				Commands: []string{"make", "make test"},
+				Commands: stringsToCommands([]string{"make", "make test"}),
 			},
 		},
 	}
@@ -113,12 +122,12 @@ func TestEnhancedSelector_CommandInfoMetadata(t *testing.T) {
 				Name:     "frontend",
 				Location: "/path/to/frontend",
 				Type:     "npm",
-				Commands: []string{"npm start", "npm build"},
+				Commands: stringsToCommands([]string{"npm start", "npm build"}),
 			},
 			{
 				Location: "/path/to/backend",
 				Type:     "go",
-				Commands: []string{"go test ./..."},
+				Commands: stringsToCommands([]string{"go test ./..."}),
 			},
 		},
 	}

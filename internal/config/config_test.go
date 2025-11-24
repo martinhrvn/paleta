@@ -8,6 +8,103 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func TestCommandUnmarshalYAML(t *testing.T) {
+	tests := []struct {
+		name     string
+		yaml     string
+		expected []Command
+		wantErr  bool
+	}{
+		{
+			name: "old format - string commands",
+			yaml: `commands:
+  - "npm run start"
+  - "npm run build"
+  - "npm run test"`,
+			expected: []Command{
+				{Name: "", Command: "npm run start"},
+				{Name: "", Command: "npm run build"},
+				{Name: "", Command: "npm run test"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "new format - object with name and command",
+			yaml: `commands:
+  - name: "start"
+    command: "npm run start"
+  - name: "build"
+    command: "npm run build"
+  - name: "test"
+    command: "npm run test"`,
+			expected: []Command{
+				{Name: "start", Command: "npm run start"},
+				{Name: "build", Command: "npm run build"},
+				{Name: "test", Command: "npm run test"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "new format - object with only command (no name)",
+			yaml: `commands:
+  - command: "npm run start"
+  - command: "npm run build"`,
+			expected: []Command{
+				{Name: "", Command: "npm run start"},
+				{Name: "", Command: "npm run build"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "mixed format - both strings and objects",
+			yaml: `commands:
+  - "npm run start"
+  - name: "build"
+    command: "npm run build"
+  - "npm run test"`,
+			expected: []Command{
+				{Name: "", Command: "npm run start"},
+				{Name: "build", Command: "npm run build"},
+				{Name: "", Command: "npm run test"},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			type TestStruct struct {
+				Commands []Command `yaml:"commands"`
+			}
+
+			var result TestStruct
+			err := yaml.Unmarshal([]byte(tt.yaml), &result)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("yaml.Unmarshal() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr {
+				if len(result.Commands) != len(tt.expected) {
+					t.Errorf("Expected %d commands, got %d", len(tt.expected), len(result.Commands))
+					return
+				}
+
+				for i, cmd := range result.Commands {
+					expected := tt.expected[i]
+					if cmd.Name != expected.Name {
+						t.Errorf("Commands[%d].Name = %q, expected %q", i, cmd.Name, expected.Name)
+					}
+					if cmd.Command != expected.Command {
+						t.Errorf("Commands[%d].Command = %q, expected %q", i, cmd.Command, expected.Command)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestConfigYAMLParsing(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -31,7 +128,11 @@ func TestConfigYAMLParsing(t *testing.T) {
 						Name:     "frontend",
 						Location: "packages/frontend",
 						Type:     "npm",
-						Commands: []string{"start", "build", "test"},
+						Commands: []Command{
+							{Name: "", Command: "start"},
+							{Name: "", Command: "build"},
+							{Name: "", Command: "test"},
+						},
 					},
 				},
 			},
@@ -58,13 +159,19 @@ func TestConfigYAMLParsing(t *testing.T) {
 						Name:     "frontend",
 						Location: "packages/frontend",
 						Type:     "npm",
-						Commands: []string{"start", "build"},
+						Commands: []Command{
+							{Name: "", Command: "start"},
+							{Name: "", Command: "build"},
+						},
 					},
 					{
 						Name:     "backend",
 						Location: "packages/backend",
 						Type:     "go",
-						Commands: []string{"run", "test"},
+						Commands: []Command{
+							{Name: "", Command: "run"},
+							{Name: "", Command: "test"},
+						},
 					},
 				},
 			},
@@ -82,7 +189,9 @@ func TestConfigYAMLParsing(t *testing.T) {
 					{
 						Location: "packages/frontend",
 						Type:     "npm",
-						Commands: []string{"start"},
+						Commands: []Command{
+							{Name: "", Command: "start"},
+						},
 					},
 				},
 			},
@@ -101,7 +210,10 @@ func TestConfigYAMLParsing(t *testing.T) {
 					{
 						Name:     "scripts",
 						Location: "scripts",
-						Commands: []string{"deploy.sh", "backup.sh"},
+						Commands: []Command{
+							{Name: "", Command: "deploy.sh"},
+							{Name: "", Command: "backup.sh"},
+						},
 					},
 				},
 			},
@@ -144,7 +256,10 @@ func TestConfigYAMLParsing(t *testing.T) {
 					{
 						Name:     "root",
 						Location: "",
-						Commands: []string{"go test", "go build"},
+						Commands: []Command{
+							{Name: "", Command: "go test"},
+							{Name: "", Command: "go build"},
+						},
 					},
 				},
 			},
@@ -183,8 +298,12 @@ func TestConfigYAMLParsing(t *testing.T) {
 						t.Errorf("Location[%d] has %d commands, expected %d", i, len(loc.Commands), len(expected.Commands))
 					}
 					for j, cmd := range loc.Commands {
-						if cmd != expected.Commands[j] {
-							t.Errorf("Location[%d].Commands[%d] = %q, expected %q", i, j, cmd, expected.Commands[j])
+						expectedCmd := expected.Commands[j]
+						if cmd.Name != expectedCmd.Name {
+							t.Errorf("Location[%d].Commands[%d].Name = %q, expected %q", i, j, cmd.Name, expectedCmd.Name)
+						}
+						if cmd.Command != expectedCmd.Command {
+							t.Errorf("Location[%d].Commands[%d].Command = %q, expected %q", i, j, cmd.Command, expectedCmd.Command)
 						}
 					}
 				}
@@ -232,7 +351,9 @@ func TestProcessProjectTypesWithEmptyLocation(t *testing.T) {
 				Name:     "root",
 				Location: "",
 				Type:     "npm",
-				Commands: []string{"custom"},
+				Commands: []Command{
+					{Name: "", Command: "custom"},
+				},
 			},
 		},
 	}
@@ -326,7 +447,10 @@ func TestLoadConfig(t *testing.T) {
 						Name:     "frontend",
 						Location: "packages/frontend",
 						Type:     "npm",
-						Commands: []string{"start", "build"},
+						Commands: []Command{
+							{Name: "", Command: "start"},
+							{Name: "", Command: "build"},
+						},
 					},
 				},
 			},
@@ -409,8 +533,12 @@ func TestLoadConfig(t *testing.T) {
 					t.Errorf("Location[%d] has %d commands, expected %d", i, len(loc.Commands), len(expected.Commands))
 				}
 				for j, cmd := range loc.Commands {
-					if cmd != expected.Commands[j] {
-						t.Errorf("Location[%d].Commands[%d] = %q, expected %q", i, j, cmd, expected.Commands[j])
+					expectedCmd := expected.Commands[j]
+					if cmd.Name != expectedCmd.Name {
+						t.Errorf("Location[%d].Commands[%d].Name = %q, expected %q", i, j, cmd.Name, expectedCmd.Name)
+					}
+					if cmd.Command != expectedCmd.Command {
+						t.Errorf("Location[%d].Commands[%d].Command = %q, expected %q", i, j, cmd.Command, expectedCmd.Command)
 					}
 				}
 			}
@@ -419,6 +547,24 @@ func TestLoadConfig(t *testing.T) {
 }
 
 func TestFilterCommands(t *testing.T) {
+	// Helper to convert strings to Commands with no name
+	stringsToCommands := func(strs []string) []Command {
+		cmds := make([]Command, len(strs))
+		for i, s := range strs {
+			cmds[i] = Command{Name: "", Command: s}
+		}
+		return cmds
+	}
+
+	// Helper to convert Commands to strings for comparison
+	commandsToStrings := func(cmds []Command) []string {
+		strs := make([]string, len(cmds))
+		for i, c := range cmds {
+			strs[i] = c.Command
+		}
+		return strs
+	}
+
 	tests := []struct {
 		name     string
 		commands []string
@@ -514,15 +660,17 @@ func TestFilterCommands(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := filterCommands(tt.commands, tt.include, tt.exclude)
+			commandsInput := stringsToCommands(tt.commands)
+			result := filterCommands(commandsInput, tt.include, tt.exclude)
+			resultStrings := commandsToStrings(result)
 
-			if len(result) != len(tt.expected) {
+			if len(resultStrings) != len(tt.expected) {
 				t.Errorf("filterCommands() returned %d commands, expected %d\nGot: %v\nExpected: %v",
-					len(result), len(tt.expected), result, tt.expected)
+					len(resultStrings), len(tt.expected), resultStrings, tt.expected)
 				return
 			}
 
-			for i, cmd := range result {
+			for i, cmd := range resultStrings {
 				if cmd != tt.expected[i] {
 					t.Errorf("filterCommands()[%d] = %q, expected %q", i, cmd, tt.expected[i])
 				}
@@ -570,17 +718,17 @@ func TestLoadConfigWithIncludeExclude(t *testing.T) {
 	}
 
 	// Test config with include/exclude
-	// Note: npm commands are formatted as "npm run <script>" so patterns need to match that
+	// Note: npm commands have names from package.json scripts, so patterns match against names
 	configYAML := `locations:
   - name: "test"
     location: "."
     type: "npm"
     include:
-      - "npm run dev"
-      - "npm run build*"
-      - "npm run test"
+      - "dev"
+      - "build*"
+      - "test"
     exclude:
-      - "npm run build:prod"
+      - "build:prod"
     commands:
       - "custom-command"`
 
@@ -606,7 +754,7 @@ func TestLoadConfigWithIncludeExclude(t *testing.T) {
 	// Manual command should be present
 	hasCustom := false
 	for _, cmd := range location.Commands {
-		if cmd == "custom-command" {
+		if cmd.Command == "custom-command" {
 			hasCustom = true
 			break
 		}
@@ -615,27 +763,27 @@ func TestLoadConfigWithIncludeExclude(t *testing.T) {
 		t.Errorf("Manual command 'custom-command' should not be filtered")
 	}
 
-	// Check that included commands are present (with npm run prefix)
-	expectedPresent := []string{"npm run dev", "npm run build", "npm run test"}
-	for _, expectedCmd := range expectedPresent {
+	// Check that included commands are present (by name)
+	expectedPresent := []string{"dev", "build", "test"}
+	for _, expectedName := range expectedPresent {
 		found := false
 		for _, cmd := range location.Commands {
-			if cmd == expectedCmd {
+			if cmd.Name == expectedName {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Errorf("Expected command %q to be present after filtering", expectedCmd)
+			t.Errorf("Expected command with name %q to be present after filtering", expectedName)
 		}
 	}
 
-	// Check that excluded commands are not present (with npm run prefix)
-	excludedCommands := []string{"npm run build:prod", "npm run test:watch", "npm run test:ci", "npm run lint", "npm run format"}
-	for _, excludedCmd := range excludedCommands {
+	// Check that excluded commands are not present (by name)
+	excludedNames := []string{"build:prod", "test:watch", "test:ci", "lint", "format"}
+	for _, excludedName := range excludedNames {
 		for _, cmd := range location.Commands {
-			if cmd == excludedCmd {
-				t.Errorf("Command %q should have been filtered out", excludedCmd)
+			if cmd.Name == excludedName {
+				t.Errorf("Command with name %q should have been filtered out", excludedName)
 			}
 		}
 	}

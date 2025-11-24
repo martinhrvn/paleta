@@ -6,6 +6,15 @@ import (
 	"testing"
 )
 
+// Helper to convert strings to Commands for tests
+func stringsToCommands(strs []string) []Command {
+	cmds := make([]Command, len(strs))
+	for i, s := range strs {
+		cmds[i] = Command{Name: "", Command: s}
+	}
+	return cmds
+}
+
 func TestExpandGlobPatterns(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -27,7 +36,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 					Name:     "services",
 					Location: "packages/*",
 					Type:     "npm",
-					Commands: []string{"start", "build"},
+					Commands: stringsToCommands([]string{"start", "build"}),
 				},
 			},
 			expected: []Location{
@@ -35,19 +44,19 @@ func TestExpandGlobPatterns(t *testing.T) {
 					Name:     "services",
 					Location: "packages/backend",
 					Type:     "npm",
-					Commands: []string{"start", "build"},
+					Commands: stringsToCommands([]string{"start", "build"}),
 				},
 				{
 					Name:     "services",
 					Location: "packages/frontend",
 					Type:     "npm",
-					Commands: []string{"start", "build"},
+					Commands: stringsToCommands([]string{"start", "build"}),
 				},
 				{
 					Name:     "services",
 					Location: "packages/shared",
 					Type:     "npm",
-					Commands: []string{"start", "build"},
+					Commands: stringsToCommands([]string{"start", "build"}),
 				},
 			},
 			wantErr: false,
@@ -62,7 +71,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 					Name:     "frontend",
 					Location: "packages/frontend",
 					Type:     "npm",
-					Commands: []string{"start"},
+					Commands: stringsToCommands([]string{"start"}),
 				},
 			},
 			expected: []Location{
@@ -70,7 +79,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 					Name:     "frontend",
 					Location: "packages/frontend",
 					Type:     "npm",
-					Commands: []string{"start"},
+					Commands: stringsToCommands([]string{"start"}),
 				},
 			},
 			wantErr: false,
@@ -87,12 +96,12 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Location: "apps/*",
 					Type:     "npm",
-					Commands: []string{"start"},
+					Commands: stringsToCommands([]string{"start"}),
 				},
 				{
 					Location: "packages/*",
 					Type:     "npm",
-					Commands: []string{"build"},
+					Commands: stringsToCommands([]string{"build"}),
 				},
 			},
 			expected: []Location{
@@ -100,25 +109,25 @@ func TestExpandGlobPatterns(t *testing.T) {
 					Name:     "mobile",
 					Location: "apps/mobile",
 					Type:     "npm",
-					Commands: []string{"start"},
+					Commands: stringsToCommands([]string{"start"}),
 				},
 				{
 					Name:     "web",
 					Location: "apps/web",
 					Type:     "npm",
-					Commands: []string{"start"},
+					Commands: stringsToCommands([]string{"start"}),
 				},
 				{
 					Name:     "ui",
 					Location: "packages/ui",
 					Type:     "npm",
-					Commands: []string{"build"},
+					Commands: stringsToCommands([]string{"build"}),
 				},
 				{
 					Name:     "utils",
 					Location: "packages/utils",
 					Type:     "npm",
-					Commands: []string{"build"},
+					Commands: stringsToCommands([]string{"build"}),
 				},
 			},
 			wantErr: false,
@@ -132,7 +141,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Location: "services/*",
 					Type:     "go",
-					Commands: []string{"run"},
+					Commands: stringsToCommands([]string{"run"}),
 				},
 			},
 			expected: []Location{},
@@ -152,7 +161,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Location: "packages/*",
 					Type:     "npm",
-					Commands: []string{"test"},
+					Commands: stringsToCommands([]string{"test"}),
 				},
 			},
 			expected: []Location{
@@ -160,13 +169,13 @@ func TestExpandGlobPatterns(t *testing.T) {
 					Name:     "backend",
 					Location: "packages/backend",
 					Type:     "npm",
-					Commands: []string{"test"},
+					Commands: stringsToCommands([]string{"test"}),
 				},
 				{
 					Name:     "frontend",
 					Location: "packages/frontend",
 					Type:     "npm",
-					Commands: []string{"test"},
+					Commands: stringsToCommands([]string{"test"}),
 				},
 			},
 			wantErr: false,
@@ -177,7 +186,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Location: "foo/*/bar/*",
 					Type:     "npm",
-					Commands: []string{"test"},
+					Commands: stringsToCommands([]string{"test"}),
 				},
 			},
 			wantErr: true,
@@ -188,7 +197,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Location: "packages/*/src",
 					Type:     "npm",
-					Commands: []string{"test"},
+					Commands: stringsToCommands([]string{"test"}),
 				},
 			},
 			wantErr: true,
@@ -199,7 +208,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Location: "packages*",
 					Type:     "npm",
-					Commands: []string{"test"},
+					Commands: stringsToCommands([]string{"test"}),
 				},
 			},
 			wantErr: true,
@@ -214,7 +223,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Location: "apps/*",
 					Type:     "npm",
-					Commands: []string{"start"},
+					Commands: stringsToCommands([]string{"start"}),
 				},
 			},
 			expected: []Location{
@@ -222,13 +231,13 @@ func TestExpandGlobPatterns(t *testing.T) {
 					Name:     "mobile",
 					Location: "apps/mobile",
 					Type:     "npm",
-					Commands: []string{"start"},
+					Commands: stringsToCommands([]string{"start"}),
 				},
 				{
 					Name:     "web",
 					Location: "apps/web",
 					Type:     "npm",
-					Commands: []string{"start"},
+					Commands: stringsToCommands([]string{"start"}),
 				},
 			},
 			wantErr: false,
@@ -299,8 +308,10 @@ func TestExpandGlobPatterns(t *testing.T) {
 						t.Errorf("Location[%d] has %d commands, expected %d", i, len(loc.Commands), len(expected.Commands))
 					}
 					for j, cmd := range loc.Commands {
-						if cmd != expected.Commands[j] {
-							t.Errorf("Location[%d].Commands[%d] = %q, expected %q", i, j, cmd, expected.Commands[j])
+						expectedCmd := expected.Commands[j]
+						if cmd.Name != expectedCmd.Name || cmd.Command != expectedCmd.Command {
+							t.Errorf("Location[%d].Commands[%d] = {Name: %q, Command: %q}, expected {Name: %q, Command: %q}",
+								i, j, cmd.Name, cmd.Command, expectedCmd.Name, expectedCmd.Command)
 						}
 					}
 				}

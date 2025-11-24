@@ -3,10 +3,12 @@ package commands
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	fuzzyfinder "github.com/ktr0731/go-fuzzyfinder"
 	"github.com/martin/go-pm/internal/config"
+	"github.com/martin/go-pm/internal/history"
 	"github.com/martin/go-pm/internal/ui"
 )
 
@@ -80,14 +82,20 @@ func ProcessFzfSelection(cfg *config.Config, fzfSelection string) (*SelectionRes
 
 // CommandInfo holds information about a command for display
 type CommandInfo struct {
-	Display     string
-	Directory   string
-	Command     string
-	DisplayName string
+	Display       string
+	Directory     string
+	Command       string
+	DisplayName   string
+	FrecencyScore float64 // Score for sorting
 }
 
 // PrepareCommandInfo prepares command information for fuzzy finder
 func PrepareCommandInfo(cfg *config.Config) []CommandInfo {
+	return PrepareCommandInfoWithHistory(cfg, nil, false)
+}
+
+// PrepareCommandInfoWithHistory prepares command information with optional frecency sorting
+func PrepareCommandInfoWithHistory(cfg *config.Config, hist *history.History, enableFrecency bool) []CommandInfo {
 	var infos []CommandInfo
 
 	for _, location := range cfg.Locations {
@@ -101,14 +109,35 @@ func PrepareCommandInfo(cfg *config.Config) []CommandInfo {
 		}
 
 		for _, command := range location.Commands {
+			// Use command name if available, otherwise use full command
+			cmdDisplay := command.Name
+			if cmdDisplay == "" {
+				cmdDisplay = command.Command
+			}
+
+			// Calculate frecency score if history is available
+			var score float64
+			if hist != nil && enableFrecency {
+				score = hist.GetScore(displayName, command.Command)
+			}
+
 			info := CommandInfo{
-				Display:     fmt.Sprintf("%s: %s", displayName, command),
-				Directory:   location.Location,
-				Command:     command,
-				DisplayName: displayName,
+				Display:       fmt.Sprintf("%s: %s", displayName, cmdDisplay),
+				Directory:     location.Location,
+				Command:       command.Command,
+				DisplayName:   displayName,
+				FrecencyScore: score,
 			}
 			infos = append(infos, info)
 		}
+	}
+
+	// Sort by frecency score if enabled
+	if enableFrecency && hist != nil {
+		sort.Slice(infos, func(i, j int) bool {
+			// Higher scores first
+			return infos[i].FrecencyScore > infos[j].FrecencyScore
+		})
 	}
 
 	return infos
@@ -116,8 +145,21 @@ func PrepareCommandInfo(cfg *config.Config) []CommandInfo {
 
 // RunFzf executes fuzzy finder with the given options and returns the user's selection
 func RunFzf(cfg *config.Config) (*SelectionResult, error) {
-	// Prepare command information
-	commandInfos := PrepareCommandInfo(cfg)
+	// Load history if frecency is enabled
+	var hist *history.History
+	enableFrecency := cfg.Frecency.Enabled
+
+	if enableFrecency {
+		// Find project root
+		projectRoot, err := history.FindProjectRoot(".")
+		if err == nil {
+			// Load or create history
+			hist, _ = history.LoadOrCreateHistory(projectRoot)
+		}
+	}
+
+	// Prepare command information with frecency sorting
+	commandInfos := PrepareCommandInfoWithHistory(cfg, hist, enableFrecency)
 	if len(commandInfos) == 0 {
 		return nil, fmt.Errorf("no commands available")
 	}

@@ -86,8 +86,8 @@ func TestLoadConfigWithGlobExpansion(t *testing.T) {
 			t.Errorf("Location[%d] has %d commands, expected %d", i, len(loc.Commands), len(expectedCommands))
 		}
 		for j, cmd := range loc.Commands {
-			if cmd != expectedCommands[j] {
-				t.Errorf("Location[%d].Commands[%d] = %q, expected %q", i, j, cmd, expectedCommands[j])
+			if cmd.Command != expectedCommands[j] {
+				t.Errorf("Location[%d].Commands[%d].Command = %q, expected %q", i, j, cmd.Command, expectedCommands[j])
 			}
 		}
 	}

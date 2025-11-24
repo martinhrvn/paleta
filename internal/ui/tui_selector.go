@@ -2,10 +2,12 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/martin/go-pm/internal/config"
+	"github.com/martin/go-pm/internal/history"
 	"github.com/rivo/tview"
 )
 
@@ -23,15 +25,28 @@ type TUISelector struct {
 	filteredCommands  []CommandInfo
 	searchQuery       string
 	result            *SelectionResult
+	history           *history.History
+	frecencyEnabled   bool
 }
 
 // NewTUISelector creates a new TUI selector
 func NewTUISelector(cfg *config.Config) *TUISelector {
-	return &TUISelector{
+	selector := &TUISelector{
 		config:            cfg,
 		app:               tview.NewApplication(),
 		selectedLocations: make(map[string]bool),
+		frecencyEnabled:   cfg.Frecency.Enabled,
 	}
+
+	// Load history if frecency is enabled
+	if selector.frecencyEnabled {
+		projectRoot, err := history.FindProjectRoot(".")
+		if err == nil {
+			selector.history, _ = history.LoadOrCreateHistory(projectRoot)
+		}
+	}
+
+	return selector
 }
 
 // Run starts the TUI selector
@@ -56,50 +71,39 @@ func (s *TUISelector) Run() (*SelectionResult, error) {
 }
 
 func (s *TUISelector) initUI() {
-	// Create search input
+	// Create search input (fzf-like, at the bottom)
 	s.searchInput = tview.NewInputField().
-		SetLabel("Search: ").
+		SetLabel("> ").
 		SetFieldWidth(0).
-		SetPlaceholder("Type to filter commands...")
+		SetFieldBackgroundColor(tcell.ColorBlack).
+		SetLabelColor(tcell.ColorBlue)
 
-	s.searchInput.SetBorder(true).
-		SetBorderColor(tcell.ColorDarkGray)
-
-	// Create command list
+	// Create command list (no border, minimal style)
 	s.commandList = tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
-		SetSelectedBackgroundColor(tcell.ColorDarkCyan).
-		SetSelectedTextColor(tcell.ColorWhite)
+		SetMainTextColor(tcell.ColorWhite).
+		SetSelectedBackgroundColor(tcell.ColorBlue).
+		SetSelectedTextColor(tcell.ColorBlack)
 
-	s.commandList.SetBorder(true).
-		SetBorderColor(tcell.ColorDarkGray)
-
-	// Create location list
+	// Create location list (minimal, no border)
 	s.locationList = tview.NewList().
 		ShowSecondaryText(false).
 		SetHighlightFullLine(true).
+		SetMainTextColor(tcell.ColorWhite).
 		SetSelectedBackgroundColor(tcell.ColorDarkBlue).
 		SetSelectedTextColor(tcell.ColorWhite)
 
-	s.locationList.SetBorder(true).
-		SetBorderColor(tcell.ColorDarkGray)
-
-	// Create status text
+	// Create status text (single line, minimal)
 	s.statusText = tview.NewTextView().
 		SetDynamicColors(true).
-		SetTextAlign(tview.AlignCenter)
+		SetTextColor(tcell.ColorDarkGray)
 
-	s.statusText.SetBorder(true).
-		SetBorderColor(tcell.ColorDarkGray)
-
-	// Create help text
+	// Create help text (single line at bottom)
 	s.helpText = tview.NewTextView().
 		SetDynamicColors(true).
-		SetText("[yellow]↑/↓[white]: Navigate | [yellow]Tab[white]: Switch panels | [yellow]Enter[white]: Select | [yellow]Ctrl+U[white]: Clear search | [yellow]Ctrl+L[white]: Clear all | [yellow]Esc/Ctrl+C[white]: Cancel")
-
-	s.helpText.SetBorder(true).
-		SetBorderColor(tcell.ColorDarkGray)
+		SetTextColor(tcell.ColorDarkGray).
+		SetText("  [::d]Tab[-]: switch  [::d]Ctrl+L[-]: clear  [::d]Ctrl+F[-]: frecency  [::d]Esc[-]: cancel")
 
 	// Set up search input handler
 	s.searchInput.SetChangedFunc(func(text string) {
@@ -215,26 +219,46 @@ func (s *TUISelector) initUI() {
 		return event
 	})
 
-	// Create layout
+	// Create layout (fzf-like: status at top, list in middle, search/help at bottom)
+	// Create a separator
+	separator := tview.NewBox().
+		SetDrawFunc(func(screen tcell.Screen, x, y, width, height int) (int, int, int, int) {
+			// Draw vertical line
+			for row := y; row < y+height; row++ {
+				screen.SetContent(x, row, '│', nil, tcell.StyleDefault.Foreground(tcell.ColorDarkGray))
+			}
+			return x + 1, y, width - 1, height
+		})
+
+	// Left side: compact location list with title
+	locationTitle := tview.NewTextView().
+		SetText("  LOCATIONS").
+		SetTextColor(tcell.ColorDarkGray)
+
 	leftPanel := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(s.locationList, 0, 1, false).
-		AddItem(s.statusText, 3, 0, false)
+		AddItem(locationTitle, 1, 0, false).
+		AddItem(s.locationList, 0, 1, false)
 
+	// Right side: commands with search at bottom
 	rightPanel := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(s.searchInput, 3, 0, false).
-		AddItem(s.commandList, 0, 1, false)
+		AddItem(s.commandList, 0, 1, false).
+		AddItem(s.searchInput, 1, 0, false)
 
+	// Main area: location list (narrow) + separator + commands
 	mainPanel := tview.NewFlex().
 		SetDirection(tview.FlexColumn).
-		AddItem(leftPanel, 30, 0, true).
+		AddItem(leftPanel, 24, 0, true).
+		AddItem(separator, 1, 0, false).
 		AddItem(rightPanel, 0, 1, false)
 
+	// Root: status at top, main area, help at bottom
 	root := tview.NewFlex().
 		SetDirection(tview.FlexRow).
+		AddItem(s.statusText, 1, 0, false).
 		AddItem(mainPanel, 0, 1, true).
-		AddItem(s.helpText, 3, 0, false)
+		AddItem(s.helpText, 1, 0, false)
 
 	// Set up global key handlers
 	s.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -269,6 +293,11 @@ func (s *TUISelector) initUI() {
 			s.updateFilteredCommands()
 			s.app.SetFocus(s.searchInput)
 			return nil
+		case tcell.KeyCtrlF:
+			// Toggle frecency sorting
+			s.frecencyEnabled = !s.frecencyEnabled
+			s.updateFilteredCommands()
+			return nil
 		case tcell.KeyEscape, tcell.KeyCtrlC:
 			s.app.Stop()
 			return nil
@@ -289,11 +318,24 @@ func (s *TUISelector) loadCommands() {
 		}
 
 		for _, command := range location.Commands {
+			// Use command name if available, otherwise use full command
+			cmdDisplay := command.Name
+			if cmdDisplay == "" {
+				cmdDisplay = command.Command
+			}
+
+			// Calculate frecency score if history is available
+			var score float64
+			if s.history != nil && s.frecencyEnabled {
+				score = s.history.GetScore(displayName, command.Command)
+			}
+
 			info := CommandInfo{
-				Display:     fmt.Sprintf("%s: %s", displayName, command),
-				Directory:   location.Location,
-				Command:     command,
-				DisplayName: displayName,
+				Display:       fmt.Sprintf("%s: %s", displayName, cmdDisplay),
+				Directory:     location.Location,
+				Command:       command.Command,
+				DisplayName:   displayName,
+				FrecencyScore: score,
 			}
 			s.commands = append(s.commands, info)
 		}
@@ -301,6 +343,16 @@ func (s *TUISelector) loadCommands() {
 }
 
 func (s *TUISelector) updateFilteredCommands() {
+	// Recalculate frecency scores if frecency was just enabled
+	if s.frecencyEnabled && s.history != nil {
+		for i := range s.commands {
+			s.commands[i].FrecencyScore = s.history.GetScore(
+				s.commands[i].DisplayName,
+				s.commands[i].Command,
+			)
+		}
+	}
+
 	s.filteredCommands = []CommandInfo{}
 	s.commandList.Clear()
 
@@ -330,6 +382,14 @@ func (s *TUISelector) updateFilteredCommands() {
 		s.filteredCommands = locationFiltered
 	} else {
 		s.filteredCommands = s.fuzzyFilter(locationFiltered, s.searchQuery)
+	}
+
+	// Sort by frecency score if enabled
+	if s.frecencyEnabled && s.history != nil {
+		sort.Slice(s.filteredCommands, func(i, j int) bool {
+			// Higher scores first
+			return s.filteredCommands[i].FrecencyScore > s.filteredCommands[j].FrecencyScore
+		})
 	}
 
 	// Update command list display
@@ -387,12 +447,13 @@ func (s *TUISelector) updateLocationDisplay() {
 			displayName = loc.Location
 		}
 
-		prefix := "[ ]"
+		// Minimal indicator (like fzf multi-select)
+		prefix := "  "
 		if s.selectedLocations[displayName] {
-			prefix = "[✓]"
+			prefix = "• "
 		}
 
-		s.locationList.AddItem(fmt.Sprintf("%s %s", prefix, displayName), "", 0, nil)
+		s.locationList.AddItem(fmt.Sprintf("%s%s", prefix, displayName), "", 0, nil)
 	}
 }
 
@@ -407,19 +468,34 @@ func (s *TUISelector) updateStatus() {
 		}
 	}
 
-	var locationStatus string
-	if selectedCount == 0 || selectedCount == len(s.config.Locations) {
-		locationStatus = "[green]All locations[white]"
-	} else {
-		locationStatus = fmt.Sprintf("[green]%s[white]", strings.Join(selectedNames, ", "))
+	// Compact single-line status like fzf
+	var parts []string
+
+	// Count
+	parts = append(parts, fmt.Sprintf("[::d]%d/%d[-]", len(s.filteredCommands), len(s.commands)))
+
+	// Location filter (if not all)
+	if selectedCount > 0 && selectedCount < len(s.config.Locations) {
+		locationText := strings.Join(selectedNames, ",")
+		if len(locationText) > 30 {
+			locationText = locationText[:27] + "..."
+		}
+		parts = append(parts, fmt.Sprintf("[green]%s[-]", locationText))
 	}
 
-	searchStatus := ""
+	// Search query (if any)
 	if s.searchQuery != "" {
-		searchStatus = fmt.Sprintf("\nSearch: [yellow]%s[white]", s.searchQuery)
+		queryText := s.searchQuery
+		if len(queryText) > 20 {
+			queryText = queryText[:17] + "..."
+		}
+		parts = append(parts, fmt.Sprintf("[yellow]'%s'[-]", queryText))
 	}
 
-	commandCount := fmt.Sprintf("\nShowing: [cyan]%d[white] commands", len(s.filteredCommands))
+	// Frecency indicator
+	if s.frecencyEnabled {
+		parts = append(parts, "[blue]⚡[-]")
+	}
 
-	s.statusText.SetText(fmt.Sprintf("Active: %s%s%s", locationStatus, searchStatus, commandCount))
+	s.statusText.SetText("  " + strings.Join(parts, "  "))
 }

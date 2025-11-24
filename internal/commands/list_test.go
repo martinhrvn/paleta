@@ -20,7 +20,7 @@ func TestListCommands(t *testing.T) {
 					{
 						Name:     "frontend",
 						Location: "packages/frontend",
-						Commands: []string{"start", "build", "test"},
+						Commands: stringsToCommands([]string{"start", "build", "test"}),
 					},
 				},
 			},
@@ -37,12 +37,12 @@ func TestListCommands(t *testing.T) {
 					{
 						Name:     "frontend",
 						Location: "packages/frontend",
-						Commands: []string{"start", "build"},
+						Commands: stringsToCommands([]string{"start", "build"}),
 					},
 					{
 						Name:     "backend",
 						Location: "packages/backend",
-						Commands: []string{"run", "test"},
+						Commands: stringsToCommands([]string{"run", "test"}),
 					},
 				},
 			},
@@ -59,12 +59,12 @@ func TestListCommands(t *testing.T) {
 				Locations: []config.Location{
 					{
 						Location: "packages/frontend",
-						Commands: []string{"start", "build"},
+						Commands: stringsToCommands([]string{"start", "build"}),
 					},
 					{
 						Name:     "backend",
 						Location: "packages/backend",
-						Commands: []string{"run"},
+						Commands: stringsToCommands([]string{"run"}),
 					},
 				},
 			},
@@ -85,7 +85,7 @@ func TestListCommands(t *testing.T) {
 					{
 						Name:     "backend",
 						Location: "packages/backend",
-						Commands: []string{"run"},
+						Commands: stringsToCommands([]string{"run"}),
 					},
 				},
 			},
@@ -133,7 +133,7 @@ func TestFormatForFzf(t *testing.T) {
 					{
 						Name:     "frontend",
 						Location: "packages/frontend",
-						Commands: []string{"start", "build"},
+						Commands: stringsToCommands([]string{"start", "build"}),
 					},
 				},
 			},
@@ -149,11 +149,11 @@ func TestFormatForFzf(t *testing.T) {
 					{
 						Name:     "frontend",
 						Location: "packages/frontend",
-						Commands: []string{"start"},
+						Commands: stringsToCommands([]string{"start"}),
 					},
 					{
 						Location: "packages/backend",
-						Commands: []string{"run"},
+						Commands: stringsToCommands([]string{"run"}),
 					},
 				},
 			},
@@ -195,11 +195,11 @@ func TestListCommandsOutput(t *testing.T) {
 			{
 				Name:     "frontend",
 				Location: "packages/frontend",
-				Commands: []string{"start", "build"},
+				Commands: stringsToCommands([]string{"start", "build"}),
 			},
 			{
 				Location: "packages/backend",
-				Commands: []string{"run", "test"},
+				Commands: stringsToCommands([]string{"run", "test"}),
 			},
 		},
 	}

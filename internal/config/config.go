@@ -10,16 +10,60 @@ import (
 )
 
 type Config struct {
-	Locations []Location `yaml:"locations"`
+	Root      string          `yaml:"root,omitempty"`
+	Locations []Location      `yaml:"locations"`
+	Frecency  FrecencyConfig  `yaml:"frecency,omitempty"`
+}
+
+// FrecencyConfig configures frecency sorting behavior
+type FrecencyConfig struct {
+	Enabled         bool    `yaml:"enabled"`
+	RecencyWeight   float64 `yaml:"recency_weight"`
+	FrequencyWeight float64 `yaml:"frequency_weight"`
+}
+
+// DefaultFrecencyConfig returns the default frecency configuration
+func DefaultFrecencyConfig() FrecencyConfig {
+	return FrecencyConfig{
+		Enabled:         true,
+		RecencyWeight:   0.5,
+		FrequencyWeight: 0.5,
+	}
+}
+
+type Command struct {
+	Name    string `yaml:"name,omitempty"`
+	Command string `yaml:"command"`
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling for Command
+// Supports both string format (old) and object format (new)
+func (c *Command) UnmarshalYAML(value *yaml.Node) error {
+	// Try to unmarshal as a string (old format)
+	var cmdString string
+	if err := value.Decode(&cmdString); err == nil {
+		c.Command = cmdString
+		c.Name = "" // No name for old format
+		return nil
+	}
+
+	// Try to unmarshal as an object (new format)
+	type commandAlias Command
+	var cmd commandAlias
+	if err := value.Decode(&cmd); err != nil {
+		return err
+	}
+	*c = Command(cmd)
+	return nil
 }
 
 type Location struct {
-	Name     string   `yaml:"name,omitempty"`
-	Location string   `yaml:"location,omitempty"`
-	Type     string   `yaml:"type,omitempty"`
-	Commands []string `yaml:"commands,omitempty"`
-	Include  []string `yaml:"include,omitempty"`
-	Exclude  []string `yaml:"exclude,omitempty"`
+	Name     string    `yaml:"name,omitempty"`
+	Location string    `yaml:"location,omitempty"`
+	Type     string    `yaml:"type,omitempty"`
+	Commands []Command `yaml:"commands,omitempty"`
+	Include  []string  `yaml:"include,omitempty"`
+	Exclude  []string  `yaml:"exclude,omitempty"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {
@@ -33,6 +77,9 @@ func LoadConfig(configPath string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
+
+	// Apply default frecency config if not specified
+	applyDefaultFrecencyConfig(&config)
 
 	// Normalize empty paths to current directory
 	normalizeEmptyPaths(&config)
@@ -52,6 +99,14 @@ func LoadConfig(configPath string) (*Config, error) {
 	return &config, nil
 }
 
+// applyDefaultFrecencyConfig applies default frecency settings if not configured
+func applyDefaultFrecencyConfig(config *Config) {
+	// If frecency config is missing, use defaults
+	if config.Frecency.RecencyWeight == 0 && config.Frecency.FrequencyWeight == 0 {
+		config.Frecency = DefaultFrecencyConfig()
+	}
+}
+
 // normalizeEmptyPaths normalizes empty location paths to "." (current directory)
 func normalizeEmptyPaths(config *Config) {
 	for i := range config.Locations {
@@ -65,9 +120,10 @@ func normalizeEmptyPaths(config *Config) {
 // Include patterns act as a whitelist (if specified)
 // Exclude patterns act as a blacklist (applied after include)
 // Both support glob patterns using filepath.Match syntax
-func filterCommands(commands []string, include []string, exclude []string) []string {
+// Patterns match against command name (if present) or command string
+func filterCommands(commands []Command, include []string, exclude []string) []Command {
 	if len(commands) == 0 {
-		return []string{}
+		return []Command{}
 	}
 
 	// If no filters specified, return all commands
@@ -75,13 +131,18 @@ func filterCommands(commands []string, include []string, exclude []string) []str
 		return commands
 	}
 
-	var result []string
+	var result []Command
 
 	// Apply include filter (whitelist)
 	if len(include) > 0 {
 		for _, cmd := range commands {
+			// Match against command name if present, otherwise against command string
+			matchString := cmd.Name
+			if matchString == "" {
+				matchString = cmd.Command
+			}
 			for _, pattern := range include {
-				matched, err := filepath.Match(pattern, cmd)
+				matched, err := filepath.Match(pattern, matchString)
 				if err == nil && matched {
 					result = append(result, cmd)
 					break // Command matched, no need to check other patterns
@@ -95,11 +156,16 @@ func filterCommands(commands []string, include []string, exclude []string) []str
 
 	// Apply exclude filter (blacklist)
 	if len(exclude) > 0 {
-		filtered := make([]string, 0, len(result))
+		filtered := make([]Command, 0, len(result))
 		for _, cmd := range result {
+			// Match against command name if present, otherwise against command string
+			matchString := cmd.Name
+			if matchString == "" {
+				matchString = cmd.Command
+			}
 			shouldExclude := false
 			for _, pattern := range exclude {
-				matched, err := filepath.Match(pattern, cmd)
+				matched, err := filepath.Match(pattern, matchString)
 				if err == nil && matched {
 					shouldExclude = true
 					break
@@ -137,16 +203,19 @@ func processProjectTypes(config *Config) error {
 
 		// For configurable project types, get the full commands directly
 		if configurableType, ok := projectType.(*projecttypes.ConfigurableProjectType); ok {
-			// Get all commands as a map
+			// Get all commands as a map (key = name, value = full command)
 			commands, err := configurableType.GetAllCommands(location.Location)
 			if err != nil {
 				return fmt.Errorf("failed to parse commands for location %s: %w", location.Location, err)
 			}
 
-			// Convert to command list format
-			var commandList []string
-			for _, cmd := range commands {
-				commandList = append(commandList, cmd)
+			// Convert to command list format with names
+			var commandList []Command
+			for name, cmd := range commands {
+				commandList = append(commandList, Command{
+					Name:    name,
+					Command: cmd,
+				})
 			}
 
 			// Filter discovered commands based on include/exclude patterns
@@ -164,17 +233,23 @@ func processProjectTypes(config *Config) error {
 			}
 
 			// Prefix the commands with the project type command prefix
-			var prefixedCommands []string
+			var commandList []Command
 			for _, cmd := range projectCommands {
+				var fullCmd string
 				if projectType.GetCommandPrefix() != "" {
-					prefixedCommands = append(prefixedCommands, fmt.Sprintf("%s %s", projectType.GetCommandPrefix(), cmd))
+					fullCmd = fmt.Sprintf("%s %s", projectType.GetCommandPrefix(), cmd)
 				} else {
-					prefixedCommands = append(prefixedCommands, cmd)
+					fullCmd = cmd
 				}
+				// No name available for fallback path
+				commandList = append(commandList, Command{
+					Name:    "",
+					Command: fullCmd,
+				})
 			}
 
 			// Filter discovered commands based on include/exclude patterns
-			filteredCommands := filterCommands(prefixedCommands, location.Include, location.Exclude)
+			filteredCommands := filterCommands(commandList, location.Include, location.Exclude)
 
 			// Merge filtered auto-discovered commands with manual commands
 			allCommands := append(location.Commands, filteredCommands...)
@@ -189,4 +264,74 @@ func processProjectTypes(config *Config) error {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// LoadGlobalConfig loads the global configuration from ~/.config/gopm/config.yaml
+func LoadGlobalConfig() (*Config, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		// If home directory can't be determined, return empty config
+		return &Config{
+			Frecency: DefaultFrecencyConfig(),
+		}, nil
+	}
+
+	globalConfigPath := filepath.Join(homeDir, ".config", "gopm", "config.yaml")
+
+	// If global config doesn't exist, return defaults
+	if !fileExists(globalConfigPath) {
+		return &Config{
+			Frecency: DefaultFrecencyConfig(),
+		}, nil
+	}
+
+	// Load global config
+	config, err := LoadConfig(globalConfigPath)
+	if err != nil {
+		// If there's an error loading, return defaults
+		return &Config{
+			Frecency: DefaultFrecencyConfig(),
+		}, nil
+	}
+
+	return config, nil
+}
+
+// MergeFrecencyConfig merges frecency settings, with local config taking precedence
+func MergeFrecencyConfig(global, local FrecencyConfig) FrecencyConfig {
+	result := global
+
+	// If local config has non-zero values, use them (they override global)
+	// Note: We need to distinguish between "not set" and "set to false/0"
+	// For simplicity, we'll check if any local config is different from zero values
+	if local.RecencyWeight != 0 || local.FrequencyWeight != 0 {
+		result.RecencyWeight = local.RecencyWeight
+		result.FrequencyWeight = local.FrequencyWeight
+	}
+
+	// Enabled can be explicitly set to false, so we need special handling
+	// If both weights are zero in local, we assume frecency config wasn't specified locally
+	localConfigSpecified := local.RecencyWeight != 0 || local.FrequencyWeight != 0
+	if localConfigSpecified {
+		result.Enabled = local.Enabled
+	}
+
+	return result
+}
+
+// LoadConfigWithGlobal loads both global and local configs and merges them
+func LoadConfigWithGlobal(localConfigPath string) (*Config, error) {
+	// Load global config
+	globalConfig, _ := LoadGlobalConfig()
+
+	// Load local config
+	localConfig, err := LoadConfig(localConfigPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Merge frecency settings (local overrides global)
+	localConfig.Frecency = MergeFrecencyConfig(globalConfig.Frecency, localConfig.Frecency)
+
+	return localConfig, nil
 }

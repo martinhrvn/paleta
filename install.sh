@@ -388,19 +388,68 @@ EOF
     fi
 }
 
+# Function to setup zsh integration (keyboard shortcuts)
+setup_zsh_integration() {
+    print_step "Setting up zsh shell integration..."
+
+    # Only setup for zsh
+    if [ -n "$ZSH_VERSION" ] || grep -q "zsh" "$SHELL" 2>/dev/null; then
+        local integration_dir="$HOME/.local/share/gopm"
+        local integration_file="$integration_dir/gopm-integration.zsh"
+        local zshrc="$HOME/.zshrc"
+
+        # Create directory if it doesn't exist
+        mkdir -p "$integration_dir"
+
+        # Copy or install integration file
+        if [ -f "gopm-integration.zsh" ]; then
+            # If we're in the development directory
+            cp "gopm-integration.zsh" "$integration_file"
+        elif [ -f "$(dirname "$0")/gopm-integration.zsh" ]; then
+            # If running from the repo directory
+            cp "$(dirname "$0")/gopm-integration.zsh" "$integration_file"
+        else
+            print_info "gopm-integration.zsh not found, skipping zsh integration"
+            return 0
+        fi
+
+        print_success "Integration file installed to $integration_file"
+
+        # Add source line to .zshrc if not already present
+        if [ -f "$zshrc" ]; then
+            if ! grep -q "gopm-integration.zsh" "$zshrc" 2>/dev/null; then
+                echo "" >> "$zshrc"
+                echo "# gopm keyboard shortcut (Ctrl+P)" >> "$zshrc"
+                echo "[ -f \"$integration_file\" ] && source \"$integration_file\"" >> "$zshrc"
+                print_success "Added integration to $zshrc"
+                print_info "Restart your shell or run: source $zshrc"
+                print_info "Press Ctrl+P to launch gopm from anywhere!"
+            else
+                print_success "Integration already configured in $zshrc"
+            fi
+        else
+            print_info "No .zshrc found. Add this to your zsh config:"
+            print_info "  [ -f \"$integration_file\" ] && source \"$integration_file\""
+        fi
+    else
+        print_info "Zsh not detected, skipping zsh integration"
+    fi
+}
+
 # Main installation function
 main() {
     print_step "Starting gopm installation..."
-    
+
     # Check dependencies
     check_dependencies
-    
+
     # Install components
     install_binary
     install_wrapper
     setup_path
     create_completion
-    
+    setup_zsh_integration
+
     print_success "gopm installation completed!"
     echo
     echo "Usage:"

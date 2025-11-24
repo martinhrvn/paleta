@@ -19,7 +19,12 @@ func ListCommands(cfg *config.Config) []string {
 		
 		// Add each command for this location
 		for _, command := range location.Commands {
-			commands = append(commands, fmt.Sprintf("%s:%s", displayName, command))
+			// Use command name if available, otherwise use full command
+			cmdDisplay := command.Name
+			if cmdDisplay == "" {
+				cmdDisplay = command.Command
+			}
+			commands = append(commands, fmt.Sprintf("%s:%s", displayName, cmdDisplay))
 		}
 	}
 	
@@ -40,7 +45,12 @@ func FormatForFzf(cfg *config.Config) []string {
 		
 		// Add each command for this location in fzf format
 		for _, command := range location.Commands {
-			commands = append(commands, fmt.Sprintf("[%s] %s", displayName, command))
+			// Use command name if available, otherwise use full command
+			cmdDisplay := command.Name
+			if cmdDisplay == "" {
+				cmdDisplay = command.Command
+			}
+			commands = append(commands, fmt.Sprintf("[%s] %s", displayName, cmdDisplay))
 		}
 	}
 	

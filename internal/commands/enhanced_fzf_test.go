@@ -13,7 +13,7 @@ func TestRunEnhancedFzf_ConfigParsing(t *testing.T) {
 			{
 				Name:     "test-project",
 				Location: "/test/path",
-				Commands: []string{"test command"},
+				Commands: stringsToCommands([]string{"test command"}),
 			},
 		},
 	}
@@ -30,16 +30,16 @@ func TestPrepareCommandInfo_WithLocations(t *testing.T) {
 			{
 				Name:     "frontend",
 				Location: "/path/to/frontend",
-				Commands: []string{"npm start", "npm test"},
+				Commands: stringsToCommands([]string{"npm start", "npm test"}),
 			},
 			{
 				Name:     "backend",
 				Location: "/path/to/backend",
-				Commands: []string{"go run main.go"},
+				Commands: stringsToCommands([]string{"go run main.go"}),
 			},
 			{
 				Location: "/path/to/scripts",
-				Commands: []string{"./deploy.sh"},
+				Commands: stringsToCommands([]string{"./deploy.sh"}),
 			},
 		},
 	}

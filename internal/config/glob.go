@@ -83,7 +83,9 @@ func expandSingleGlob(loc Location) ([]Location, error) {
 			Name:     name,
 			Location: match,
 			Type:     loc.Type,
-			Commands: append([]string{}, loc.Commands...),
+			Commands: append([]Command{}, loc.Commands...),
+			Include:  append([]string{}, loc.Include...),
+			Exclude:  append([]string{}, loc.Exclude...),
 		}
 		result = append(result, newLoc)
 	}

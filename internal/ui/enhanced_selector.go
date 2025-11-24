@@ -19,11 +19,12 @@ type SelectionResult struct {
 
 // CommandInfo holds information about a command for display
 type CommandInfo struct {
-	Display     string
-	Directory   string
-	Command     string
-	DisplayName string
-	Type        string // Project type (npm, go, etc.)
+	Display       string
+	Directory     string
+	Command       string
+	DisplayName   string
+	Type          string  // Project type (npm, go, etc.)
+	FrecencyScore float64 // Score for sorting
 }
 
 // EnhancedSelector provides command selection with location filtering
@@ -141,10 +142,16 @@ func (s *EnhancedSelector) prepareFilteredCommands() []CommandInfo {
 		}
 
 		for _, command := range location.Commands {
+			// Use command name if available, otherwise use full command
+			cmdDisplay := command.Name
+			if cmdDisplay == "" {
+				cmdDisplay = command.Command
+			}
+
 			info := CommandInfo{
-				Display:     fmt.Sprintf("%s: %s", displayName, command),
+				Display:     fmt.Sprintf("%s: %s", displayName, cmdDisplay),
 				Directory:   location.Location,
-				Command:     command,
+				Command:     command.Command,
 				DisplayName: displayName,
 				Type:        location.Type,
 			}

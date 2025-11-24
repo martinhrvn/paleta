@@ -6,6 +6,7 @@ import (
 
 	"github.com/martin/go-pm/internal/commands"
 	"github.com/martin/go-pm/internal/config"
+	"github.com/martin/go-pm/internal/history"
 )
 
 func main() {
@@ -23,6 +24,8 @@ func main() {
 		handleListCommand()
 	case "select":
 		handleSelectCommand()
+	case "record":
+		handleRecordCommand()
 	case "help":
 		showUsage()
 	default:
@@ -119,8 +122,43 @@ func handleSelectCommand() {
 	}
 
 	// Output as JSON for shell script parsing
-	fmt.Printf(`{"directory":"%s","command":"%s"}`, result.Directory, result.Command)
+	fmt.Printf(`{"directory":"%s","command":"%s","display_name":"%s"}`, result.Directory, result.Command, result.DisplayName)
 	fmt.Println()
+}
+
+func handleRecordCommand() {
+	// Expect arguments: gopm record <display_name> <command>
+	if len(os.Args) < 4 {
+		fmt.Fprintf(os.Stderr, "Usage: gopm record <location> <command>\n")
+		os.Exit(1)
+	}
+
+	displayName := os.Args[2]
+	command := os.Args[3]
+
+	// Find project root
+	projectRoot, err := history.FindProjectRoot(".")
+	if err != nil {
+		// Silently fail - history is optional
+		return
+	}
+
+	// Load or create history
+	hist, err := history.LoadOrCreateHistory(projectRoot)
+	if err != nil {
+		// Silently fail - history is optional
+		return
+	}
+
+	// Record execution
+	err = hist.RecordExecution(displayName, command)
+	if err != nil {
+		// Silently fail
+		return
+	}
+
+	// Save history
+	_ = hist.SaveToDefaultLocation()
 }
 
 func showUsage() {

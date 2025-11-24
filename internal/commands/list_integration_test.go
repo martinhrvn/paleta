@@ -27,26 +27,26 @@ func TestListCommandsIntegration(t *testing.T) {
 			name: "npm-monorepo",
 			dir:  "../../examples/npm-monorepo",
 			expected: []string{
-				// Default npm commands
-				"backend:npm install",
-				"backend:npm audit",
-				"backend:npm outdated",
-				"backend:npm update",
-				// Scripts from package.json
-				"backend:npm run start",
-				"backend:npm run build",
-				"backend:npm run test",
-				"backend:npm run dev",
-				// Default npm commands
-				"frontend:npm install",
-				"frontend:npm audit",
-				"frontend:npm outdated",
-				"frontend:npm update",
-				// Scripts from package.json
-				"frontend:npm run start",
-				"frontend:npm run build",
-				"frontend:npm run test",
-				"frontend:npm run dev",
+				// Command names from npm (base commands and scripts)
+				"backend:install",
+				"backend:audit",
+				"backend:outdated",
+				"backend:update",
+				// Scripts from package.json (names only)
+				"backend:start",
+				"backend:build",
+				"backend:test",
+				"backend:dev",
+				// Command names from npm (base commands and scripts)
+				"frontend:install",
+				"frontend:audit",
+				"frontend:outdated",
+				"frontend:update",
+				// Scripts from package.json (names only)
+				"frontend:start",
+				"frontend:build",
+				"frontend:test",
+				"frontend:dev",
 			},
 		},
 	}
@@ -117,26 +117,26 @@ func TestFormatForFzfIntegration(t *testing.T) {
 	fzfList := commands.FormatForFzf(cfg)
 
 	expectedEntries := []string{
-		// Default npm commands
-		"[backend] npm install",
-		"[backend] npm audit", 
-		"[backend] npm outdated",
-		"[backend] npm update",
-		// Scripts from package.json
-		"[backend] npm run start",
-		"[backend] npm run build",
-		"[backend] npm run test",
-		"[backend] npm run dev",
-		// Default npm commands
-		"[frontend] npm install",
-		"[frontend] npm audit",
-		"[frontend] npm outdated",
-		"[frontend] npm update",
-		// Scripts from package.json
-		"[frontend] npm run start",
-		"[frontend] npm run build",
-		"[frontend] npm run test",
-		"[frontend] npm run dev",
+		// Command names from npm (base commands and scripts)
+		"[backend] install",
+		"[backend] audit",
+		"[backend] outdated",
+		"[backend] update",
+		// Scripts from package.json (names only)
+		"[backend] start",
+		"[backend] build",
+		"[backend] test",
+		"[backend] dev",
+		// Command names from npm (base commands and scripts)
+		"[frontend] install",
+		"[frontend] audit",
+		"[frontend] outdated",
+		"[frontend] update",
+		// Scripts from package.json (names only)
+		"[frontend] start",
+		"[frontend] build",
+		"[frontend] test",
+		"[frontend] dev",
 	}
 
 	// Sort for consistent comparison

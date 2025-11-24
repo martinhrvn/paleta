@@ -83,10 +83,11 @@ run_command() {
         exit 1
     fi
 
-    # Parse JSON to extract directory and command
+    # Parse JSON to extract directory, command, and display_name
     local jq_cmd="${JQ_CMD:-jq}"
     DIRECTORY=$(echo "$SELECTION_JSON" | "$jq_cmd" -r '.directory')
     COMMAND=$(echo "$SELECTION_JSON" | "$jq_cmd" -r '.command')
+    DISPLAY_NAME=$(echo "$SELECTION_JSON" | "$jq_cmd" -r '.display_name')
 
     # Validate parsed values
     if [ "$DIRECTORY" = "null" ] || [ "$COMMAND" = "null" ]; then
@@ -105,9 +106,14 @@ run_command() {
     print_info "In: $DIRECTORY"
     echo
 
+    # Record this command execution in history (silently fail if it doesn't work)
+    if [ -n "$DISPLAY_NAME" ] && [ "$DISPLAY_NAME" != "null" ]; then
+        "$GOPM_BINARY" record "$DISPLAY_NAME" "$COMMAND" 2>/dev/null || true
+    fi
+
     # Change to the directory and run the command
     cd "$DIRECTORY"
-    
+
     # Use BASH_CMD if set (for Nix), otherwise use bash
     local bash_cmd="${BASH_CMD:-bash}"
     exec "$bash_cmd" -c "$COMMAND"

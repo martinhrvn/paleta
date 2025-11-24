@@ -6,6 +6,15 @@ import (
 	"github.com/martin/go-pm/internal/config"
 )
 
+// Helper to convert strings to Commands for tests
+func stringsToCommands(strs []string) []config.Command {
+	cmds := make([]config.Command, len(strs))
+	for i, s := range strs {
+		cmds[i] = config.Command{Name: "", Command: s}
+	}
+	return cmds
+}
+
 func TestParseFzfSelection(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -79,20 +88,20 @@ func TestFindLocationByDisplayName(t *testing.T) {
 			{
 				Name:     "frontend",
 				Location: "packages/frontend",
-				Commands: []string{"start", "build"},
+				Commands: stringsToCommands([]string{"start", "build"}),
 			},
 			{
 				Location: "packages/backend",
-				Commands: []string{"run", "test"},
+				Commands: stringsToCommands([]string{"run", "test"}),
 			},
 			{
 				Name:     "scripts",
 				Location: "scripts",
-				Commands: []string{"deploy.sh"},
+				Commands: stringsToCommands([]string{"deploy.sh"}),
 			},
 			{
 				Location: ".",
-				Commands: []string{"go test", "go build"},
+				Commands: stringsToCommands([]string{"go test", "go build"}),
 			},
 		},
 	}
@@ -158,11 +167,11 @@ func TestSelectionResult(t *testing.T) {
 			{
 				Name:     "frontend",
 				Location: "packages/frontend",
-				Commands: []string{"start", "build"},
+				Commands: stringsToCommands([]string{"start", "build"}),
 			},
 			{
-				Location: "packages/backend", 
-				Commands: []string{"run"},
+				Location: "packages/backend",
+				Commands: stringsToCommands([]string{"run"}),
 			},
 		},
 	}
