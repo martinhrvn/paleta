@@ -61,10 +61,11 @@ func TestLoadConfigWithGlobExpansion(t *testing.T) {
 	}
 
 	// Verify glob expansion worked
+	// Paths should now be absolute
 	expectedLocations := []string{
-		"packages/backend",
-		"packages/frontend", 
-		"packages/shared",
+		filepath.Join(tmpDir, "packages/backend"),
+		filepath.Join(tmpDir, "packages/frontend"),
+		filepath.Join(tmpDir, "packages/shared"),
 	}
 
 	if len(config.Locations) != len(expectedLocations) {

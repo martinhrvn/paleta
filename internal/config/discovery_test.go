@@ -214,8 +214,10 @@ func TestLoadConfigFromDiscovery(t *testing.T) {
 		t.Errorf("Expected location name 'frontend', got %q", config.Locations[0].Name)
 	}
 
-	if config.Locations[0].Location != "packages/frontend" {
-		t.Errorf("Expected location path 'packages/frontend', got %q", config.Locations[0].Location)
+	// Location should now be absolute path
+	expectedLocation := filepath.Join(tmpDir, "project/packages/frontend")
+	if config.Locations[0].Location != expectedLocation {
+		t.Errorf("Expected location path %q, got %q", expectedLocation, config.Locations[0].Location)
 	}
 }
 
@@ -558,14 +560,18 @@ locations:
 
 			// Verify correct config was loaded
 			if tt.expectLocal {
-				if len(config.Locations) == 0 || config.Locations[0].Location != "local-src" {
-					t.Error("Expected local config to be loaded")
+				expectedLocation := filepath.Join(projectDir, "local-src")
+				if len(config.Locations) == 0 || config.Locations[0].Location != expectedLocation {
+					t.Errorf("Expected local config to be loaded with location %q, got %q",
+						expectedLocation, config.Locations[0].Location)
 				}
 			}
 
 			if tt.expectGlobal {
-				if len(config.Locations) == 0 || config.Locations[0].Location != "global-src" {
-					t.Error("Expected global config to be loaded")
+				expectedLocation := filepath.Join(projectDir, "global-src")
+				if len(config.Locations) == 0 || config.Locations[0].Location != expectedLocation {
+					t.Errorf("Expected global config to be loaded with location %q, got %q",
+						expectedLocation, config.Locations[0].Location)
 				}
 			}
 		})

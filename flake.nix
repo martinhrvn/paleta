@@ -81,21 +81,23 @@
           };
         };
         
-        # Shell completions
+        # Shell completions and integration
         gopm-completions = pkgs.stdenv.mkDerivation {
           name = "gopm-completions";
           src = ./.;
-          
+
           installPhase = ''
             mkdir -p $out/share/bash-completion/completions
             mkdir -p $out/share/zsh/site-functions
-            
+            mkdir -p $out/share/gopm
+
             cp completion.bash $out/share/bash-completion/completions/gopm
             cp completion.zsh $out/share/zsh/site-functions/_gopm
+            cp gopm-integration.zsh $out/share/gopm/gopm-integration.zsh
           '';
-          
+
           meta = with pkgs.lib; {
-            description = "Shell completions for gopm";
+            description = "Shell completions and integration for gopm";
             platforms = platforms.unix;
           };
         };

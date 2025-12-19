@@ -91,6 +91,12 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 	config.Locations = expandedLocations
 
+	// Convert all location paths to absolute paths
+	// This must happen while we're still in the config directory
+	if err := makeLocationPathsAbsolute(&config); err != nil {
+		return nil, fmt.Errorf("failed to make location paths absolute: %w", err)
+	}
+
 	// Process project types and add their commands
 	if err := processProjectTypes(&config); err != nil {
 		return nil, fmt.Errorf("failed to process project types: %w", err)
@@ -114,6 +120,35 @@ func normalizeEmptyPaths(config *Config) {
 			config.Locations[i].Location = "."
 		}
 	}
+}
+
+// makeLocationPathsAbsolute converts all relative location paths to absolute paths
+// For local configs: uses current working directory (should be config directory)
+// For global configs: uses config.Root as base directory
+func makeLocationPathsAbsolute(config *Config) error {
+	for i := range config.Locations {
+		if config.Locations[i].Location == "" {
+			continue
+		}
+
+		var absPath string
+
+		// If config has a Root field (global projects), use that as base
+		if config.Root != "" {
+			// Join location with root directory
+			absPath = filepath.Join(config.Root, config.Locations[i].Location)
+		} else {
+			// Use current working directory (local .gopmrc case)
+			var err error
+			absPath, err = filepath.Abs(config.Locations[i].Location)
+			if err != nil {
+				return fmt.Errorf("failed to get absolute path for location %q: %w", config.Locations[i].Location, err)
+			}
+		}
+
+		config.Locations[i].Location = absPath
+	}
+	return nil
 }
 
 // filterCommands filters commands based on include and exclude patterns

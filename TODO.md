@@ -61,9 +61,9 @@ The project types we should support intitally are:
 - [ ] Support for comments in config file
 
 ### Enhanced UI/UX
-- [ ] Preview window in fzf showing command details
-- [ ] Most recently used (MRU) commands at top
-- [ ] Command history tracking
+- [x] Preview window in fzf showing command details
+- [x] Most recently used (MRU) commands at top (via frecency)
+- [x] Command history tracking
 - [ ] Dry-run mode to preview what will be executed
 - [ ] Verbose mode for debugging
 - [ ] Do not show locations that do not exist
@@ -72,10 +72,12 @@ The project types we should support intitally are:
   - keyboard shortcut to focus/unfocus while searching
 - [ ] aliases
 - [ ] automatically detect type of a location based on presence of package.json/go.mod/etc.
-- [ ] history of executed commands
-   - [ ] store in a file (probably some home directory config, but per "project")
-   - [ ] default sort by frecency of use
-   - [ ] allow to change sorting by keboard shortcut
+- [x] history of executed commands
+   - [x] store in a file (per project in ~/.gopm/history/)
+   - [x] default sort by frecency of use (50/50 balance)
+   - [x] allow to change sorting by keyboard shortcut (Ctrl+F in TUI mode)
+   - [x] global config support (~/.config/gopm/config.yaml)
+   - [x] per-project config override via .gopmrc
 ### Advanced Features
 - [ ] Support for pre/post command hooks
 - [ ] Support for command templates/variables
@@ -83,7 +85,8 @@ The project types we should support intitally are:
 - [ ] Support for command groups/categories
 - [ ] Integration with different package managers based on `type`
 - [ ] Watch mode for repeated command execution
-- [ ] Shell completion (bash/zsh/fish)
+- [x] Shell completion (bash/zsh)
+- [x] Zsh keyboard shortcut integration (Ctrl+P to launch gopm)
 
 ## Implementation Details
 
@@ -114,6 +117,7 @@ The project types we should support intitally are:
 - [x] Enhanced shell wrapper script (gopm.sh)
 - [x] Installation script (install.sh)
 - [x] Shell completion (bash/zsh)
+- [x] Zsh keyboard shortcut integration (Ctrl+P)
 - [x] Auto-detection of binary location
 - [x] Colored output and better UX
 - [x] Nix flake with complete package and development environment
@@ -172,6 +176,14 @@ The project types we should support intitally are:
 - [x] Default embedded parser configurations
 - [x] Parser command execution with proper error handling
 
+### Global Project Configuration
+- [x] Support for centralized project configs in `~/.config/gopm/projects/`
+- [x] Per-project YAML files with root directory specification
+- [x] Automatic matching based on current directory vs project root
+- [x] Precedence: local .gopmrc takes priority over global configs
+- [x] Global frecency settings still apply from `~/.config/gopm/config.yaml`
+- [x] Closest match preferred when multiple projects match
+
 ## Release Checklist
 - [ ] Version tagging
 - [ ] Changelog updates
@@ -195,3 +207,26 @@ The project types we should support intitally are:
 - Iterate based on real usage patterns
 - Keep the tool fast and responsive
 - Maintain backwards compatibility with config format
+
+## Recent Updates
+
+### Frecency Sorting (Completed)
+Added intelligent command ranking based on frequency and recency:
+- **History Tracking**: Per-project command execution history stored in `~/.gopm/history/`
+- **Frecency Algorithm**: 50/50 balanced scoring (configurable)
+  - Frequency score: `log(count + 1) × 100`
+  - Recency score: `100 / (1 + days_since_access)`
+- **Configuration**:
+  - Global config: `~/.config/gopm/config.yaml`
+  - Local override: `.gopmrc` in project root
+  - Default: enabled with 50/50 balance
+- **UI Integration**:
+  - Standard fzf: Commands sorted by frecency (controlled by config)
+  - Enhanced TUI: Ctrl+F to toggle frecency on/off
+  - Visual indicator when frecency is enabled
+- **Implementation**:
+  - `internal/history/`: Core tracking, storage, and scoring
+  - File locking for concurrent access safety
+  - Automatic pruning (keeps last 1000 entries)
+  - Project detection via .git or .gopmrc
+- **Shell Integration**: Automatic recording after command selection

@@ -143,8 +143,8 @@ func PrepareCommandInfoWithHistory(cfg *config.Config, hist *history.History, en
 	return infos
 }
 
-// RunFzf executes fuzzy finder with the given options and returns the user's selection
-func RunFzf(cfg *config.Config) (*SelectionResult, error) {
+// RunFzf executes fuzzy finder with multi-select support and returns the user's selections
+func RunFzf(cfg *config.Config) ([]SelectionResult, error) {
 	// Load history if frecency is enabled
 	var hist *history.History
 	enableFrecency := cfg.Frecency.Enabled
@@ -164,13 +164,13 @@ func RunFzf(cfg *config.Config) (*SelectionResult, error) {
 		return nil, fmt.Errorf("no commands available")
 	}
 
-	// Use fuzzyfinder to let user select
-	idx, err := fuzzyfinder.Find(
+	// Use fuzzyfinder with multi-select (Tab to toggle, Enter to confirm)
+	indices, err := fuzzyfinder.FindMulti(
 		commandInfos,
 		func(i int) string {
 			return commandInfos[i].Display
 		},
-		fuzzyfinder.WithPromptString("Select command: "),
+		fuzzyfinder.WithPromptString("Select commands (Tab to toggle): "),
 		fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
 			if i == -1 {
 				return ""
@@ -189,12 +189,22 @@ func RunFzf(cfg *config.Config) (*SelectionResult, error) {
 		return nil, fmt.Errorf("fuzzy finder error: %w", err)
 	}
 
-	selected := commandInfos[idx]
-	return &SelectionResult{
-		Directory:   selected.Directory,
-		Command:     selected.Command,
-		DisplayName: selected.DisplayName,
-	}, nil
+	if len(indices) == 0 {
+		return nil, fmt.Errorf("no commands selected")
+	}
+
+	// Convert indices to SelectionResults (preserving selection order)
+	results := make([]SelectionResult, len(indices))
+	for i, idx := range indices {
+		selected := commandInfos[idx]
+		results[i] = SelectionResult{
+			Directory:   selected.Directory,
+			Command:     selected.Command,
+			DisplayName: selected.DisplayName,
+		}
+	}
+
+	return results, nil
 }
 
 // RunEnhancedFzf executes the enhanced fuzzy finder with location filtering support

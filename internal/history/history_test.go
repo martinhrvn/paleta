@@ -398,6 +398,56 @@ func TestHistoryPruning(t *testing.T) {
 	}
 }
 
+// TestGetEntry tests retrieving full command entry data
+func TestGetEntry(t *testing.T) {
+	tempDir := t.TempDir()
+	projectRoot := filepath.Join(tempDir, "test-project")
+
+	h, err := NewHistory(projectRoot)
+	if err != nil {
+		t.Fatalf("NewHistory failed: %v", err)
+	}
+
+	mockClock := &mockTime{current: time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)}
+	h.timeProvider = mockClock
+
+	location := "frontend"
+	command := "npm run build"
+
+	// Test non-existent entry
+	entry, exists := h.GetEntry(location, command)
+	if exists {
+		t.Error("Expected entry to not exist before recording")
+	}
+
+	// Record execution
+	h.RecordExecution(location, command)
+
+	// Advance time and record again
+	mockClock.Set(mockClock.Now().Add(2 * time.Hour))
+	h.RecordExecution(location, command)
+
+	// Get the entry
+	entry, exists = h.GetEntry(location, command)
+	if !exists {
+		t.Fatal("Expected entry to exist after recording")
+	}
+
+	if entry.Count != 2 {
+		t.Errorf("Expected count 2, got %d", entry.Count)
+	}
+
+	expectedLastAccess := time.Date(2024, 6, 15, 12, 30, 0, 0, time.UTC)
+	if !entry.LastAccess.Equal(expectedLastAccess) {
+		t.Errorf("Expected LastAccess %v, got %v", expectedLastAccess, entry.LastAccess)
+	}
+
+	expectedFirstAccess := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+	if !entry.FirstAccess.Equal(expectedFirstAccess) {
+		t.Errorf("Expected FirstAccess %v, got %v", expectedFirstAccess, entry.FirstAccess)
+	}
+}
+
 // TestConcurrentAccess tests thread-safe operations
 func TestConcurrentAccess(t *testing.T) {
 	tempDir := t.TempDir()

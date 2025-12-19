@@ -5,6 +5,8 @@ A fast, lightweight CLI tool for managing and executing commands across multiple
 ## Features
 
 - **Interactive Command Selection**: Use fuzzy search (via fzf or built-in TUI) to quickly find and run commands
+- **Zsh Keyboard Shortcut**: Press Ctrl+P from anywhere to launch gopm (auto-configured during installation)
+- **Global Project Configuration**: Centralized config management in `~/.config/gopm/projects/` with automatic project detection
 - **Monorepo Support**: Manage commands across multiple projects in a single configuration
 - **Project Type Detection**: Automatically discovers commands from package.json, go.mod, and other project files
 - **Glob Pattern Support**: Define locations using glob patterns to match multiple directories
@@ -29,6 +31,7 @@ The installer will:
 - Build and install the `gopm-bin` binary to `~/.local/bin`
 - Install the `gopm` shell wrapper script
 - Set up shell completion (bash/zsh)
+- Configure zsh keyboard shortcut (Ctrl+P) for instant access
 - Add the installation directory to your PATH
 
 ### Using Nix
@@ -113,8 +116,11 @@ locations:
     location: "path/to/project" # Required: Path to project directory
     type: "npm"                 # Optional: Project type (npm, yarn, pnpm, go)
     commands:                   # Optional: Additional custom commands
-      - "command1"
-      - "command2"
+      - "npm run legacy"        # String format (backward compatible)
+      - name: "build"           # Object format with name
+        command: "npm run build"
+      - name: "test"
+        command: "npm test"
 ```
 
 ### Location Fields
@@ -122,7 +128,9 @@ locations:
 - **name** (optional): Display name shown in the command selector
 - **location** (required): Path to the project directory (supports glob patterns)
 - **type** (optional): Project type for automatic command detection
-- **commands** (optional): Additional commands to include
+- **commands** (optional): Additional commands to include (supports both string and object formats)
+- **include** (optional): Whitelist patterns for filtering commands (glob patterns)
+- **exclude** (optional): Blacklist patterns for filtering commands (glob patterns)
 
 ### Supported Project Types
 
@@ -143,6 +151,83 @@ locations:
       - "npm start"
 ```
 
+### Command Formats
+
+Commands can be specified in two formats, which can be mixed within the same location:
+
+**String Format (Legacy):**
+```yaml
+commands:
+  - "npm run build"
+  - "npm test"
+  - "./deploy.sh"
+```
+
+**Object Format (Recommended):**
+```yaml
+commands:
+  - name: "build"
+    command: "npm run build"
+  - name: "test"
+    command: "npm test"
+  - name: "deploy"
+    command: "./deploy.sh"
+```
+
+**Benefits of Named Commands:**
+- **Better UI**: Command names appear clearly in the selector
+- **Filtering**: Use `include` and `exclude` patterns to filter by name
+- **Clarity**: Easier to understand what each command does
+
+**Mixed Format Example:**
+```yaml
+locations:
+  - location: "frontend"
+    type: "npm"
+    commands:
+      - name: "dev"
+        command: "npm run dev -- --host 0.0.0.0"
+      - "npm run build"  # Legacy format still works
+```
+
+### Command Filtering
+
+Filter auto-discovered commands using `include` and `exclude` patterns:
+
+```yaml
+locations:
+  - location: "packages/api"
+    type: "npm"
+    include:
+      - "test*"     # Only include commands starting with "test"
+      - "build"     # And the "build" command
+    exclude:
+      - "*:watch"   # But exclude any watch commands
+```
+
+**Pattern Matching:**
+- Patterns match against command **names** (if present) or command strings
+- Supports glob patterns (`*`, `?`, etc.)
+- Include patterns act as a whitelist (if specified)
+- Exclude patterns act as a blacklist (applied after include)
+
+**Example:**
+```yaml
+locations:
+  - location: "services/*"
+    type: "npm"
+    commands:
+      - name: "local-deploy"
+        command: "docker-compose up"
+    include:
+      - "test*"      # Include test commands from package.json
+      - "build*"     # Include build commands
+      - "local-*"    # Include our custom local-* commands
+    exclude:
+      - "*:watch"    # Exclude watch commands
+      - "test:e2e"   # Exclude e2e tests
+```
+
 ### Custom Parsers
 
 Create `~/.gopm/parsers.yaml` to define custom command parsers:
@@ -160,6 +245,61 @@ parsers:
       command: "jq -r '.scripts | keys[]' {file}"
       template: "npm run {key}"
 ```
+
+### Global Project Configuration
+
+Instead of having `.gopmrc` files in each project, you can maintain centralized configurations in `~/.config/gopm/projects/`. This is useful for backing up your project configurations or managing them across multiple machines.
+
+**Setup:**
+
+Create project configuration files in `~/.config/gopm/projects/`:
+
+```bash
+mkdir -p ~/.config/gopm/projects
+```
+
+**Example Project Configuration:**
+
+Create `~/.config/gopm/projects/my-project.yaml`:
+
+```yaml
+root: /home/user/projects/my-project
+locations:
+  - name: "frontend"
+    location: "packages/frontend"
+    type: "npm"
+  - name: "backend"
+    location: "packages/backend"
+    type: "npm"
+```
+
+**How It Works:**
+
+1. gopm first looks for `.gopmrc` in the current directory and parent directories
+2. If a local `.gopmrc` is found, it takes priority (global frecency settings still apply)
+3. If no local config is found, gopm scans `~/.config/gopm/projects/*.yaml`
+4. It finds the project whose `root` matches or is a parent of the current directory
+5. If multiple projects match, the closest (most specific) one is used
+
+**Benefits:**
+
+- **Centralized Configuration**: Keep all project configs in one place for easy backup
+- **No Per-Project Files**: Useful for projects where you can't or don't want to add a `.gopmrc`
+- **Multiple Machines**: Sync your `~/.config/gopm/projects/` across machines
+- **Flexible Override**: Local `.gopmrc` still takes priority when needed
+
+**Global Settings:**
+
+You can also configure global frecency settings in `~/.config/gopm/config.yaml`:
+
+```yaml
+frecency:
+  enabled: true
+  recency_weight: 0.5    # 0.0 to 1.0
+  frequency_weight: 0.5  # 0.0 to 1.0
+```
+
+These settings apply to all projects unless overridden in a local `.gopmrc`.
 
 ## Usage
 
@@ -199,11 +339,65 @@ The enhanced mode (`--enhanced` flag) provides:
 
 ### Shell Integration
 
+#### Wrapper Script
+
 The gopm wrapper script automatically:
 - Changes to the correct directory
 - Executes the selected command
 - Handles errors gracefully
 - Provides colored output
+
+#### Zsh Keyboard Shortcut (Ctrl+P)
+
+The installer automatically sets up zsh integration that allows you to launch gopm from anywhere with a keyboard shortcut.
+
+**Default Setup (Automatic):**
+
+After running `./install.sh`, the integration is automatically configured in your `~/.zshrc`. Simply restart your shell or run:
+
+```bash
+source ~/.zshrc
+```
+
+Now press **Ctrl+P** to launch gopm's interactive selector from anywhere!
+
+**Customization:**
+
+You can customize the behavior by setting environment variables in your `~/.zshrc`:
+
+```bash
+# Use a different keybinding (e.g., Ctrl+G instead of Ctrl+P)
+export GOPM_KEYBIND='^G'
+
+# Use enhanced mode by default
+export GOPM_MODE='--enhanced'
+
+# Custom binary location (if needed)
+export GOPM_BINARY="$HOME/custom/path/gopm-bin"
+```
+
+**Manual Setup:**
+
+If you need to set up the integration manually:
+
+```bash
+# Download the integration file
+mkdir -p ~/.local/share/gopm
+cp gopm-integration.zsh ~/.local/share/gopm/
+
+# Add to your .zshrc
+echo '[ -f "$HOME/.local/share/gopm/gopm-integration.zsh" ] && source "$HOME/.local/share/gopm/gopm-integration.zsh"' >> ~/.zshrc
+
+# Reload your shell
+source ~/.zshrc
+```
+
+**Features:**
+
+- Launch gopm with a single keypress from anywhere
+- Selected command is executed in the correct directory
+- Command appears in your shell history
+- Automatically records command usage for frecency sorting
 
 ## Examples
 
@@ -238,12 +432,15 @@ locations:
   - name: "scripts"
     location: "scripts"
     commands:
-      - "./deploy.sh production"
-      - "./deploy.sh staging"
-      - "./backup.sh"
+      - name: "deploy-prod"
+        command: "./deploy.sh production"
+      - name: "deploy-staging"
+        command: "./deploy.sh staging"
+      - name: "backup"
+        command: "./backup.sh"
 ```
 
-### Custom Commands
+### Custom Commands with Filtering
 
 ```yaml
 locations:
@@ -251,9 +448,53 @@ locations:
     location: "services/api"
     type: "npm"
     commands:
-      - "docker-compose up"
-      - "docker-compose down"
-      - "make migrate"
+      - name: "docker-up"
+        command: "docker-compose up"
+      - name: "docker-down"
+        command: "docker-compose down"
+      - name: "migrate"
+        command: "make migrate"
+    include:
+      - "test*"      # Include test commands from package.json
+      - "build"      # Include build command
+      - "docker-*"   # Include our custom docker commands
+      - "migrate"    # Include migrate command
+    exclude:
+      - "test:e2e"   # Exclude e2e tests
+```
+
+### Advanced Example with Mixed Formats
+
+```yaml
+locations:
+  - name: "frontend"
+    location: "apps/frontend"
+    type: "npm"
+    commands:
+      # Named commands for better clarity
+      - name: "dev-local"
+        command: "npm run dev -- --host 0.0.0.0 --port 3000"
+      - name: "dev-remote"
+        command: "npm run dev -- --host 0.0.0.0 --port 3000 --public"
+      # Legacy string format still works
+      - "npm run storybook"
+    include:
+      - "build*"     # Include all build variants
+      - "test:unit"  # Include unit tests only
+      - "dev-*"      # Include our custom dev commands
+    exclude:
+      - "test:e2e"   # Exclude e2e tests
+
+  - name: "backend"
+    location: "apps/backend"
+    type: "npm"
+    commands:
+      - name: "debug"
+        command: "node --inspect-brk index.js"
+      - name: "migrate-up"
+        command: "npm run migrate:up"
+      - name: "migrate-down"
+        command: "npm run migrate:down"
 ```
 
 ## Dependencies

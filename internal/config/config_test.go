@@ -399,13 +399,25 @@ func TestLoadConfigWithEmptyLocation(t *testing.T) {
 		t.Fatalf("Failed to write config file: %v", err)
 	}
 
+	// Change to tmpDir before loading config (mimics real usage)
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(oldWd)
+
+	err = os.Chdir(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
+
 	// Load the config
 	config, err := LoadConfig(configPath)
 	if err != nil {
 		t.Fatalf("LoadConfig() failed: %v", err)
 	}
 
-	// Verify the location was normalized to "."
+	// Verify the location was normalized and made absolute
 	if len(config.Locations) != 1 {
 		t.Fatalf("Expected 1 location, got %d", len(config.Locations))
 	}
@@ -414,8 +426,9 @@ func TestLoadConfigWithEmptyLocation(t *testing.T) {
 	if location.Name != "root" {
 		t.Errorf("Expected name 'root', got %q", location.Name)
 	}
-	if location.Location != "." {
-		t.Errorf("Expected location to be normalized to '.', got %q", location.Location)
+	// Location should now be absolute path to tmpDir
+	if location.Location != tmpDir {
+		t.Errorf("Expected location to be %q, got %q", tmpDir, location.Location)
 	}
 	if len(location.Commands) != 2 {
 		t.Errorf("Expected 2 commands, got %d", len(location.Commands))
@@ -487,12 +500,24 @@ func TestLoadConfig(t *testing.T) {
 			defer os.RemoveAll(tmpDir)
 
 			configPath := filepath.Join(tmpDir, tt.configPath)
-			
+
 			if tt.configYAML != "" {
 				err = os.WriteFile(configPath, []byte(tt.configYAML), 0644)
 				if err != nil {
 					t.Fatalf("Failed to write config file: %v", err)
 				}
+			}
+
+			// Change to tmpDir before loading config (mimics real usage)
+			oldWd, err := os.Getwd()
+			if err != nil {
+				t.Fatalf("Failed to get working directory: %v", err)
+			}
+			defer os.Chdir(oldWd)
+
+			err = os.Chdir(tmpDir)
+			if err != nil {
+				t.Fatalf("Failed to change to temp directory: %v", err)
 			}
 
 			config, err := LoadConfig(configPath)
@@ -523,8 +548,10 @@ func TestLoadConfig(t *testing.T) {
 				if loc.Name != expected.Name {
 					t.Errorf("Location[%d].Name = %q, expected %q", i, loc.Name, expected.Name)
 				}
-				if loc.Location != expected.Location {
-					t.Errorf("Location[%d].Location = %q, expected %q", i, loc.Location, expected.Location)
+				// Location should now be absolute
+				expectedLocation := filepath.Join(tmpDir, expected.Location)
+				if loc.Location != expectedLocation {
+					t.Errorf("Location[%d].Location = %q, expected %q", i, loc.Location, expectedLocation)
 				}
 				if loc.Type != expected.Type {
 					t.Errorf("Location[%d].Type = %q, expected %q", i, loc.Type, expected.Type)
