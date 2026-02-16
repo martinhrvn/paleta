@@ -230,3 +230,28 @@ Added intelligent command ranking based on frequency and recency:
   - Automatic pruning (keeps last 1000 entries)
   - Project detection via .git or .gopmrc
 - **Shell Integration**: Automatic recording after command selection
+
+### fzf-style TUI with Multi-Select (Completed)
+Added a new fzf-like TUI interface with improved UX:
+- **New Layout**: Single-column command list (70%) + preview panel (30%)
+  - Removed the locations sidebar for cleaner interface
+  - Preview shows: Location, Path, Command, Type, and Frecency score
+- **Multi-Select Support**:
+  - Tab: Toggle selection on current item
+  - Ctrl+A: Select/deselect all
+  - Enter: Confirm selection(s)
+  - Multiple selections are joined with `&&` for sequential execution
+- **Keyboard Navigation**:
+  - Ctrl+j / Down arrow: Move cursor down
+  - Ctrl+k / Up arrow: Move cursor up
+  - Type to filter (input has focus by default)
+  - Esc/Ctrl+C: Cancel
+- **Integration**:
+  - `gopm select --tui`: Run the new TUI directly
+  - `gopm tui`: Shell command for the new TUI
+  - Ctrl+G (zsh): Keyboard shortcut for gpm TUI mode
+- **Implementation**:
+  - `internal/ui/fzf_tui_selector.go`: New TUI component
+  - `internal/ui/fzf_tui_selector_test.go`: Unit tests (TDD)
+  - Updated `gopm-core.sh` with `gpm_run` function
+  - Updated `gopm-integration.zsh` with `__gpm_tui_select_widget`

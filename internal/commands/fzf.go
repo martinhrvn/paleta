@@ -221,3 +221,24 @@ func RunEnhancedFzf(cfg *config.Config) (*SelectionResult, error) {
 		DisplayName: result.DisplayName,
 	}, nil
 }
+
+// RunFzfTUI executes the new fzf-style TUI with multi-select support
+func RunFzfTUI(cfg *config.Config) ([]SelectionResult, error) {
+	selector := ui.NewFzfTUISelector(cfg)
+	results, err := selector.Run()
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert ui.SelectionResult slice to commands.SelectionResult slice
+	cmdResults := make([]SelectionResult, len(results))
+	for i, r := range results {
+		cmdResults[i] = SelectionResult{
+			Directory:   r.Directory,
+			Command:     r.Command,
+			DisplayName: r.DisplayName,
+		}
+	}
+
+	return cmdResults, nil
+}

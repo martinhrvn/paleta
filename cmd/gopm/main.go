@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/martin/go-pm/internal/commands"
 	"github.com/martin/go-pm/internal/config"
@@ -92,12 +93,14 @@ func handleListCommand() {
 }
 
 func handleSelectCommand() {
-	// Check for enhanced flag
-	enhanced := false
+	// Parse flags
+	mode := "fzf" // default mode
 	for _, arg := range os.Args[2:] {
-		if arg == "--enhanced" || arg == "-e" {
-			enhanced = true
-			break
+		switch arg {
+		case "--enhanced", "-e":
+			mode = "enhanced"
+		case "--tui", "-t":
+			mode = "tui"
 		}
 	}
 
@@ -108,12 +111,20 @@ func handleSelectCommand() {
 		os.Exit(1)
 	}
 
-	// Run fzf selection (enhanced or regular)
-	var result *commands.SelectionResult
-	if enhanced {
-		result, err = commands.RunEnhancedFzf(cfg)
-	} else {
-		result, err = commands.RunFzf(cfg)
+	// Run selection based on mode
+	var results []commands.SelectionResult
+	switch mode {
+	case "tui":
+		results, err = commands.RunFzfTUI(cfg)
+	case "enhanced":
+		result, e := commands.RunEnhancedFzf(cfg)
+		if e != nil {
+			err = e
+		} else {
+			results = []commands.SelectionResult{*result}
+		}
+	default:
+		results, err = commands.RunFzf(cfg)
 	}
 
 	if err != nil {
@@ -121,9 +132,44 @@ func handleSelectCommand() {
 		os.Exit(1)
 	}
 
-	// Output as JSON for shell script parsing
-	fmt.Printf(`{"directory":"%s","command":"%s","display_name":"%s"}`, result.Directory, result.Command, result.DisplayName)
-	fmt.Println()
+	// Output JSON
+	outputSelectionJSON(results)
+}
+
+func outputSelectionJSON(results []commands.SelectionResult) {
+	if len(results) == 0 {
+		fmt.Fprintln(os.Stderr, "No selection made")
+		os.Exit(1)
+	}
+
+	// Single selection - output as single object for backward compatibility
+	if len(results) == 1 {
+		r := results[0]
+		fmt.Printf(`{"directory":"%s","command":"%s","display_name":"%s"}`,
+			escapeJSON(r.Directory), escapeJSON(r.Command), escapeJSON(r.DisplayName))
+		fmt.Println()
+		return
+	}
+
+	// Multiple selections - output as JSON array
+	fmt.Print("[")
+	for i, r := range results {
+		if i > 0 {
+			fmt.Print(",")
+		}
+		fmt.Printf(`{"directory":"%s","command":"%s","display_name":"%s"}`,
+			escapeJSON(r.Directory), escapeJSON(r.Command), escapeJSON(r.DisplayName))
+	}
+	fmt.Println("]")
+}
+
+func escapeJSON(s string) string {
+	// Escape special characters for JSON
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\t", `\t`)
+	return s
 }
 
 func handleRecordCommand() {
@@ -172,8 +218,9 @@ func showUsage() {
 	fmt.Println("    init --force             Overwrite existing .gopmrc file")
 	fmt.Println("    list                     List all available location:command pairs")
 	fmt.Println("    list --format=fzf        List commands in fzf format")
-	fmt.Println("    select                   Interactive command selection with fzf")
+	fmt.Println("    select                   Interactive command selection with fzf (multi-select with Tab)")
 	fmt.Println("    select --enhanced        Enhanced TUI selection with location filtering")
+	fmt.Println("    select --tui             fzf-style TUI with multi-select support")
 	fmt.Println("    help                     Show this help message")
 	fmt.Println()
 	fmt.Println("EXAMPLES:")
@@ -183,4 +230,5 @@ func showUsage() {
 	fmt.Println("    gopm list --format=fzf")
 	fmt.Println("    gopm select")
 	fmt.Println("    gopm select --enhanced")
+	fmt.Println("    gopm select --tui")
 }

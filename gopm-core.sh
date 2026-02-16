@@ -25,12 +25,14 @@ show_usage() {
     echo
     echo "COMMANDS:"
     echo "    run        Interactive command selection and execution (default)"
+    echo "    tui        fzf-style TUI with multi-select support (Tab to select, && to chain)"
     echo "    list       List all available commands"
     echo "    help       Show this help message"
     echo
     echo "EXAMPLES:"
     echo "    gopm           # Interactive selection and execution"
     echo "    gopm run       # Same as above"
+    echo "    gopm tui       # fzf-style TUI with multi-select"
     echo "    gopm list      # List all commands"
     echo
     echo "CONFIGURATION:"
@@ -135,11 +137,119 @@ list_commands() {
     "$GOPM_BINARY" list
 }
 
+# Function to run the new fzf-style TUI with multi-select support
+# This is the new "gpm" command
+gpm_run() {
+    check_dependencies
+
+    # GOPM_BINARY must be set by the wrapper
+    if [ -z "$GOPM_BINARY" ]; then
+        print_error "GOPM_BINARY environment variable not set."
+        return 1
+    fi
+
+    if [ ! -f "$GOPM_BINARY" ] || [ ! -x "$GOPM_BINARY" ]; then
+        print_error "gopm binary not found at: $GOPM_BINARY"
+        return 1
+    fi
+
+    # Call gopm select --tui to get the selection as JSON
+    local selection_json
+    if ! selection_json=$("$GOPM_BINARY" select --tui 2>/dev/null); then
+        print_error "Selection cancelled or failed."
+        return 1
+    fi
+
+    if [ -z "$selection_json" ]; then
+        print_error "No selection made."
+        return 1
+    fi
+
+    local jq_cmd="${JQ_CMD:-jq}"
+
+    # Check if result is array (multi-select) or single object
+    local first_char="${selection_json:0:1}"
+
+    if [ "$first_char" = "[" ]; then
+        # Multi-select: JSON array
+        local count
+        count=$(echo "$selection_json" | "$jq_cmd" 'length')
+
+        if [ "$count" -eq 0 ]; then
+            print_error "No commands selected."
+            return 1
+        fi
+
+        print_info "Running $count command(s)..."
+        echo
+
+        # Build compound command: cd dir1 && cmd1 && cd dir2 && cmd2 ...
+        local compound_cmd=""
+        local i=0
+        while [ "$i" -lt "$count" ]; do
+            local dir cmd name
+            dir=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].directory")
+            cmd=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].command")
+            name=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].display_name")
+
+            # Record each command
+            if [ -n "$name" ] && [ "$name" != "null" ]; then
+                "$GOPM_BINARY" record "$name" "$cmd" 2>/dev/null || true
+            fi
+
+            # Build compound command
+            if [ -z "$compound_cmd" ]; then
+                compound_cmd="cd '$dir' && $cmd"
+            else
+                compound_cmd="$compound_cmd && cd '$dir' && $cmd"
+            fi
+
+            i=$((i + 1))
+        done
+
+        # Execute compound command
+        local bash_cmd="${BASH_CMD:-bash}"
+        eval "$compound_cmd"
+    else
+        # Single selection: JSON object
+        local dir cmd name
+        dir=$(echo "$selection_json" | "$jq_cmd" -r '.directory')
+        cmd=$(echo "$selection_json" | "$jq_cmd" -r '.command')
+        name=$(echo "$selection_json" | "$jq_cmd" -r '.display_name')
+
+        if [ "$dir" = "null" ] || [ "$cmd" = "null" ]; then
+            print_error "Failed to parse selection."
+            return 1
+        fi
+
+        if [ ! -d "$dir" ]; then
+            print_error "Directory '$dir' does not exist."
+            return 1
+        fi
+
+        print_info "Running: $cmd"
+        print_info "In: $dir"
+        echo
+
+        # Record command
+        if [ -n "$name" ] && [ "$name" != "null" ]; then
+            "$GOPM_BINARY" record "$name" "$cmd" 2>/dev/null || true
+        fi
+
+        cd "$dir"
+        local bash_cmd="${BASH_CMD:-bash}"
+        exec "$bash_cmd" -c "$cmd"
+    fi
+}
+
 # Main function - to be called by wrappers
 gopm_main() {
     case "${1:-run}" in
         run|"")
             run_command
+            ;;
+        tui)
+            gpm_run
             ;;
         list)
             list_commands
