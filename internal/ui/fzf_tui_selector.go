@@ -20,6 +20,9 @@ type FzfTUISelector struct {
 	searchInput      *tview.InputField
 	statusText       *tview.TextView
 	helpText         *tview.TextView
+	editInput        *tview.InputField
+	rootLayout       *tview.Flex
+	mainPanel        *tview.Flex
 	commands         []CommandInfo
 	filteredCommands []CommandInfo
 	selectedIndices  map[int]bool // Track selected items by filtered index
@@ -28,6 +31,10 @@ type FzfTUISelector struct {
 	results          []SelectionResult
 	history          *history.History
 	frecencyEnabled  bool
+	editing          bool   // Whether we're in edit mode
+	editCommand      string // Command being edited
+	editDirectory    string // Directory for the command being edited
+	editDisplayName  string // Display name for the command being edited
 }
 
 // NewFzfTUISelector creates a new fzf-style TUI selector
@@ -105,7 +112,7 @@ func (s *FzfTUISelector) initUI() {
 	s.helpText = tview.NewTextView().
 		SetDynamicColors(true).
 		SetTextColor(tcell.ColorDarkGray).
-		SetText("  [::d]Tab[-]: select  [::d]Enter[-]: confirm  [::d]Ctrl+A[-]: all  [::d]Esc[-]: cancel")
+		SetText("  [::d]Tab[-]: select  [::d]Enter[-]: run  [::d]Ctrl+E[-]: edit  [::d]Ctrl+A[-]: all  [::d]Esc[-]: cancel")
 
 	// Set up search input handler
 	s.searchInput.SetChangedFunc(func(text string) {
@@ -127,6 +134,10 @@ func (s *FzfTUISelector) initUI() {
 		case tcell.KeyEnter:
 			// Confirm selection
 			s.confirmSelection()
+			return nil
+		case tcell.KeyCtrlE:
+			// Confirm selection for editing (place on prompt without executing)
+			s.enterEditMode()
 			return nil
 		case tcell.KeyTab:
 			// Toggle selection on current item
@@ -155,6 +166,9 @@ func (s *FzfTUISelector) initUI() {
 		case tcell.KeyEnter:
 			s.confirmSelection()
 			return nil
+		case tcell.KeyCtrlE:
+			s.enterEditMode()
+			return nil
 		case tcell.KeyTab:
 			s.toggleSelection(s.currentIndex)
 			s.moveCursorDown()
@@ -169,18 +183,38 @@ func (s *FzfTUISelector) initUI() {
 		return event
 	})
 
+	// Create edit input (shown when editing a command)
+	s.editInput = tview.NewInputField().
+		SetLabel("Edit> ").
+		SetFieldWidth(0).
+		SetFieldBackgroundColor(tcell.ColorBlack).
+		SetLabelColor(tcell.ColorYellow)
+
+	s.editInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEnter:
+			s.editCommand = s.editInput.GetText()
+			s.confirmEdit()
+			return nil
+		case tcell.KeyEscape:
+			s.cancelEdit()
+			return nil
+		}
+		return event
+	})
+
 	// Create layout: command list (70%) + preview panel (30%)
-	mainPanel := tview.NewFlex().
+	s.mainPanel = tview.NewFlex().
 		SetDirection(tview.FlexColumn).
 		AddItem(s.commandList, 0, 7, true).
 		AddItem(s.previewPanel, 0, 3, false)
 
-	// Root layout: status, main panel, search input, help
-	root := tview.NewFlex().
+	// Root layout: search input, status, main panel, help
+	s.rootLayout = tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(s.statusText, 1, 0, false).
-		AddItem(mainPanel, 0, 1, true).
 		AddItem(s.searchInput, 1, 0, false).
+		AddItem(s.statusText, 1, 0, false).
+		AddItem(s.mainPanel, 0, 1, true).
 		AddItem(s.helpText, 1, 0, false)
 
 	// Global key handlers
@@ -216,7 +250,7 @@ func (s *FzfTUISelector) initUI() {
 		return event
 	})
 
-	s.app.SetRoot(root, true).SetFocus(s.searchInput)
+	s.app.SetRoot(s.rootLayout, true).SetFocus(s.searchInput)
 }
 
 func (s *FzfTUISelector) loadCommands() {
@@ -434,6 +468,68 @@ func (s *FzfTUISelector) getSelectedCommands() []SelectionResult {
 func (s *FzfTUISelector) confirmSelection() {
 	s.results = s.getSelectedCommands()
 	s.app.Stop()
+}
+
+func (s *FzfTUISelector) enterEditMode() {
+	if len(s.filteredCommands) == 0 || s.currentIndex < 0 || s.currentIndex >= len(s.filteredCommands) {
+		return
+	}
+
+	cmd := s.filteredCommands[s.currentIndex]
+	s.editing = true
+	s.editCommand = cmd.Command
+	s.editDirectory = cmd.Directory
+	s.editDisplayName = cmd.DisplayName
+
+	if s.editInput != nil {
+		s.editInput.SetText(cmd.Command)
+		s.showEditLayout()
+		s.app.SetFocus(s.editInput)
+	}
+}
+
+func (s *FzfTUISelector) confirmEdit() {
+	s.results = []SelectionResult{
+		{
+			Directory:   s.editDirectory,
+			Command:     s.editCommand,
+			DisplayName: s.editDisplayName,
+			Action:      "edit",
+		},
+	}
+	s.app.Stop()
+}
+
+func (s *FzfTUISelector) cancelEdit() {
+	s.editing = false
+	s.editCommand = ""
+	s.editDirectory = ""
+	s.editDisplayName = ""
+
+	if s.editInput != nil {
+		s.showNormalLayout()
+		s.app.SetFocus(s.searchInput)
+	}
+}
+
+func (s *FzfTUISelector) showEditLayout() {
+	s.rootLayout.Clear()
+	s.rootLayout.
+		AddItem(s.editInput, 1, 0, true).
+		AddItem(s.statusText, 1, 0, false).
+		AddItem(s.mainPanel, 0, 1, false).
+		AddItem(s.helpText, 1, 0, false)
+	s.helpText.SetText("  [::d]Enter[-]: confirm  [::d]Esc[-]: cancel")
+}
+
+func (s *FzfTUISelector) showNormalLayout() {
+	s.rootLayout.Clear()
+	s.rootLayout.
+		AddItem(s.searchInput, 1, 0, false).
+		AddItem(s.statusText, 1, 0, false).
+		AddItem(s.mainPanel, 0, 1, true).
+		AddItem(s.helpText, 1, 0, false)
+	s.helpText.SetText("  [::d]Tab[-]: select  [::d]Enter[-]: run  [::d]Ctrl+E[-]: edit  [::d]Ctrl+A[-]: all  [::d]Esc[-]: cancel")
 }
 
 func (s *FzfTUISelector) moveCursorDown() {

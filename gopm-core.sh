@@ -25,14 +25,12 @@ show_usage() {
     echo
     echo "COMMANDS:"
     echo "    run        Interactive command selection and execution (default)"
-    echo "    tui        fzf-style TUI with multi-select support (Tab to select, && to chain)"
     echo "    list       List all available commands"
     echo "    help       Show this help message"
     echo
     echo "EXAMPLES:"
     echo "    gopm           # Interactive selection and execution"
     echo "    gopm run       # Same as above"
-    echo "    gopm tui       # fzf-style TUI with multi-select"
     echo "    gopm list      # List all commands"
     echo
     echo "CONFIGURATION:"
@@ -56,7 +54,7 @@ check_dependencies() {
     fi
 }
 
-# Function to run command interactively
+# Function to run command interactively (supports multi-select)
 run_command() {
     check_dependencies
 
@@ -74,95 +72,16 @@ run_command() {
 
     # Call gopm select to get the selection as JSON
     print_info "Loading configuration and starting selection..."
-    if ! SELECTION_JSON=$("$GOPM_BINARY" select 2>/dev/null); then
+    local selection_json
+    if ! selection_json=$("$GOPM_BINARY" select 2>/dev/null); then
         print_error "Selection cancelled or failed."
         exit 1
     fi
 
     # Check if we got valid JSON
-    if [ -z "$SELECTION_JSON" ]; then
-        print_error "No selection made."
-        exit 1
-    fi
-
-    # Parse JSON to extract directory, command, and display_name
-    local jq_cmd="${JQ_CMD:-jq}"
-    DIRECTORY=$(echo "$SELECTION_JSON" | "$jq_cmd" -r '.directory')
-    COMMAND=$(echo "$SELECTION_JSON" | "$jq_cmd" -r '.command')
-    DISPLAY_NAME=$(echo "$SELECTION_JSON" | "$jq_cmd" -r '.display_name')
-
-    # Validate parsed values
-    if [ "$DIRECTORY" = "null" ] || [ "$COMMAND" = "null" ]; then
-        print_error "Failed to parse selection from gopm output."
-        exit 1
-    fi
-
-    # Check if directory exists
-    if [ ! -d "$DIRECTORY" ]; then
-        print_error "Directory '$DIRECTORY' does not exist."
-        exit 1
-    fi
-
-    # Show what we're about to do
-    print_info "Running: $COMMAND"
-    print_info "In: $DIRECTORY"
-    echo
-
-    # Record this command execution in history (silently fail if it doesn't work)
-    if [ -n "$DISPLAY_NAME" ] && [ "$DISPLAY_NAME" != "null" ]; then
-        "$GOPM_BINARY" record "$DISPLAY_NAME" "$COMMAND" 2>/dev/null || true
-    fi
-
-    # Change to the directory and run the command
-    cd "$DIRECTORY"
-
-    # Use BASH_CMD if set (for Nix), otherwise use bash
-    local bash_cmd="${BASH_CMD:-bash}"
-    exec "$bash_cmd" -c "$COMMAND"
-}
-
-# Function to list commands
-list_commands() {
-    # GOPM_BINARY must be set by the wrapper
-    if [ -z "$GOPM_BINARY" ]; then
-        print_error "GOPM_BINARY environment variable not set."
-        exit 1
-    fi
-
-    if [ ! -f "$GOPM_BINARY" ] || [ ! -x "$GOPM_BINARY" ]; then
-        print_error "gopm binary not found at: $GOPM_BINARY"
-        exit 1
-    fi
-
-    "$GOPM_BINARY" list
-}
-
-# Function to run the new fzf-style TUI with multi-select support
-# This is the new "gpm" command
-gpm_run() {
-    check_dependencies
-
-    # GOPM_BINARY must be set by the wrapper
-    if [ -z "$GOPM_BINARY" ]; then
-        print_error "GOPM_BINARY environment variable not set."
-        return 1
-    fi
-
-    if [ ! -f "$GOPM_BINARY" ] || [ ! -x "$GOPM_BINARY" ]; then
-        print_error "gopm binary not found at: $GOPM_BINARY"
-        return 1
-    fi
-
-    # Call gopm select --tui to get the selection as JSON
-    local selection_json
-    if ! selection_json=$("$GOPM_BINARY" select --tui 2>/dev/null); then
-        print_error "Selection cancelled or failed."
-        return 1
-    fi
-
     if [ -z "$selection_json" ]; then
         print_error "No selection made."
-        return 1
+        exit 1
     fi
 
     local jq_cmd="${JQ_CMD:-jq}"
@@ -177,11 +96,8 @@ gpm_run() {
 
         if [ "$count" -eq 0 ]; then
             print_error "No commands selected."
-            return 1
+            exit 1
         fi
-
-        print_info "Running $count command(s)..."
-        echo
 
         # Build compound command: cd dir1 && cmd1 && cd dir2 && cmd2 ...
         local compound_cmd=""
@@ -208,7 +124,8 @@ gpm_run() {
         done
 
         # Execute compound command
-        local bash_cmd="${BASH_CMD:-bash}"
+        print_info "Running $count command(s)..."
+        echo
         eval "$compound_cmd"
     else
         # Single selection: JSON object
@@ -217,39 +134,58 @@ gpm_run() {
         cmd=$(echo "$selection_json" | "$jq_cmd" -r '.command')
         name=$(echo "$selection_json" | "$jq_cmd" -r '.display_name')
 
+        # Validate parsed values
         if [ "$dir" = "null" ] || [ "$cmd" = "null" ]; then
-            print_error "Failed to parse selection."
-            return 1
+            print_error "Failed to parse selection from gopm output."
+            exit 1
         fi
 
+        # Check if directory exists
         if [ ! -d "$dir" ]; then
             print_error "Directory '$dir' does not exist."
-            return 1
+            exit 1
         fi
 
+        # Show what we're about to do
         print_info "Running: $cmd"
         print_info "In: $dir"
         echo
 
-        # Record command
+        # Record this command execution in history
         if [ -n "$name" ] && [ "$name" != "null" ]; then
             "$GOPM_BINARY" record "$name" "$cmd" 2>/dev/null || true
         fi
 
+        # Change to the directory and run the command
         cd "$dir"
+
+        # Use BASH_CMD if set (for Nix), otherwise use bash
         local bash_cmd="${BASH_CMD:-bash}"
         exec "$bash_cmd" -c "$cmd"
     fi
 }
 
+# Function to list commands
+list_commands() {
+    # GOPM_BINARY must be set by the wrapper
+    if [ -z "$GOPM_BINARY" ]; then
+        print_error "GOPM_BINARY environment variable not set."
+        exit 1
+    fi
+
+    if [ ! -f "$GOPM_BINARY" ] || [ ! -x "$GOPM_BINARY" ]; then
+        print_error "gopm binary not found at: $GOPM_BINARY"
+        exit 1
+    fi
+
+    "$GOPM_BINARY" list
+}
+
 # Main function - to be called by wrappers
 gopm_main() {
     case "${1:-run}" in
-        run|"")
+        run|tui|"")
             run_command
-            ;;
-        tui)
-            gpm_run
             ;;
         list)
             list_commands

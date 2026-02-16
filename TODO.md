@@ -92,7 +92,7 @@ The project types we should support intitally are:
 
 ### Language & Dependencies
 - [x] Written in Go
-- [x] Minimal external dependencies (only gopkg.in/yaml.v3 and go-fuzzyfinder)
+- [x] Minimal external dependencies (gopkg.in/yaml.v3, tcell, tview)
 - [x] Use standard library where possible
 - [ ] Ensure cross-platform compatibility (Linux/Mac/Windows)
 
@@ -117,7 +117,7 @@ The project types we should support intitally are:
 - [x] Enhanced shell wrapper script (gopm.sh)
 - [x] Installation script (install.sh)
 - [x] Shell completion (bash/zsh)
-- [x] Zsh keyboard shortcut integration (Ctrl+P)
+- [x] Zsh keyboard shortcut integration (Ctrl+P, with multi-select support)
 - [x] Auto-detection of binary location
 - [x] Colored output and better UX
 - [x] Nix flake with complete package and development environment

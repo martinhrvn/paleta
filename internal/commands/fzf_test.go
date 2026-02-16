@@ -161,6 +161,47 @@ func TestFindLocationByDisplayName(t *testing.T) {
 	}
 }
 
+func TestPrepareCommandInfo_WithLocations(t *testing.T) {
+	cfg := &config.Config{
+		Locations: []config.Location{
+			{
+				Name:     "frontend",
+				Location: "/path/to/frontend",
+				Commands: stringsToCommands([]string{"npm start", "npm test"}),
+			},
+			{
+				Name:     "backend",
+				Location: "/path/to/backend",
+				Commands: stringsToCommands([]string{"go run main.go"}),
+			},
+			{
+				Location: "/path/to/scripts",
+				Commands: stringsToCommands([]string{"./deploy.sh"}),
+			},
+		},
+	}
+
+	infos := PrepareCommandInfo(cfg)
+
+	if len(infos) != 4 {
+		t.Errorf("Expected 4 command infos, got %d", len(infos))
+	}
+
+	// Test that display names are formatted correctly
+	expectedDisplays := []string{
+		"frontend: npm start",
+		"frontend: npm test",
+		"backend: go run main.go",
+		"/path/to/scripts: ./deploy.sh",
+	}
+
+	for i, expected := range expectedDisplays {
+		if i < len(infos) && infos[i].Display != expected {
+			t.Errorf("Expected display %q, got %q", expected, infos[i].Display)
+		}
+	}
+}
+
 func TestSelectionResult(t *testing.T) {
 	cfg := &config.Config{
 		Locations: []config.Location{

@@ -67,6 +67,16 @@ func (h *History) RecordExecution(location, command string) error {
 	return nil
 }
 
+// GetEntry retrieves the command entry for a given location and command
+func (h *History) GetEntry(location, command string) (CommandEntry, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	key := location + ":" + command
+	entry, exists := h.Commands[key]
+	return entry, exists
+}
+
 // GetScore calculates the frecency score for a command
 func (h *History) GetScore(location, command string) float64 {
 	h.mu.RLock()

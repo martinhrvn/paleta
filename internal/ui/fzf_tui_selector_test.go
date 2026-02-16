@@ -6,6 +6,15 @@ import (
 	"github.com/martin/go-pm/internal/config"
 )
 
+// Helper to convert strings to Commands for tests
+func stringsToCommands(strs []string) []config.Command {
+	cmds := make([]config.Command, len(strs))
+	for i, s := range strs {
+		cmds[i] = config.Command{Name: "", Command: s}
+	}
+	return cmds
+}
+
 // Helper function to create test config
 func createTestConfig() *config.Config {
 	return &config.Config{
@@ -336,6 +345,115 @@ func TestFzfTUISelector_ClearSelections(t *testing.T) {
 
 	if len(selector.selectedIndices) != 0 {
 		t.Errorf("expected 0 selections after clear, got %d", len(selector.selectedIndices))
+	}
+}
+
+func TestFzfTUISelector_ConfirmSelection_DefaultAction(t *testing.T) {
+	cfg := createTestConfig()
+	selector := createTestFzfSelector(cfg)
+
+	selector.loadCommands()
+	selector.filteredCommands = selector.commands
+	selector.currentIndex = 0
+
+	// confirmSelection should leave Action empty (default/execute behavior)
+	selector.confirmSelection()
+
+	if len(selector.results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(selector.results))
+	}
+	if selector.results[0].Action != "" {
+		t.Errorf("expected empty Action for confirmSelection, got %q", selector.results[0].Action)
+	}
+}
+
+func TestFzfTUISelector_EnterEditMode_SetsEditingState(t *testing.T) {
+	cfg := createTestConfig()
+	selector := createTestFzfSelector(cfg)
+
+	selector.loadCommands()
+	selector.filteredCommands = selector.commands
+	selector.currentIndex = 0
+
+	// Should not be in edit mode initially
+	if selector.editing {
+		t.Error("expected editing to be false initially")
+	}
+
+	// Enter edit mode
+	selector.enterEditMode()
+
+	// Should now be in edit mode
+	if !selector.editing {
+		t.Error("expected editing to be true after enterEditMode")
+	}
+
+	// The editInput should be pre-filled with the current command
+	if selector.editCommand != "npm start" {
+		t.Errorf("expected editCommand 'npm start', got %q", selector.editCommand)
+	}
+	if selector.editDirectory != "/path/to/frontend" {
+		t.Errorf("expected editDirectory '/path/to/frontend', got %q", selector.editDirectory)
+	}
+	if selector.editDisplayName != "frontend" {
+		t.Errorf("expected editDisplayName 'frontend', got %q", selector.editDisplayName)
+	}
+}
+
+func TestFzfTUISelector_ConfirmEdit_SetsEditAction(t *testing.T) {
+	cfg := createTestConfig()
+	selector := createTestFzfSelector(cfg)
+
+	selector.loadCommands()
+	selector.filteredCommands = selector.commands
+	selector.currentIndex = 0
+
+	// Enter edit mode
+	selector.enterEditMode()
+
+	// Simulate editing the command
+	selector.editCommand = "npm start --port 3001"
+
+	// Confirm the edit
+	selector.confirmEdit()
+
+	if len(selector.results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(selector.results))
+	}
+	if selector.results[0].Action != "edit" {
+		t.Errorf("expected Action 'edit', got %q", selector.results[0].Action)
+	}
+	if selector.results[0].Command != "npm start --port 3001" {
+		t.Errorf("expected modified command, got %q", selector.results[0].Command)
+	}
+	if selector.results[0].Directory != "/path/to/frontend" {
+		t.Errorf("expected directory '/path/to/frontend', got %q", selector.results[0].Directory)
+	}
+}
+
+func TestFzfTUISelector_CancelEdit_ReturnsToNormalMode(t *testing.T) {
+	cfg := createTestConfig()
+	selector := createTestFzfSelector(cfg)
+
+	selector.loadCommands()
+	selector.filteredCommands = selector.commands
+	selector.currentIndex = 0
+
+	// Enter edit mode
+	selector.enterEditMode()
+	if !selector.editing {
+		t.Fatal("expected editing to be true")
+	}
+
+	// Cancel edit
+	selector.cancelEdit()
+
+	// Should be back to normal mode with no results
+	if selector.editing {
+		t.Error("expected editing to be false after cancelEdit")
+	}
+	if len(selector.results) != 0 {
+		t.Errorf("expected 0 results after cancel, got %d", len(selector.results))
 	}
 }
 

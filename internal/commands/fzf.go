@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	fuzzyfinder "github.com/ktr0731/go-fuzzyfinder"
 	"github.com/martin/go-pm/internal/config"
 	"github.com/martin/go-pm/internal/history"
 	"github.com/martin/go-pm/internal/ui"
@@ -17,6 +16,7 @@ type SelectionResult struct {
 	Directory   string // The actual directory path where command should be executed
 	Command     string // The command to run
 	DisplayName string // The display name shown in fzf (for reference)
+	Action      string // "execute" (default, empty) or "edit"
 }
 
 // ParseFzfSelection parses a fzf selection in format "location: command" and returns command and location
@@ -143,86 +143,7 @@ func PrepareCommandInfoWithHistory(cfg *config.Config, hist *history.History, en
 	return infos
 }
 
-// RunFzf executes fuzzy finder with multi-select support and returns the user's selections
-func RunFzf(cfg *config.Config) ([]SelectionResult, error) {
-	// Load history if frecency is enabled
-	var hist *history.History
-	enableFrecency := cfg.Frecency.Enabled
-
-	if enableFrecency {
-		// Find project root
-		projectRoot, err := history.FindProjectRoot(".")
-		if err == nil {
-			// Load or create history
-			hist, _ = history.LoadOrCreateHistory(projectRoot)
-		}
-	}
-
-	// Prepare command information with frecency sorting
-	commandInfos := PrepareCommandInfoWithHistory(cfg, hist, enableFrecency)
-	if len(commandInfos) == 0 {
-		return nil, fmt.Errorf("no commands available")
-	}
-
-	// Use fuzzyfinder with multi-select (Tab to toggle, Enter to confirm)
-	indices, err := fuzzyfinder.FindMulti(
-		commandInfos,
-		func(i int) string {
-			return commandInfos[i].Display
-		},
-		fuzzyfinder.WithPromptString("Select commands (Tab to toggle): "),
-		fuzzyfinder.WithPreviewWindow(func(i, w, h int) string {
-			if i == -1 {
-				return ""
-			}
-			info := commandInfos[i]
-			preview := fmt.Sprintf("Directory: %s\nCommand: %s", info.Directory, info.Command)
-			return preview
-		}),
-	)
-
-	if err != nil {
-		// Check if user canceled
-		if err == fuzzyfinder.ErrAbort {
-			return nil, fmt.Errorf("selection canceled")
-		}
-		return nil, fmt.Errorf("fuzzy finder error: %w", err)
-	}
-
-	if len(indices) == 0 {
-		return nil, fmt.Errorf("no commands selected")
-	}
-
-	// Convert indices to SelectionResults (preserving selection order)
-	results := make([]SelectionResult, len(indices))
-	for i, idx := range indices {
-		selected := commandInfos[idx]
-		results[i] = SelectionResult{
-			Directory:   selected.Directory,
-			Command:     selected.Command,
-			DisplayName: selected.DisplayName,
-		}
-	}
-
-	return results, nil
-}
-
-// RunEnhancedFzf executes the enhanced fuzzy finder with location filtering support
-func RunEnhancedFzf(cfg *config.Config) (*SelectionResult, error) {
-	selector := ui.NewTUISelector(cfg)
-	result, err := selector.Run()
-	if err != nil {
-		return nil, err
-	}
-	// Convert ui.SelectionResult to commands.SelectionResult
-	return &SelectionResult{
-		Directory:   result.Directory,
-		Command:     result.Command,
-		DisplayName: result.DisplayName,
-	}, nil
-}
-
-// RunFzfTUI executes the new fzf-style TUI with multi-select support
+// RunFzfTUI executes the fzf-style TUI with multi-select support
 func RunFzfTUI(cfg *config.Config) ([]SelectionResult, error) {
 	selector := ui.NewFzfTUISelector(cfg)
 	results, err := selector.Run()
@@ -237,6 +158,7 @@ func RunFzfTUI(cfg *config.Config) ([]SelectionResult, error) {
 			Directory:   r.Directory,
 			Command:     r.Command,
 			DisplayName: r.DisplayName,
+			Action:      r.Action,
 		}
 	}
 

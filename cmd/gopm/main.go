@@ -93,17 +93,6 @@ func handleListCommand() {
 }
 
 func handleSelectCommand() {
-	// Parse flags
-	mode := "fzf" // default mode
-	for _, arg := range os.Args[2:] {
-		switch arg {
-		case "--enhanced", "-e":
-			mode = "enhanced"
-		case "--tui", "-t":
-			mode = "tui"
-		}
-	}
-
 	// Load config from discovery
 	cfg, err := config.LoadConfigFromDiscovery()
 	if err != nil {
@@ -111,22 +100,8 @@ func handleSelectCommand() {
 		os.Exit(1)
 	}
 
-	// Run selection based on mode
-	var results []commands.SelectionResult
-	switch mode {
-	case "tui":
-		results, err = commands.RunFzfTUI(cfg)
-	case "enhanced":
-		result, e := commands.RunEnhancedFzf(cfg)
-		if e != nil {
-			err = e
-		} else {
-			results = []commands.SelectionResult{*result}
-		}
-	default:
-		results, err = commands.RunFzf(cfg)
-	}
-
+	// Run TUI selection
+	results, err := commands.RunFzfTUI(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error with selection: %v\n", err)
 		os.Exit(1)
@@ -145,8 +120,12 @@ func outputSelectionJSON(results []commands.SelectionResult) {
 	// Single selection - output as single object for backward compatibility
 	if len(results) == 1 {
 		r := results[0]
-		fmt.Printf(`{"directory":"%s","command":"%s","display_name":"%s"}`,
-			escapeJSON(r.Directory), escapeJSON(r.Command), escapeJSON(r.DisplayName))
+		actionField := ""
+		if r.Action == "edit" {
+			actionField = `,"action":"edit"`
+		}
+		fmt.Printf(`{"directory":"%s","command":"%s","display_name":"%s"%s}`,
+			escapeJSON(r.Directory), escapeJSON(r.Command), escapeJSON(r.DisplayName), actionField)
 		fmt.Println()
 		return
 	}
@@ -157,8 +136,12 @@ func outputSelectionJSON(results []commands.SelectionResult) {
 		if i > 0 {
 			fmt.Print(",")
 		}
-		fmt.Printf(`{"directory":"%s","command":"%s","display_name":"%s"}`,
-			escapeJSON(r.Directory), escapeJSON(r.Command), escapeJSON(r.DisplayName))
+		actionField := ""
+		if r.Action == "edit" {
+			actionField = `,"action":"edit"`
+		}
+		fmt.Printf(`{"directory":"%s","command":"%s","display_name":"%s"%s}`,
+			escapeJSON(r.Directory), escapeJSON(r.Command), escapeJSON(r.DisplayName), actionField)
 	}
 	fmt.Println("]")
 }
@@ -218,9 +201,7 @@ func showUsage() {
 	fmt.Println("    init --force             Overwrite existing .gopmrc file")
 	fmt.Println("    list                     List all available location:command pairs")
 	fmt.Println("    list --format=fzf        List commands in fzf format")
-	fmt.Println("    select                   Interactive command selection with fzf (multi-select with Tab)")
-	fmt.Println("    select --enhanced        Enhanced TUI selection with location filtering")
-	fmt.Println("    select --tui             fzf-style TUI with multi-select support")
+	fmt.Println("    select                   Interactive TUI command selection (multi-select with Tab)")
 	fmt.Println("    help                     Show this help message")
 	fmt.Println()
 	fmt.Println("EXAMPLES:")
@@ -229,6 +210,4 @@ func showUsage() {
 	fmt.Println("    gopm list")
 	fmt.Println("    gopm list --format=fzf")
 	fmt.Println("    gopm select")
-	fmt.Println("    gopm select --enhanced")
-	fmt.Println("    gopm select --tui")
 }
