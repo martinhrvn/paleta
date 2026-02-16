@@ -24,6 +24,7 @@ __gopm_find_binary() {
         "${0:a:h}/gopm"                    # Same directory as this script
         "${0:a:h}/gopm-bin"                # Same directory with -bin suffix
         "${commands[gopm-bin]}"            # In PATH with -bin suffix
+        "${commands[gopm]}"               # In PATH (may be wrapper, but works)
         "$HOME/.local/bin/gopm-bin"        # User local bin
         "/usr/local/bin/gopm-bin"          # System local bin
     )
@@ -41,7 +42,8 @@ __gopm_find_binary() {
 # Zsh widget function for gopm selection and execution (supports multi-select)
 __gopm_select_widget() {
     # Find the gopm binary
-    local gopm_binary=$(__gopm_find_binary)
+    local gopm_binary
+    gopm_binary=$(__gopm_find_binary)
     if [[ $? -ne 0 ]]; then
         echo "\ngopm binary not found. Please ensure gopm is installed." >&2
         zle reset-prompt

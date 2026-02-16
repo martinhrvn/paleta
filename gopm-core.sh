@@ -193,6 +193,9 @@ gopm_main() {
         help|--help|-h)
             show_usage
             ;;
+        select|record)
+            "$GOPM_BINARY" "$@"
+            ;;
         *)
             print_error "Unknown command '$1'"
             show_usage
