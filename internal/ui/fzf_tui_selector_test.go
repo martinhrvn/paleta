@@ -205,19 +205,44 @@ func TestModel_GeneratePreview_EmptyType(t *testing.T) {
 	}
 }
 
-func TestModel_FormatSelectedItem(t *testing.T) {
+func TestModel_FormatListItemPlain(t *testing.T) {
 	m := createTestModel(createTestConfig())
 
-	// Test unselected item
-	formatted := m.formatListItem(0, false)
+	// Test unselected item (plain, no ANSI codes)
+	formatted := m.formatListItemPlain(0, false)
 	if formatted != "  frontend: npm start" {
 		t.Errorf("expected '  frontend: npm start', got %q", formatted)
 	}
 
-	// Test selected item
+	// Test selected item (plain, no ANSI codes)
+	formatted = m.formatListItemPlain(0, true)
+	if formatted != "✓ frontend: npm start" {
+		t.Errorf("expected '✓ frontend: npm start', got %q", formatted)
+	}
+
+	// Test out of bounds
+	formatted = m.formatListItemPlain(-1, false)
+	if formatted != "" {
+		t.Errorf("expected empty string for out of bounds, got %q", formatted)
+	}
+}
+
+func TestModel_FormatListItemStyled(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	// Styled output contains ANSI codes, so use contains checks
+	formatted := m.formatListItem(0, false)
+	if !contains(formatted, "frontend:") {
+		t.Errorf("styled item should contain 'frontend:', got %q", formatted)
+	}
+	if !contains(formatted, "npm start") {
+		t.Errorf("styled item should contain 'npm start', got %q", formatted)
+	}
+
+	// Selected item should contain ✓
 	formatted = m.formatListItem(0, true)
-	if formatted != "* frontend: npm start" {
-		t.Errorf("expected '* frontend: npm start', got %q", formatted)
+	if !contains(formatted, "✓") {
+		t.Errorf("styled selected item should contain '✓', got %q", formatted)
 	}
 }
 

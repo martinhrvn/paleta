@@ -9,26 +9,32 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	"github.com/martin/go-pm/internal/config"
 	"github.com/martin/go-pm/internal/history"
 )
 
-// Styles
+// Muted "Slate" color palette
 var (
-	searchPromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
-	selectedMarkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	cursorLineStyle   = lipgloss.NewStyle().Background(lipgloss.Color("12")).Foreground(lipgloss.Color("0"))
+	searchPromptStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("67"))
+	selectedMarkStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("109"))
+	cursorLineStyle    = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("252"))
 	previewBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("240"))
-	previewLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-	previewValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
-	statusStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	statusGreenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	statusYellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-	statusBlueStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
-	helpStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	editPromptStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+				BorderForeground(lipgloss.Color("238"))
+	previewLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("109"))
+	previewValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	statusStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
+	statusGreenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("109"))
+	statusYellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("180"))
+	statusBlueStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("67"))
+	helpStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
+	helpKeyStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("67"))
+	editPromptStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("180"))
+	listLocationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
+	listCommandStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	previewTitleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("67")).Bold(true)
 )
 
 // Model is the bubbletea model for the fzf-style TUI selector
@@ -222,9 +228,19 @@ func (m Model) View() string {
 
 	// Help line
 	if m.editing {
-		sections = append(sections, helpStyle.Render("  Enter: confirm  Esc: cancel"))
+		sections = append(sections, m.renderHelp([][2]string{
+			{"Enter", "confirm"},
+			{"Esc", "cancel"},
+		}))
 	} else {
-		sections = append(sections, helpStyle.Render("  Tab: select  Enter: run  Ctrl+E: edit  Ctrl+A: all  Esc: cancel"))
+		sections = append(sections, m.renderHelp([][2]string{
+			{"Tab", "select"},
+			{"Enter", "run"},
+			{"^E", "edit"},
+			{"^A", "all"},
+			{"^F", "frecency"},
+			{"Esc", "cancel"},
+		}))
 	}
 
 	return strings.Join(sections, "\n")
@@ -252,7 +268,15 @@ func (m Model) renderStatus() string {
 		parts = append(parts, statusBlueStyle.Render("frecency"))
 	}
 
-	return "  " + strings.Join(parts, "  ")
+	return "  " + strings.Join(parts, statusStyle.Render(" · "))
+}
+
+func (m Model) renderHelp(items [][2]string) string {
+	var parts []string
+	for _, item := range items {
+		parts = append(parts, helpKeyStyle.Render(item[0])+helpStyle.Render(" "+item[1]))
+	}
+	return "  " + strings.Join(parts, helpStyle.Render(" · "))
 }
 
 func (m Model) renderMainContent() string {
@@ -299,17 +323,16 @@ func (m Model) renderCommandList(width, height int) string {
 		isSelected := m.selectedIndices[i]
 		isCursor := i == m.currentIndex
 
-		line := m.formatListItem(i, isSelected)
-
+		var line string
 		if isCursor {
-			// Pad to full width for cursor highlight
-			padded := line
-			if len(padded) < width {
-				padded = padded + strings.Repeat(" ", width-len(padded))
+			// Use plain text for cursor line — cursorLineStyle overrides sub-colors
+			plain := m.formatListItemPlain(i, isSelected)
+			if len(plain) < width {
+				plain = plain + strings.Repeat(" ", width-len(plain))
 			}
-			line = cursorLineStyle.Render(padded)
-		} else if isSelected {
-			line = selectedMarkStyle.Render(line)
+			line = cursorLineStyle.Render(plain)
+		} else {
+			line = m.formatListItem(i, isSelected)
 		}
 
 		lines = append(lines, line)
@@ -410,7 +433,25 @@ func (m Model) formatListItem(index int, selected bool) string {
 	}
 	prefix := "  "
 	if selected {
-		prefix = "* "
+		prefix = selectedMarkStyle.Render("✓") + " "
+	}
+	// Split Display on first ": " to style location and command differently
+	display := m.filteredCommands[index].Display
+	if loc, rest, ok := strings.Cut(display, ": "); ok {
+		return prefix + listLocationStyle.Render(loc+":") + " " + listCommandStyle.Render(rest)
+	}
+	return prefix + listCommandStyle.Render(display)
+}
+
+// formatListItemPlain returns an unstyled version for cursor line rendering,
+// where cursorLineStyle overrides sub-colors anyway.
+func (m Model) formatListItemPlain(index int, selected bool) string {
+	if index < 0 || index >= len(m.filteredCommands) {
+		return ""
+	}
+	prefix := "  "
+	if selected {
+		prefix = "✓ "
 	}
 	return prefix + m.filteredCommands[index].Display
 }
@@ -593,20 +634,18 @@ func (m *Model) adjustViewport() {
 func (m Model) generatePreview(cmd CommandInfo) string {
 	var lines []string
 
-	lines = append(lines, previewLabelStyle.Render("Location:")+"  "+previewValueStyle.Render(cmd.DisplayName))
-	lines = append(lines, "")
-	lines = append(lines, previewLabelStyle.Render("Path:")+"      "+previewValueStyle.Render(cmd.Directory))
-	lines = append(lines, "")
-	lines = append(lines, previewLabelStyle.Render("Command:")+"   "+previewValueStyle.Render(cmd.Command))
+	lines = append(lines, previewTitleStyle.Render("Details"))
+	lines = append(lines, statusStyle.Render("─────────────────────"))
+	lines = append(lines, previewLabelStyle.Render("Location  ")+previewValueStyle.Render(cmd.DisplayName))
+	lines = append(lines, previewLabelStyle.Render("Path      ")+previewValueStyle.Render(cmd.Directory))
+	lines = append(lines, previewLabelStyle.Render("Command   ")+previewValueStyle.Render(cmd.Command))
 
 	if cmd.Type != "" {
-		lines = append(lines, "")
-		lines = append(lines, previewLabelStyle.Render("Type:")+"      "+previewValueStyle.Render(cmd.Type))
+		lines = append(lines, previewLabelStyle.Render("Type      ")+previewValueStyle.Render(cmd.Type))
 	}
 
 	if m.frecencyEnabled && cmd.FrecencyScore > 0 {
-		lines = append(lines, "")
-		lines = append(lines, previewLabelStyle.Render("Score:")+"     "+previewValueStyle.Render(fmt.Sprintf("%.2f", cmd.FrecencyScore)))
+		lines = append(lines, previewLabelStyle.Render("Score     ")+previewValueStyle.Render(fmt.Sprintf("%.2f", cmd.FrecencyScore)))
 	}
 
 	return strings.Join(lines, "\n")
@@ -617,13 +656,16 @@ func (m *Model) Run() ([]SelectionResult, error) {
 	m.loadCommands()
 	m.updateFilteredCommands()
 
-	// Open /dev/tty for TUI rendering so stdout stays clean for JSON output.
+	// Open /dev/tty with O_RDWR for TUI rendering so stdout stays clean for
+	// JSON output. Read access is needed for terminal capability queries.
 	// The shell integration captures stdout, so bubbletea must not write there.
-	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
+	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open /dev/tty: %w", err)
 	}
 	defer tty.Close()
+
+	lipgloss.SetColorProfile(termenv.TrueColor)
 
 	p := tea.NewProgram(*m, tea.WithAltScreen(), tea.WithOutput(tty))
 	finalModel, err := p.Run()
