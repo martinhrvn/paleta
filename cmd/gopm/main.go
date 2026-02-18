@@ -21,6 +21,8 @@ func main() {
 	switch command {
 	case "init":
 		handleInitCommand()
+	case "edit":
+		handleEditCommand()
 	case "list":
 		handleListCommand()
 	case "select":
@@ -62,6 +64,14 @@ func handleInitCommand() {
 	fmt.Println("  1. Edit .gopmrc to configure your project locations")
 	fmt.Println("  2. Run 'gopm list' to see available commands")
 	fmt.Println("  3. Run 'gopm select' to interactively select and run commands")
+}
+
+func handleEditCommand() {
+	err := commands.EditConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func handleListCommand() {
@@ -199,6 +209,7 @@ func showUsage() {
 	fmt.Println("COMMANDS:")
 	fmt.Println("    init                     Create a default .gopmrc configuration file")
 	fmt.Println("    init --force             Overwrite existing .gopmrc file")
+	fmt.Println("    edit                     Open nearest .gopmrc in $EDITOR")
 	fmt.Println("    list                     List all available location:command pairs")
 	fmt.Println("    list --format=fzf        List commands in fzf format")
 	fmt.Println("    select                   Interactive TUI command selection (multi-select with Tab)")

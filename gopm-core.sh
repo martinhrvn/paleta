@@ -25,6 +25,7 @@ show_usage() {
     echo
     echo "COMMANDS:"
     echo "    run        Interactive command selection and execution (default)"
+    echo "    edit       Open nearest .gopmrc in \$EDITOR"
     echo "    list       List all available commands"
     echo "    help       Show this help message"
     echo
@@ -186,6 +187,9 @@ gopm_main() {
     case "${1:-run}" in
         run|tui|"")
             run_command
+            ;;
+        edit)
+            "$GOPM_BINARY" edit
             ;;
         list)
             list_commands
