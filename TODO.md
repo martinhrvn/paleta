@@ -92,7 +92,7 @@ The project types we should support intitally are:
 
 ### Language & Dependencies
 - [x] Written in Go
-- [x] Minimal external dependencies (gopkg.in/yaml.v3, tcell, tview)
+- [x] Minimal external dependencies (gopkg.in/yaml.v3, bubbletea, lipgloss, bubbles)
 - [x] Use standard library where possible
 - [ ] Ensure cross-platform compatibility (Linux/Mac/Windows)
 

@@ -3,6 +3,7 @@ package ui
 import (
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/martin/go-pm/internal/config"
 )
 
@@ -35,97 +36,84 @@ func createTestConfig() *config.Config {
 	}
 }
 
-// Helper to create FzfTUISelector with test config (without starting app)
-func createTestFzfSelector(cfg *config.Config) *FzfTUISelector {
-	return NewFzfTUISelector(cfg)
+// Helper to create a Model with test config (without starting program)
+func createTestModel(cfg *config.Config) Model {
+	m := NewModel(cfg)
+	m.loadCommands()
+	m.filteredCommands = make([]CommandInfo, len(m.commands))
+	copy(m.filteredCommands, m.commands)
+	return m
 }
 
-func TestFzfTUISelector_ToggleSelection(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	// Load commands to populate filteredCommands
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands // No filtering for test
+func TestModel_ToggleSelection(t *testing.T) {
+	m := createTestModel(createTestConfig())
 
 	// Initially no selections
-	if len(selector.selectedIndices) != 0 {
-		t.Errorf("expected 0 selections initially, got %d", len(selector.selectedIndices))
+	if len(m.selectedIndices) != 0 {
+		t.Errorf("expected 0 selections initially, got %d", len(m.selectedIndices))
 	}
 
 	// Toggle selection on
-	selector.toggleSelection(0)
-	if !selector.selectedIndices[0] {
+	m.toggleSelection(0)
+	if !m.selectedIndices[0] {
 		t.Error("expected index 0 to be selected after toggle")
 	}
 
 	// Toggle selection off
-	selector.toggleSelection(0)
-	if selector.selectedIndices[0] {
+	m.toggleSelection(0)
+	if m.selectedIndices[0] {
 		t.Error("expected index 0 to be unselected after second toggle")
 	}
 }
 
-func TestFzfTUISelector_ToggleMultipleSelections(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
+func TestModel_ToggleMultipleSelections(t *testing.T) {
+	m := createTestModel(createTestConfig())
 
 	// Select multiple items
-	selector.toggleSelection(0)
-	selector.toggleSelection(2)
-	selector.toggleSelection(4)
+	m.toggleSelection(0)
+	m.toggleSelection(2)
+	m.toggleSelection(4)
 
-	if !selector.selectedIndices[0] {
+	if !m.selectedIndices[0] {
 		t.Error("expected index 0 to be selected")
 	}
-	if !selector.selectedIndices[2] {
+	if !m.selectedIndices[2] {
 		t.Error("expected index 2 to be selected")
 	}
-	if !selector.selectedIndices[4] {
+	if !m.selectedIndices[4] {
 		t.Error("expected index 4 to be selected")
 	}
 
 	// Index 1 and 3 should not be selected
-	if selector.selectedIndices[1] {
+	if m.selectedIndices[1] {
 		t.Error("expected index 1 to NOT be selected")
 	}
-	if selector.selectedIndices[3] {
+	if m.selectedIndices[3] {
 		t.Error("expected index 3 to NOT be selected")
 	}
 }
 
-func TestFzfTUISelector_ToggleOutOfBounds(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
+func TestModel_ToggleOutOfBounds(t *testing.T) {
+	m := createTestModel(createTestConfig())
 
 	// Should not panic on out of bounds
-	selector.toggleSelection(-1)
-	selector.toggleSelection(100)
+	m.toggleSelection(-1)
+	m.toggleSelection(100)
 
 	// Should have no selections
-	if len(selector.selectedIndices) != 0 {
-		t.Errorf("expected 0 selections for out of bounds, got %d", len(selector.selectedIndices))
+	if len(m.selectedIndices) != 0 {
+		t.Errorf("expected 0 selections for out of bounds, got %d", len(m.selectedIndices))
 	}
 }
 
-func TestFzfTUISelector_GetSelectedCommands_WithSelections(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
+func TestModel_GetSelectedCommands_WithSelections(t *testing.T) {
+	m := createTestModel(createTestConfig())
 
 	// Select items at indices 0 and 2
-	selector.toggleSelection(0)
-	selector.toggleSelection(2)
+	m.toggleSelection(0)
+	m.toggleSelection(2)
 
-	results := selector.getSelectedCommands()
+	results := m.getSelectedCommands()
 
 	if len(results) != 2 {
 		t.Errorf("expected 2 selected commands, got %d", len(results))
@@ -140,18 +128,14 @@ func TestFzfTUISelector_GetSelectedCommands_WithSelections(t *testing.T) {
 	}
 }
 
-func TestFzfTUISelector_GetSelectedCommands_NoSelection_ReturnsCurrent(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
+func TestModel_GetSelectedCommands_NoSelection_ReturnsCurrent(t *testing.T) {
+	m := createTestModel(createTestConfig())
 
 	// Set current cursor position to index 1 (npm test)
-	selector.currentIndex = 1
+	m.currentIndex = 1
 
 	// No explicit selections, should return current item
-	results := selector.getSelectedCommands()
+	results := m.getSelectedCommands()
 
 	if len(results) != 1 {
 		t.Errorf("expected 1 command (current item), got %d", len(results))
@@ -162,31 +146,24 @@ func TestFzfTUISelector_GetSelectedCommands_NoSelection_ReturnsCurrent(t *testin
 	}
 }
 
-func TestFzfTUISelector_GetSelectedCommands_EmptyList(t *testing.T) {
+func TestModel_GetSelectedCommands_EmptyList(t *testing.T) {
 	cfg := &config.Config{
 		Locations: []config.Location{},
 	}
-	selector := createTestFzfSelector(cfg)
+	m := createTestModel(cfg)
 
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
-
-	results := selector.getSelectedCommands()
+	results := m.getSelectedCommands()
 
 	if len(results) != 0 {
 		t.Errorf("expected 0 commands for empty list, got %d", len(results))
 	}
 }
 
-func TestFzfTUISelector_GeneratePreview(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
+func TestModel_GeneratePreview(t *testing.T) {
+	m := createTestModel(createTestConfig())
 
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
-
-	cmd := selector.filteredCommands[0]
-	preview := selector.generatePreview(cmd)
+	cmd := m.filteredCommands[0]
+	preview := m.generatePreview(cmd)
 
 	// Check that preview contains expected information
 	if !contains(preview, "frontend") {
@@ -203,7 +180,7 @@ func TestFzfTUISelector_GeneratePreview(t *testing.T) {
 	}
 }
 
-func TestFzfTUISelector_GeneratePreview_EmptyType(t *testing.T) {
+func TestModel_GeneratePreview_EmptyType(t *testing.T) {
 	cfg := &config.Config{
 		Locations: []config.Location{
 			{
@@ -214,13 +191,10 @@ func TestFzfTUISelector_GeneratePreview_EmptyType(t *testing.T) {
 			},
 		},
 	}
-	selector := createTestFzfSelector(cfg)
+	m := createTestModel(cfg)
 
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
-
-	cmd := selector.filteredCommands[0]
-	preview := selector.generatePreview(cmd)
+	cmd := m.filteredCommands[0]
+	preview := m.generatePreview(cmd)
 
 	// Should still work without type
 	if !contains(preview, "scripts") {
@@ -231,51 +205,43 @@ func TestFzfTUISelector_GeneratePreview_EmptyType(t *testing.T) {
 	}
 }
 
-func TestFzfTUISelector_FormatSelectedItem(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
+func TestModel_FormatSelectedItem(t *testing.T) {
+	m := createTestModel(createTestConfig())
 
 	// Test unselected item
-	formatted := selector.formatListItem(0, false)
+	formatted := m.formatListItem(0, false)
 	if formatted != "  frontend: npm start" {
 		t.Errorf("expected '  frontend: npm start', got %q", formatted)
 	}
 
 	// Test selected item
-	formatted = selector.formatListItem(0, true)
+	formatted = m.formatListItem(0, true)
 	if formatted != "* frontend: npm start" {
 		t.Errorf("expected '* frontend: npm start', got %q", formatted)
 	}
 }
 
-func TestFzfTUISelector_LoadCommands(t *testing.T) {
+func TestModel_LoadCommands(t *testing.T) {
 	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
+	m := NewModel(cfg)
+	m.loadCommands()
 
 	// Should have 5 commands total (3 from frontend, 2 from backend)
-	if len(selector.commands) != 5 {
-		t.Errorf("expected 5 commands, got %d", len(selector.commands))
+	if len(m.commands) != 5 {
+		t.Errorf("expected 5 commands, got %d", len(m.commands))
 	}
 
 	// Check first command
-	if selector.commands[0].DisplayName != "frontend" {
-		t.Errorf("expected first command DisplayName 'frontend', got %q", selector.commands[0].DisplayName)
+	if m.commands[0].DisplayName != "frontend" {
+		t.Errorf("expected first command DisplayName 'frontend', got %q", m.commands[0].DisplayName)
 	}
-	if selector.commands[0].Command != "npm start" {
-		t.Errorf("expected first command 'npm start', got %q", selector.commands[0].Command)
+	if m.commands[0].Command != "npm start" {
+		t.Errorf("expected first command 'npm start', got %q", m.commands[0].Command)
 	}
 }
 
-func TestFzfTUISelector_FuzzyFilter(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
+func TestModel_FuzzyFilter(t *testing.T) {
+	m := createTestModel(createTestConfig())
 
 	tests := []struct {
 		name          string
@@ -316,7 +282,7 @@ func TestFzfTUISelector_FuzzyFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filtered := selector.fuzzyFilter(selector.commands, tt.query)
+			filtered := m.fuzzyFilter(m.commands, tt.query)
 			if len(filtered) != tt.expectedCount {
 				t.Errorf("expected %d results, got %d", tt.expectedCount, len(filtered))
 			}
@@ -324,164 +290,368 @@ func TestFzfTUISelector_FuzzyFilter(t *testing.T) {
 	}
 }
 
-func TestFzfTUISelector_ClearSelections(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
+func TestModel_ClearSelections(t *testing.T) {
+	m := createTestModel(createTestConfig())
 
 	// Make some selections
-	selector.toggleSelection(0)
-	selector.toggleSelection(1)
-	selector.toggleSelection(2)
+	m.toggleSelection(0)
+	m.toggleSelection(1)
+	m.toggleSelection(2)
 
-	if len(selector.selectedIndices) == 0 {
+	if len(m.selectedIndices) == 0 {
 		t.Error("expected some selections before clear")
 	}
 
 	// Clear selections
-	selector.clearSelections()
+	m.clearSelections()
 
-	if len(selector.selectedIndices) != 0 {
-		t.Errorf("expected 0 selections after clear, got %d", len(selector.selectedIndices))
+	if len(m.selectedIndices) != 0 {
+		t.Errorf("expected 0 selections after clear, got %d", len(m.selectedIndices))
 	}
 }
 
-func TestFzfTUISelector_ConfirmSelection_DefaultAction(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
-	selector.currentIndex = 0
+func TestModel_ConfirmSelection_DefaultAction(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.currentIndex = 0
 
 	// confirmSelection should leave Action empty (default/execute behavior)
-	selector.confirmSelection()
+	m.confirmSelection()
 
-	if len(selector.results) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(selector.results))
+	if len(m.results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(m.results))
 	}
-	if selector.results[0].Action != "" {
-		t.Errorf("expected empty Action for confirmSelection, got %q", selector.results[0].Action)
+	if m.results[0].Action != "" {
+		t.Errorf("expected empty Action for confirmSelection, got %q", m.results[0].Action)
 	}
 }
 
-func TestFzfTUISelector_EnterEditMode_SetsEditingState(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
-	selector.currentIndex = 0
+func TestModel_EnterEditMode_SetsEditingState(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.currentIndex = 0
 
 	// Should not be in edit mode initially
-	if selector.editing {
+	if m.editing {
 		t.Error("expected editing to be false initially")
 	}
 
 	// Enter edit mode
-	selector.enterEditMode()
+	m.enterEditMode()
 
 	// Should now be in edit mode
-	if !selector.editing {
+	if !m.editing {
 		t.Error("expected editing to be true after enterEditMode")
 	}
 
 	// The editInput should be pre-filled with the current command
-	if selector.editCommand != "npm start" {
-		t.Errorf("expected editCommand 'npm start', got %q", selector.editCommand)
+	if m.editCommand != "npm start" {
+		t.Errorf("expected editCommand 'npm start', got %q", m.editCommand)
 	}
-	if selector.editDirectory != "/path/to/frontend" {
-		t.Errorf("expected editDirectory '/path/to/frontend', got %q", selector.editDirectory)
+	if m.editDirectory != "/path/to/frontend" {
+		t.Errorf("expected editDirectory '/path/to/frontend', got %q", m.editDirectory)
 	}
-	if selector.editDisplayName != "frontend" {
-		t.Errorf("expected editDisplayName 'frontend', got %q", selector.editDisplayName)
+	if m.editDisplayName != "frontend" {
+		t.Errorf("expected editDisplayName 'frontend', got %q", m.editDisplayName)
 	}
 }
 
-func TestFzfTUISelector_ConfirmEdit_SetsEditAction(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
-	selector.currentIndex = 0
+func TestModel_ConfirmEdit_SetsEditAction(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.currentIndex = 0
 
 	// Enter edit mode
-	selector.enterEditMode()
+	m.enterEditMode()
 
 	// Simulate editing the command
-	selector.editCommand = "npm start --port 3001"
+	m.editCommand = "npm start --port 3001"
 
 	// Confirm the edit
-	selector.confirmEdit()
+	m.confirmEdit()
 
-	if len(selector.results) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(selector.results))
+	if len(m.results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(m.results))
 	}
-	if selector.results[0].Action != "edit" {
-		t.Errorf("expected Action 'edit', got %q", selector.results[0].Action)
+	if m.results[0].Action != "edit" {
+		t.Errorf("expected Action 'edit', got %q", m.results[0].Action)
 	}
-	if selector.results[0].Command != "npm start --port 3001" {
-		t.Errorf("expected modified command, got %q", selector.results[0].Command)
+	if m.results[0].Command != "npm start --port 3001" {
+		t.Errorf("expected modified command, got %q", m.results[0].Command)
 	}
-	if selector.results[0].Directory != "/path/to/frontend" {
-		t.Errorf("expected directory '/path/to/frontend', got %q", selector.results[0].Directory)
+	if m.results[0].Directory != "/path/to/frontend" {
+		t.Errorf("expected directory '/path/to/frontend', got %q", m.results[0].Directory)
 	}
 }
 
-func TestFzfTUISelector_CancelEdit_ReturnsToNormalMode(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
-	selector.currentIndex = 0
+func TestModel_CancelEdit_ReturnsToNormalMode(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.currentIndex = 0
 
 	// Enter edit mode
-	selector.enterEditMode()
-	if !selector.editing {
+	m.enterEditMode()
+	if !m.editing {
 		t.Fatal("expected editing to be true")
 	}
 
 	// Cancel edit
-	selector.cancelEdit()
+	m.cancelEdit()
 
 	// Should be back to normal mode with no results
-	if selector.editing {
+	if m.editing {
 		t.Error("expected editing to be false after cancelEdit")
 	}
-	if len(selector.results) != 0 {
-		t.Errorf("expected 0 results after cancel, got %d", len(selector.results))
+	if len(m.results) != 0 {
+		t.Errorf("expected 0 results after cancel, got %d", len(m.results))
 	}
 }
 
-func TestFzfTUISelector_GetSelectedCount(t *testing.T) {
-	cfg := createTestConfig()
-	selector := createTestFzfSelector(cfg)
-
-	selector.loadCommands()
-	selector.filteredCommands = selector.commands
+func TestModel_GetSelectedCount(t *testing.T) {
+	m := createTestModel(createTestConfig())
 
 	// Initially 0
-	if selector.getSelectedCount() != 0 {
+	if m.getSelectedCount() != 0 {
 		t.Errorf("expected 0 selected count initially")
 	}
 
 	// Select some
-	selector.toggleSelection(0)
-	selector.toggleSelection(2)
+	m.toggleSelection(0)
+	m.toggleSelection(2)
 
-	if selector.getSelectedCount() != 2 {
-		t.Errorf("expected 2 selected count, got %d", selector.getSelectedCount())
+	if m.getSelectedCount() != 2 {
+		t.Errorf("expected 2 selected count, got %d", m.getSelectedCount())
 	}
 
 	// Deselect one
-	selector.toggleSelection(0)
+	m.toggleSelection(0)
 
-	if selector.getSelectedCount() != 1 {
-		t.Errorf("expected 1 selected count, got %d", selector.getSelectedCount())
+	if m.getSelectedCount() != 1 {
+		t.Errorf("expected 1 selected count, got %d", m.getSelectedCount())
+	}
+}
+
+func TestModel_ToggleSelectAll(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	// Select all
+	m.toggleSelectAll()
+	if m.getSelectedCount() != 5 {
+		t.Errorf("expected 5 selected after select all, got %d", m.getSelectedCount())
+	}
+
+	// Toggle again should deselect all
+	m.toggleSelectAll()
+	if m.getSelectedCount() != 0 {
+		t.Errorf("expected 0 selected after deselect all, got %d", m.getSelectedCount())
+	}
+}
+
+func TestModel_MoveCursorDown(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	if m.currentIndex != 0 {
+		t.Errorf("expected initial cursor at 0, got %d", m.currentIndex)
+	}
+
+	m.moveCursorDown()
+	if m.currentIndex != 1 {
+		t.Errorf("expected cursor at 1 after down, got %d", m.currentIndex)
+	}
+
+	// Move past end should clamp
+	for i := 0; i < 10; i++ {
+		m.moveCursorDown()
+	}
+	if m.currentIndex != 4 {
+		t.Errorf("expected cursor clamped at 4, got %d", m.currentIndex)
+	}
+}
+
+func TestModel_MoveCursorUp(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.currentIndex = 3
+
+	m.moveCursorUp()
+	if m.currentIndex != 2 {
+		t.Errorf("expected cursor at 2 after up, got %d", m.currentIndex)
+	}
+
+	// Move past beginning should clamp
+	for i := 0; i < 10; i++ {
+		m.moveCursorUp()
+	}
+	if m.currentIndex != 0 {
+		t.Errorf("expected cursor clamped at 0, got %d", m.currentIndex)
+	}
+}
+
+func TestModel_KeyDown_MovesCursor(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	um := updated.(Model)
+
+	if um.currentIndex != 1 {
+		t.Errorf("expected cursor at 1 after KeyDown, got %d", um.currentIndex)
+	}
+}
+
+func TestModel_KeyUp_MovesCursor(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.currentIndex = 2
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	um := updated.(Model)
+
+	if um.currentIndex != 1 {
+		t.Errorf("expected cursor at 1 after KeyUp, got %d", um.currentIndex)
+	}
+}
+
+func TestModel_KeyTab_TogglesSelection(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	um := updated.(Model)
+
+	// Tab should toggle selection on index 0 and move cursor down
+	if !um.selectedIndices[0] {
+		t.Error("expected index 0 to be selected after Tab")
+	}
+	if um.currentIndex != 1 {
+		t.Errorf("expected cursor at 1 after Tab, got %d", um.currentIndex)
+	}
+}
+
+func TestModel_KeyEsc_Quits(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	um := updated.(Model)
+
+	if !um.quitting {
+		t.Error("expected quitting to be true after Esc")
+	}
+}
+
+func TestModel_KeyCtrlC_Quits(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	um := updated.(Model)
+
+	if !um.quitting {
+		t.Error("expected quitting to be true after Ctrl+C")
+	}
+}
+
+func TestModel_KeyCtrlA_SelectsAll(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlA})
+	um := updated.(Model)
+
+	if um.getSelectedCount() != 5 {
+		t.Errorf("expected 5 selected after Ctrl+A, got %d", um.getSelectedCount())
+	}
+}
+
+func TestModel_KeyCtrlF_TogglesFrecency(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	initial := m.frecencyEnabled
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	um := updated.(Model)
+
+	if um.frecencyEnabled == initial {
+		t.Error("expected frecencyEnabled to toggle after Ctrl+F")
+	}
+}
+
+func TestModel_EnterEditMode_EmptyList(t *testing.T) {
+	cfg := &config.Config{
+		Locations: []config.Location{},
+	}
+	m := createTestModel(cfg)
+
+	// Should not panic on empty list
+	m.enterEditMode()
+
+	if m.editing {
+		t.Error("should not enter edit mode with empty list")
+	}
+}
+
+func TestModel_ViewportScrolling(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.height = 10 // Small terminal: 10 - 3 lines chrome = 7 visible rows
+
+	// With 5 items and 7 visible rows, no scrolling needed
+	if m.viewportOffset != 0 {
+		t.Errorf("expected viewport offset 0 with enough space, got %d", m.viewportOffset)
+	}
+
+	// Create a model with many commands to test scrolling
+	cmds := make([]string, 20)
+	for i := range cmds {
+		cmds[i] = "cmd" + string(rune('a'+i%26))
+	}
+	bigCfg := &config.Config{
+		Locations: []config.Location{
+			{
+				Name:     "big",
+				Location: "/big",
+				Commands: stringsToCommands(cmds),
+			},
+		},
+	}
+	m2 := createTestModel(bigCfg)
+	m2.height = 10 // 7 visible rows
+
+	// Move cursor past visible area
+	for i := 0; i < 8; i++ {
+		m2.moveCursorDown()
+	}
+
+	// Viewport should have scrolled
+	if m2.viewportOffset == 0 {
+		t.Error("expected viewport to scroll when cursor moves past visible area")
+	}
+}
+
+func TestModel_UpdateFilteredCommands(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	// Set search query and update
+	m.searchInput.SetValue("npm")
+	m.updateFilteredCommands()
+
+	if len(m.filteredCommands) != 3 {
+		t.Errorf("expected 3 filtered commands for 'npm', got %d", len(m.filteredCommands))
+	}
+
+	// Cursor should be reset to 0
+	if m.currentIndex != 0 {
+		t.Errorf("expected cursor reset to 0, got %d", m.currentIndex)
+	}
+
+	// Selections should be cleared
+	if len(m.selectedIndices) != 0 {
+		t.Errorf("expected selections cleared, got %d", len(m.selectedIndices))
+	}
+}
+
+func TestModel_View_ReturnsString(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.width = 80
+	m.height = 24
+
+	view := m.View()
+
+	if view == "" {
+		t.Error("expected non-empty view output")
+	}
+
+	// Should contain command text
+	if !contains(view, "frontend") {
+		t.Error("view should contain 'frontend'")
 	}
 }
 

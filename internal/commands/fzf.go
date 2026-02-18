@@ -145,8 +145,8 @@ func PrepareCommandInfoWithHistory(cfg *config.Config, hist *history.History, en
 
 // RunFzfTUI executes the fzf-style TUI with multi-select support
 func RunFzfTUI(cfg *config.Config) ([]SelectionResult, error) {
-	selector := ui.NewFzfTUISelector(cfg)
-	results, err := selector.Run()
+	model := ui.NewModel(cfg)
+	results, err := model.Run()
 	if err != nil {
 		return nil, err
 	}
