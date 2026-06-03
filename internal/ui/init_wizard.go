@@ -175,8 +175,8 @@ func (m WizardModel) View() string {
 
 		path := it.Location.Location
 		line := fmt.Sprintf("%s %s", mark, listCommandStyle.Render(path))
-		if it.Location.Type != "" {
-			line += " " + listLocationStyle.Render("("+it.Location.Type+")")
+		if len(it.Location.Types) > 0 {
+			line += " " + listLocationStyle.Render("("+strings.Join(it.Location.Types, ", ")+")")
 		}
 		if it.Configured {
 			line += " " + statusGreenStyle.Render("(configured)")

@@ -218,28 +218,28 @@ func TestSelectionResult(t *testing.T) {
 	}
 
 	tests := []struct {
-		name             string
-		fzfSelection     string
-		expectedDir      string
-		expectedCommand  string
-		expectedDisplay  string
-		wantErr          bool
+		name            string
+		fzfSelection    string
+		expectedDir     string
+		expectedCommand string
+		expectedDisplay string
+		wantErr         bool
 	}{
 		{
-			name:             "valid selection with name",
-			fzfSelection:     "frontend: start",
-			expectedDir:      "packages/frontend",
-			expectedCommand:  "start",
-			expectedDisplay:  "frontend",
-			wantErr:          false,
+			name:            "valid selection with name",
+			fzfSelection:    "frontend: start",
+			expectedDir:     "packages/frontend",
+			expectedCommand: "start",
+			expectedDisplay: "frontend",
+			wantErr:         false,
 		},
 		{
-			name:             "valid selection with path as display",
-			fzfSelection:     "packages/backend: run",
-			expectedDir:      "packages/backend",
-			expectedCommand:  "run",
-			expectedDisplay:  "packages/backend",
-			wantErr:          false,
+			name:            "valid selection with path as display",
+			fzfSelection:    "packages/backend: run",
+			expectedDir:     "packages/backend",
+			expectedCommand: "run",
+			expectedDisplay: "packages/backend",
+			wantErr:         false,
 		},
 		{
 			name:         "invalid selection format",

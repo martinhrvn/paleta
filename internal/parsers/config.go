@@ -108,7 +108,7 @@ func (p *ParsersFile) GetParser(name string) (ParserConfig, bool) {
 func (p *ParsersFile) FindParserForDirectory(directory string) (string, ParserConfig, error) {
 	for name, parser := range p.Parsers {
 		for _, detectFile := range parser.DetectFiles {
-			if detectFilePresent(directory, detectFile) {
+			if DetectFilePresent(directory, detectFile) {
 				return name, parser, nil
 			}
 		}
@@ -116,10 +116,10 @@ func (p *ParsersFile) FindParserForDirectory(directory string) (string, ParserCo
 	return "", ParserConfig{}, fmt.Errorf("no parser found for directory: %s", directory)
 }
 
-// detectFilePresent reports whether directory contains a file matching pattern.
+// DetectFilePresent reports whether directory contains a file matching pattern.
 // A pattern without glob metacharacters is matched as an exact filename; one with
 // metacharacters (e.g. "docker-compose.*.yml") is matched with filepath.Match.
-func detectFilePresent(directory, pattern string) bool {
+func DetectFilePresent(directory, pattern string) bool {
 	if !strings.ContainsAny(pattern, "*?[") {
 		_, err := os.Stat(filepath.Join(directory, pattern))
 		return err == nil

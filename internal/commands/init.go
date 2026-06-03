@@ -63,7 +63,7 @@ func BuildWizardItems(cands []scan.Candidate, authored *config.Config) []ui.Wiza
 			Location: config.Location{
 				Name:     locationName(c.RelPath),
 				Location: c.RelPath,
-				Type:     c.Type,
+				Types:    c.Types,
 			},
 			Detected: true,
 		})
@@ -148,6 +148,13 @@ locations:
       - "npm test"
       - "npm run build"
 
+  # Example: A folder that is both an npm package and a Docker service.
+  # Commands from every type are merged; each is labelled with its type, e.g.
+  # "svc: [npm] build" and "svc: [docker] build".
+  # - name: "svc"
+  #   location: "services/svc"
+  #   type: [npm, docker]
+
   # Example: Filtering auto-discovered commands with include/exclude
   # - name: "app"
   #   location: "app"
@@ -178,7 +185,8 @@ locations:
 #   name:     (optional) Display name shown in selection UI
 #   location: (optional) Path to project directory (supports glob patterns like "packages/*")
 #                        If omitted, defaults to current directory "."
-#   type:     (optional) Project type for automatic command detection (npm, yarn, pnpm, go)
+#   type:     (optional) Project type(s) for automatic command detection.
+#             Single value (type: npm) or a list (type: [npm, docker]).
 #   commands: (optional) List of commands to make available
 #   include:  (optional) Glob patterns to filter auto-discovered commands (whitelist)
 #   exclude:  (optional) Glob patterns to exclude from auto-discovered commands (blacklist)

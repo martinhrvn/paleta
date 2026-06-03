@@ -34,7 +34,7 @@ func (c *ConfigurableProjectType) DetectConfigFile() string {
 
 func (c *ConfigurableProjectType) ParseCommands(configPath string) ([]string, error) {
 	directory := filepath.Dir(configPath)
-	
+
 	// Parse and format commands using the parser system
 	commands, err := parsers.ParseAndFormatCommands(directory, c.parserConfig)
 	if err != nil {
@@ -72,11 +72,12 @@ func (c *ConfigurableProjectType) GetFullCommand(directory string, key string) (
 	return cmd, nil
 }
 
-// CanHandleDirectory checks if this project type can handle the given directory
+// CanHandleDirectory checks if this project type can handle the given directory.
+// Detect files may be glob patterns (e.g. "docker-compose.*.yml"), so matching
+// is glob-aware.
 func (c *ConfigurableProjectType) CanHandleDirectory(directory string) bool {
 	for _, detectFile := range c.parserConfig.DetectFiles {
-		configFile := filepath.Join(directory, detectFile)
-		if fileExists(configFile) {
+		if parsers.DetectFilePresent(directory, detectFile) {
 			return true
 		}
 	}

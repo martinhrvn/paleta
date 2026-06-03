@@ -14,11 +14,13 @@ import (
 	"github.com/martinhrvn/paleta/internal/parsers"
 )
 
-// Candidate is a directory detected as a project, with its inferred paleta type.
+// Candidate is a directory detected as a project, with its inferred paleta types.
+// A directory can match several types at once (e.g. an npm package that also has
+// a Dockerfile); Types is ordered by detection priority, primary type first.
 type Candidate struct {
-	RelPath    string // path relative to the scan root ("." for the root itself)
-	Type       string // detected paleta type: npm|yarn|pnpm|go|rust|...
-	DetectFile string // the file that triggered detection, e.g. "package.json"
+	RelPath    string   // path relative to the scan root ("." for the root itself)
+	Types      []string // detected paleta types, primary first: e.g. [npm, docker]
+	DetectFile string   // the file that triggered detection of the primary type
 }
 
 // ignoredDirs is the built-in skip set used when no git repository is available
@@ -68,10 +70,10 @@ func Scan(root string) ([]Candidate, error) {
 
 	candidates := make([]Candidate, 0, len(byDir))
 	for dir, detectFiles := range byDir {
-		detectFile, typ := chooseType(filepath.Join(root, dir), detectFiles, matcher)
+		types, detectFile := chooseTypes(filepath.Join(root, dir), detectFiles, matcher)
 		candidates = append(candidates, Candidate{
 			RelPath:    dir,
-			Type:       typ,
+			Types:      types,
 			DetectFile: detectFile,
 		})
 	}
@@ -80,15 +82,17 @@ func Scan(root string) ([]Candidate, error) {
 	return candidates, nil
 }
 
-// chooseType picks the most meaningful (detectFile, type) for a directory that
-// may contain several project files. package.json is refined to the concrete JS
-// package manager by inspecting lockfiles in absDir.
-func chooseType(absDir string, detectFiles []string, matcher detectMatcher) (string, string) {
+// chooseTypes resolves every project type a directory matches, ordered by
+// detection priority (primary first), along with the detect file that triggered
+// the primary type. A directory may legitimately match several types at once
+// (e.g. package.json + Dockerfile). package.json is refined to the concrete JS
+// package manager by inspecting lockfiles in absDir, so npm/yarn/pnpm collapse to
+// a single entry.
+func chooseTypes(absDir string, detectFiles []string, matcher detectMatcher) ([]string, string) {
 	sort.Strings(detectFiles)
 
-	bestFile, bestType := "", ""
-	bestRank := len(typePriority) + 1
-
+	// First detect file that produced each type (used for the primary's DetectFile).
+	typeFile := make(map[string]string)
 	for _, file := range detectFiles {
 		typ, ok := matcher.match(file)
 		if !ok {
@@ -97,12 +101,27 @@ func chooseType(absDir string, detectFiles []string, matcher detectMatcher) (str
 		if file == "package.json" {
 			typ = detectJSPackageManager(absDir)
 		}
-		rank := typeRank(typ)
-		if rank < bestRank {
-			bestRank, bestFile, bestType = rank, file, typ
+		if _, exists := typeFile[typ]; !exists {
+			typeFile[typ] = file
 		}
 	}
-	return bestFile, bestType
+	if len(typeFile) == 0 {
+		return nil, ""
+	}
+
+	types := make([]string, 0, len(typeFile))
+	for typ := range typeFile {
+		types = append(types, typ)
+	}
+	sort.Slice(types, func(i, j int) bool {
+		ri, rj := typeRank(types[i]), typeRank(types[j])
+		if ri != rj {
+			return ri < rj
+		}
+		return types[i] < types[j]
+	})
+
+	return types, typeFile[types[0]]
 }
 
 // detectJSPackageManager picks npm/yarn/pnpm based on the lockfile present in dir.

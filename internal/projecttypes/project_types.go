@@ -13,15 +13,19 @@ import (
 type ProjectType interface {
 	// Name returns the name of the project type (e.g., "npm", "go")
 	Name() string
-	
+
 	// DetectConfigFile returns the config file name to look for (e.g., "package.json", "go.mod")
 	DetectConfigFile() string
-	
+
 	// ParseCommands parses the config file and returns available commands
 	ParseCommands(configPath string) ([]string, error)
-	
+
 	// GetCommandPrefix returns the command prefix for this project type (e.g., "npm run", "go")
 	GetCommandPrefix() string
+
+	// CanHandleDirectory reports whether this project type's detect file(s) are
+	// present in the directory.
+	CanHandleDirectory(directory string) bool
 }
 
 // ProjectTypeRegistry holds all registered project types
@@ -108,4 +112,3 @@ func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
-

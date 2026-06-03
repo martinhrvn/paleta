@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 )
 
@@ -26,6 +27,10 @@ func (n *NpmProjectType) GetCommandPrefix() string {
 	return "npm run"
 }
 
+func (n *NpmProjectType) CanHandleDirectory(directory string) bool {
+	return fileExists(filepath.Join(directory, n.DetectConfigFile()))
+}
+
 // YarnProjectType implements ProjectType for yarn projects
 type YarnProjectType struct{}
 
@@ -45,6 +50,10 @@ func (y *YarnProjectType) GetCommandPrefix() string {
 	return "yarn"
 }
 
+func (y *YarnProjectType) CanHandleDirectory(directory string) bool {
+	return fileExists(filepath.Join(directory, y.DetectConfigFile()))
+}
+
 // PnpmProjectType implements ProjectType for pnpm projects
 type PnpmProjectType struct{}
 
@@ -62,6 +71,10 @@ func (p *PnpmProjectType) ParseCommands(configPath string) ([]string, error) {
 
 func (p *PnpmProjectType) GetCommandPrefix() string {
 	return "pnpm run"
+}
+
+func (p *PnpmProjectType) CanHandleDirectory(directory string) bool {
+	return fileExists(filepath.Join(directory, p.DetectConfigFile()))
 }
 
 // PackageJson represents the structure of a package.json file

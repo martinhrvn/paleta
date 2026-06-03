@@ -68,8 +68,8 @@ func TestInitWizardChain(t *testing.T) {
 	if !ok {
 		t.Fatal("expected a 'root' location in generated config")
 	}
-	if rootLoc.Type != "go" {
-		t.Errorf("root type = %q, want go", rootLoc.Type)
+	if len(rootLoc.Types) != 1 || rootLoc.Types[0] != "go" {
+		t.Errorf("root types = %v, want [go]", rootLoc.Types)
 	}
 	if !hasCommandContaining(rootLoc.Commands, "build") || !hasCommandContaining(rootLoc.Commands, "test") {
 		t.Errorf("expected go commands for root, got %+v", rootLoc.Commands)
@@ -79,8 +79,8 @@ func TestInitWizardChain(t *testing.T) {
 	if !ok {
 		t.Fatal("expected a 'web' location in generated config")
 	}
-	if webLoc.Type != "npm" {
-		t.Errorf("web type = %q, want npm", webLoc.Type)
+	if len(webLoc.Types) != 1 || webLoc.Types[0] != "npm" {
+		t.Errorf("web types = %v, want [npm]", webLoc.Types)
 	}
 	if !hasCommandContaining(webLoc.Commands, "npm run dev") {
 		t.Errorf("expected npm scripts discovered for web, got %+v", webLoc.Commands)

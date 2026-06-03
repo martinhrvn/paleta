@@ -3,8 +3,18 @@ package scan
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
+
+// wantTypes asserts that a candidate's detected types equal want (order-sensitive,
+// primary first).
+func wantTypes(t *testing.T, c *Candidate, want ...string) {
+	t.Helper()
+	if !reflect.DeepEqual(c.Types, want) {
+		t.Errorf("candidate %q types = %v, want %v", c.RelPath, c.Types, want)
+	}
+}
 
 // writeFile creates a file (and parent dirs) with the given content.
 func writeFile(t *testing.T, path string) {
@@ -42,17 +52,13 @@ func TestScan_DetectsMultipleTypes(t *testing.T) {
 	if frontend == nil {
 		t.Fatal("expected a candidate for packages/frontend")
 	}
-	if frontend.Type != "npm" {
-		t.Errorf("expected frontend type npm, got %q", frontend.Type)
-	}
+	wantTypes(t, frontend, "npm")
 
 	api := findCandidate(cands, filepath.Join("services", "api"))
 	if api == nil {
 		t.Fatal("expected a candidate for services/api")
 	}
-	if api.Type != "go" {
-		t.Errorf("expected api type go, got %q", api.Type)
-	}
+	wantTypes(t, api, "go")
 }
 
 func TestScan_JSPackageManagerByLockfile(t *testing.T) {
@@ -84,9 +90,7 @@ func TestScan_JSPackageManagerByLockfile(t *testing.T) {
 			if app == nil {
 				t.Fatal("expected a candidate for app")
 			}
-			if app.Type != tt.wantType {
-				t.Errorf("expected type %q, got %q", tt.wantType, app.Type)
-			}
+			wantTypes(t, app, tt.wantType)
 		})
 	}
 }
@@ -104,9 +108,7 @@ func TestScan_Dockerfile(t *testing.T) {
 	if svc == nil {
 		t.Fatal("expected a candidate for svc")
 	}
-	if svc.Type != "docker" {
-		t.Errorf("expected svc type docker, got %q", svc.Type)
-	}
+	wantTypes(t, svc, "docker")
 }
 
 func TestScan_ComposeGlobOverrideFile(t *testing.T) {
@@ -123,12 +125,10 @@ func TestScan_ComposeGlobOverrideFile(t *testing.T) {
 	if infra == nil {
 		t.Fatal("expected a candidate for infra")
 	}
-	if infra.Type != "compose" {
-		t.Errorf("expected infra type compose, got %q", infra.Type)
-	}
+	wantTypes(t, infra, "compose")
 }
 
-func TestScan_ComposeBeatsDockerfile(t *testing.T) {
+func TestScan_DockerfileAndCompose(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "app", "Dockerfile"))
 	writeFile(t, filepath.Join(root, "app", "docker-compose.yml"))
@@ -142,9 +142,26 @@ func TestScan_ComposeBeatsDockerfile(t *testing.T) {
 	if app == nil {
 		t.Fatal("expected a candidate for app")
 	}
-	if app.Type != "compose" {
-		t.Errorf("expected app type compose (compose outranks docker), got %q", app.Type)
+	// Both types are detected; compose outranks docker so it is primary.
+	wantTypes(t, app, "compose", "docker")
+}
+
+func TestScan_NpmAndDocker(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "web", "package.json"))
+	writeFile(t, filepath.Join(root, "web", "Dockerfile"))
+
+	cands, err := Scan(root)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
 	}
+
+	web := findCandidate(cands, "web")
+	if web == nil {
+		t.Fatal("expected a candidate for web")
+	}
+	// npm outranks docker; the single JS manager and docker are both detected.
+	wantTypes(t, web, "npm", "docker")
 }
 
 func TestScan_SkipsIgnoredDirs(t *testing.T) {
@@ -182,9 +199,7 @@ func TestScan_RootProject(t *testing.T) {
 	if rootCand == nil {
 		t.Fatal("expected a candidate for root (.)")
 	}
-	if rootCand.Type != "go" {
-		t.Errorf("expected root type go, got %q", rootCand.Type)
-	}
+	wantTypes(t, rootCand, "go")
 }
 
 func TestScan_EmptyTree(t *testing.T) {

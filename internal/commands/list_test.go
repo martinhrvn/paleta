@@ -26,7 +26,7 @@ func TestListCommands(t *testing.T) {
 			},
 			expected: []string{
 				"frontend:start",
-				"frontend:build", 
+				"frontend:build",
 				"frontend:test",
 			},
 		},
@@ -230,7 +230,7 @@ packages/backend:test`,
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var result string
-			
+
 			if tt.format == "fzf" {
 				commands := FormatForFzf(cfg)
 				result = strings.Join(commands, "\n")
@@ -243,5 +243,57 @@ packages/backend:test`,
 				t.Errorf("Expected output:\n%s\n\nGot:\n%s", tt.expectedOutput, result)
 			}
 		})
+	}
+}
+
+func multiTypeConfig() *config.Config {
+	return &config.Config{
+		Locations: []config.Location{
+			{
+				Name:  "dotfiles",
+				Types: config.Types{"npm", "compose"},
+				Commands: []config.Command{
+					{Name: "build", Command: "npm run build", Type: "npm"},
+					{Name: "up", Command: "docker compose up", Type: "compose"},
+					{Name: "deploy", Command: "./deploy.sh"}, // manual, no type
+				},
+			},
+		},
+	}
+}
+
+func TestListCommands_MultiType(t *testing.T) {
+	got := ListCommands(multiTypeConfig())
+	want := []string{"dotfiles:[npm] build", "dotfiles:[compose] up", "dotfiles:deploy"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("ListCommands multi-type =\n%v\nwant\n%v", got, want)
+	}
+}
+
+func TestFormatForFzf_MultiType(t *testing.T) {
+	got := FormatForFzf(multiTypeConfig())
+	want := []string{"[dotfiles] [npm] build", "[dotfiles] [compose] up", "[dotfiles] deploy"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("FormatForFzf multi-type =\n%v\nwant\n%v", got, want)
+	}
+}
+
+// A single-type location must render exactly as before (no [type] prefix).
+func TestFormatForFzf_SingleTypeUnchanged(t *testing.T) {
+	cfg := &config.Config{
+		Locations: []config.Location{
+			{
+				Name:  "frontend",
+				Types: config.Types{"npm"},
+				Commands: []config.Command{
+					{Name: "build", Command: "npm run build", Type: "npm"},
+				},
+			},
+		},
+	}
+	got := FormatForFzf(cfg)
+	want := []string{"[frontend] build"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("FormatForFzf single-type = %v, want %v", got, want)
 	}
 }

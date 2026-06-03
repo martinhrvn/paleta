@@ -118,11 +118,7 @@ func PrepareCommandInfoWithHistory(cfg *config.Config, hist *history.History, en
 		}
 
 		for _, command := range location.Commands {
-			// Use command name if available, otherwise use full command
-			cmdDisplay := command.Name
-			if cmdDisplay == "" {
-				cmdDisplay = command.Command
-			}
+			cmdDisplay := config.CommandLabel(location, command)
 
 			// Calculate frecency score if history is available
 			var score float64

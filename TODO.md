@@ -78,6 +78,9 @@ The project types we should support intitally are:
   - [x] repeatable: existing `.pltrc` loaded as starting state (configured locations pre-selected & tagged, merged on save)
   - [x] static template preserved behind `plt init --template`
   - [ ] (future) drill into a selected folder to include/exclude individual detected commands
+- [x] support multiple types per location (`type: [npm, docker]`); commands from all types are merged, and when a location has >1 type each command is labelled with its type in the selector (e.g. `svc: [npm] build` / `svc: [docker] build`)
+  - [x] `plt init` auto-detects all matching types per folder and generates multi-type locations
+  - [ ] (future) per-type toggling within a folder in the wizard
 - [x] history of executed commands
    - [x] store in a file (per project in ~/.paleta/history/)
    - [x] default sort by frecency of use (50/50 balance)

@@ -370,10 +370,7 @@ func (m *Model) loadCommands() {
 		}
 
 		for _, command := range location.Commands {
-			cmdDisplay := command.Name
-			if cmdDisplay == "" {
-				cmdDisplay = command.Command
-			}
+			cmdDisplay := config.CommandLabel(location, command)
 
 			var score float64
 			if m.history != nil && m.frecencyEnabled {
@@ -385,7 +382,7 @@ func (m *Model) loadCommands() {
 				Directory:     location.Location,
 				Command:       command.Command,
 				DisplayName:   displayName,
-				Type:          location.Type,
+				Type:          command.Type,
 				Env:           config.EffectiveEnv(location, command),
 				FrecencyScore: score,
 			}

@@ -4,15 +4,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/martinhrvn/paleta/internal/projecttypes"
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-	Root      string          `yaml:"root,omitempty"`
-	Locations []Location      `yaml:"locations"`
-	Frecency  FrecencyConfig  `yaml:"frecency,omitempty"`
+	Root      string         `yaml:"root,omitempty"`
+	Locations []Location     `yaml:"locations"`
+	Frecency  FrecencyConfig `yaml:"frecency,omitempty"`
 }
 
 // FrecencyConfig configures frecency sorting behavior
@@ -35,6 +37,62 @@ type Command struct {
 	Name    string            `yaml:"name,omitempty"`
 	Command string            `yaml:"command"`
 	Env     map[string]string `yaml:"env,omitempty"`
+	// Type is the project type that produced this command (e.g. "npm",
+	// "compose"). It is set internally by processProjectTypes and is never read
+	// from or written to YAML. Empty for manually authored commands.
+	Type string `yaml:"-"`
+}
+
+// Types is a location's set of project types. In .pltrc the `type` key accepts
+// either a single value (`type: npm`) or a list (`type: [npm, docker]`); both
+// decode into this slice. A single-element slice re-marshals as a scalar so
+// existing configs round-trip unchanged.
+type Types []string
+
+// UnmarshalYAML accepts either a scalar string or a sequence of strings.
+// Whitespace is trimmed and empty entries are dropped.
+func (t *Types) UnmarshalYAML(value *yaml.Node) error {
+	var single string
+	if err := value.Decode(&single); err == nil {
+		*t = normalizeTypes([]string{single})
+		return nil
+	}
+
+	var list []string
+	if err := value.Decode(&list); err != nil {
+		return err
+	}
+	*t = normalizeTypes(list)
+	return nil
+}
+
+// MarshalYAML emits a scalar for a single type and a sequence for several, so a
+// single-type location serializes as `type: npm` rather than `type: [npm]`.
+func (t Types) MarshalYAML() (any, error) {
+	switch len(t) {
+	case 0:
+		return nil, nil
+	case 1:
+		return t[0], nil
+	default:
+		return []string(t), nil
+	}
+}
+
+// normalizeTypes trims whitespace, drops empty entries, and de-duplicates while
+// preserving first-seen order.
+func normalizeTypes(in []string) Types {
+	var out Types
+	seen := make(map[string]bool)
+	for _, s := range in {
+		s = strings.TrimSpace(s)
+		if s == "" || seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	return out
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Command
@@ -61,7 +119,7 @@ func (c *Command) UnmarshalYAML(value *yaml.Node) error {
 type Location struct {
 	Name     string            `yaml:"name,omitempty"`
 	Location string            `yaml:"location,omitempty"`
-	Type     string            `yaml:"type,omitempty"`
+	Types    Types             `yaml:"type,omitempty"`
 	Commands []Command         `yaml:"commands,omitempty"`
 	Include  []string          `yaml:"include,omitempty"`
 	Exclude  []string          `yaml:"exclude,omitempty"`
@@ -218,83 +276,111 @@ func filterCommands(commands []Command, include []string, exclude []string) []Co
 	return result
 }
 
+// CommandLabel returns the display label for a command within its location: the
+// command's name (falling back to the raw command string). When the location has
+// more than one type, type-derived commands are prefixed with "[type] " so
+// commands sharing a name across types (e.g. npm `build` vs docker `build`) stay
+// distinguishable. Single-type locations and manually authored commands render
+// exactly as before.
+func CommandLabel(loc Location, cmd Command) string {
+	name := cmd.Name
+	if name == "" {
+		name = cmd.Command
+	}
+	if len(loc.Types) > 1 && cmd.Type != "" {
+		return "[" + cmd.Type + "] " + name
+	}
+	return name
+}
+
 // processProjectTypes processes project types and adds their commands to locations
 func processProjectTypes(config *Config) error {
 	for i, location := range config.Locations {
-		if location.Type == "" {
+		if len(location.Types) == 0 {
 			continue
 		}
 
-		// Get the project type
-		projectType, err := projecttypes.GetProjectType(location.Type)
-		if err != nil {
-			return fmt.Errorf("location %s has invalid type: %w", location.Location, err)
-		}
-
-		// Check if the project type config file exists in the location
-		configFile := filepath.Join(location.Location, projectType.DetectConfigFile())
-		if !fileExists(configFile) {
-			// If no config file found, just keep the existing commands
-			continue
-		}
-
-		// For configurable project types, get the full commands directly
-		if configurableType, ok := projectType.(*projecttypes.ConfigurableProjectType); ok {
-			// Get all commands as a map (key = name, value = full command)
-			commands, err := configurableType.GetAllCommands(location.Location)
+		// Accumulate discovered commands across every type the location declares.
+		var discovered []Command
+		for _, typeName := range location.Types {
+			cmds, err := commandsForType(typeName, location.Location)
 			if err != nil {
-				return fmt.Errorf("failed to parse commands for location %s: %w", location.Location, err)
+				return err
 			}
-
-			// Convert to command list format with names
-			var commandList []Command
-			for name, cmd := range commands {
-				commandList = append(commandList, Command{
-					Name:    name,
-					Command: cmd,
-				})
-			}
-
-			// Filter discovered commands based on include/exclude patterns
-			filteredCommands := filterCommands(commandList, location.Include, location.Exclude)
-
-			// Merge filtered auto-discovered commands with manual commands (manual first)
-			allCommands := append(location.Commands, filteredCommands...)
-			config.Locations[i].Commands = allCommands
-		} else {
-			// Fallback to old behavior for backward compatibility
-			// Parse commands from the project type
-			projectCommands, err := projectType.ParseCommands(configFile)
-			if err != nil {
-				return fmt.Errorf("failed to parse commands for location %s: %w", location.Location, err)
-			}
-
-			// Prefix the commands with the project type command prefix
-			var commandList []Command
-			for _, cmd := range projectCommands {
-				var fullCmd string
-				if projectType.GetCommandPrefix() != "" {
-					fullCmd = fmt.Sprintf("%s %s", projectType.GetCommandPrefix(), cmd)
-				} else {
-					fullCmd = cmd
-				}
-				// No name available for fallback path
-				commandList = append(commandList, Command{
-					Name:    "",
-					Command: fullCmd,
-				})
-			}
-
-			// Filter discovered commands based on include/exclude patterns
-			filteredCommands := filterCommands(commandList, location.Include, location.Exclude)
-
-			// Merge filtered auto-discovered commands with manual commands
-			allCommands := append(location.Commands, filteredCommands...)
-			config.Locations[i].Commands = allCommands
+			discovered = append(discovered, cmds...)
 		}
+
+		// Stable order (map iteration in the parsers is non-deterministic, and we
+		// merge several maps). Sort by type, then name.
+		sort.SliceStable(discovered, func(a, b int) bool {
+			if discovered[a].Type != discovered[b].Type {
+				return discovered[a].Type < discovered[b].Type
+			}
+			return discovered[a].Name < discovered[b].Name
+		})
+
+		// Filter discovered commands based on include/exclude patterns.
+		filteredCommands := filterCommands(discovered, location.Include, location.Exclude)
+
+		// Merge filtered auto-discovered commands with manual commands (manual first).
+		config.Locations[i].Commands = append(location.Commands, filteredCommands...)
 	}
 
 	return nil
+}
+
+// commandsForType resolves a single project type in a directory and returns its
+// commands, each tagged with the type. A type whose detect file is absent
+// contributes nothing (the location may declare several types, only some of which
+// apply here).
+func commandsForType(typeName, directory string) ([]Command, error) {
+	projectType, err := projecttypes.GetProjectType(typeName)
+	if err != nil {
+		return nil, fmt.Errorf("location %s has invalid type: %w", directory, err)
+	}
+
+	if !projectType.CanHandleDirectory(directory) {
+		return nil, nil
+	}
+
+	// For configurable project types, get the full commands directly.
+	if configurableType, ok := projectType.(*projecttypes.ConfigurableProjectType); ok {
+		commands, err := configurableType.GetAllCommands(directory)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse commands for location %s: %w", directory, err)
+		}
+
+		var commandList []Command
+		for name, cmd := range commands {
+			commandList = append(commandList, Command{
+				Name:    name,
+				Command: cmd,
+				Type:    typeName,
+			})
+		}
+		return commandList, nil
+	}
+
+	// Fallback to old behavior for backward compatibility.
+	configFile := filepath.Join(directory, projectType.DetectConfigFile())
+	projectCommands, err := projectType.ParseCommands(configFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse commands for location %s: %w", directory, err)
+	}
+
+	var commandList []Command
+	for _, cmd := range projectCommands {
+		fullCmd := cmd
+		if projectType.GetCommandPrefix() != "" {
+			fullCmd = fmt.Sprintf("%s %s", projectType.GetCommandPrefix(), cmd)
+		}
+		commandList = append(commandList, Command{
+			Name:    "",
+			Command: fullCmd,
+			Type:    typeName,
+		})
+	}
+	return commandList, nil
 }
 
 // fileExists checks if a file exists

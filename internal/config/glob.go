@@ -10,7 +10,7 @@ import (
 
 func ExpandGlobPatterns(locations []Location) ([]Location, error) {
 	var result []Location
-	
+
 	for _, loc := range locations {
 		// Check if location contains glob pattern
 		if strings.Contains(loc.Location, "*") {
@@ -18,7 +18,7 @@ func ExpandGlobPatterns(locations []Location) ([]Location, error) {
 			if err := validateGlobPattern(loc.Location); err != nil {
 				return nil, err
 			}
-			
+
 			expanded, err := expandSingleGlob(loc)
 			if err != nil {
 				return nil, err
@@ -29,7 +29,7 @@ func ExpandGlobPatterns(locations []Location) ([]Location, error) {
 			result = append(result, loc)
 		}
 	}
-	
+
 	return result, nil
 }
 
@@ -39,17 +39,17 @@ func validateGlobPattern(pattern string) error {
 	if asteriskCount > 1 {
 		return fmt.Errorf("invalid glob pattern %q: multiple asterisks not supported, only simple patterns like 'path/*' are allowed", pattern)
 	}
-	
+
 	// Check if asterisk is at the end of the pattern
 	if !strings.HasSuffix(pattern, "*") {
 		return fmt.Errorf("invalid glob pattern %q: asterisk must be at the end of the pattern", pattern)
 	}
-	
+
 	// Check if asterisk is preceded by a slash
 	if !strings.HasSuffix(pattern, "/*") {
 		return fmt.Errorf("invalid glob pattern %q: asterisk must be preceded by a slash (e.g., 'path/*')", pattern)
 	}
-	
+
 	return nil
 }
 
@@ -58,7 +58,7 @@ func expandSingleGlob(loc Location) ([]Location, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Filter to only include directories
 	var dirMatches []string
 	for _, match := range matches {
@@ -66,10 +66,10 @@ func expandSingleGlob(loc Location) ([]Location, error) {
 			dirMatches = append(dirMatches, match)
 		}
 	}
-	
+
 	// Sort matches for consistent output
 	sort.Strings(dirMatches)
-	
+
 	// Create new Location for each match
 	var result []Location
 	for _, match := range dirMatches {
@@ -78,18 +78,18 @@ func expandSingleGlob(loc Location) ([]Location, error) {
 		if loc.Name == "" || loc.Name == filepath.Base(filepath.Dir(loc.Location)) {
 			name = filepath.Base(match)
 		}
-		
+
 		newLoc := Location{
 			Name:     name,
 			Location: match,
-			Type:     loc.Type,
+			Types:    append(Types{}, loc.Types...),
 			Commands: append([]Command{}, loc.Commands...),
 			Include:  append([]string{}, loc.Include...),
 			Exclude:  append([]string{}, loc.Exclude...),
 		}
 		result = append(result, newLoc)
 	}
-	
+
 	return result, nil
 }
 

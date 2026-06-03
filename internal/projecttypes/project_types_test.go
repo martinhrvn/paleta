@@ -35,10 +35,10 @@ func TestNpmParseCommands(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	tests := []struct {
-		name           string
-		packageJson    map[string]interface{}
-		expectedCmds   []string
-		expectError    bool
+		name         string
+		packageJson  map[string]interface{}
+		expectedCmds []string
+		expectError  bool
 	}{
 		{
 			name: "basic scripts",
@@ -260,5 +260,27 @@ func TestDiscoverProjectType(t *testing.T) {
 	_, err = DiscoverProjectType(emptyDir)
 	if err == nil {
 		t.Error("Expected error for directory with no project files")
+	}
+}
+
+func TestCanHandleDirectory_Glob(t *testing.T) {
+	compose, err := GetProjectType("compose")
+	if err != nil {
+		t.Fatalf("GetProjectType(compose): %v", err)
+	}
+
+	// Directory with only an env-specific override file (glob match).
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "docker-compose.prod.yml"), []byte("services: {}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if !compose.CanHandleDirectory(dir) {
+		t.Error("compose should handle a dir with docker-compose.prod.yml")
+	}
+
+	// Empty directory must not match.
+	empty := t.TempDir()
+	if compose.CanHandleDirectory(empty) {
+		t.Error("compose should not handle an empty dir")
 	}
 }

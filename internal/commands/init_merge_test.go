@@ -3,6 +3,7 @@ package commands
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -63,8 +64,8 @@ locations:
 
 func TestBuildWizardItems_ScanOnly(t *testing.T) {
 	cands := []scan.Candidate{
-		{RelPath: ".", Type: "go", DetectFile: "go.mod"},
-		{RelPath: "packages/web", Type: "npm", DetectFile: "package.json"},
+		{RelPath: ".", Types: []string{"go"}, DetectFile: "go.mod"},
+		{RelPath: "packages/web", Types: []string{"npm"}, DetectFile: "package.json"},
 	}
 	items := BuildWizardItems(cands, nil)
 	if len(items) != 2 {
@@ -86,13 +87,13 @@ func TestBuildWizardItems_ScanOnly(t *testing.T) {
 func TestBuildWizardItems_MergesConfigured(t *testing.T) {
 	authored := &config.Config{
 		Locations: []config.Location{
-			{Name: "web", Location: "packages/web", Type: "npm"},
+			{Name: "web", Location: "packages/web", Types: config.Types{"npm"}},
 			{Location: "packages/*"}, // glob, not detected
 		},
 	}
 	cands := []scan.Candidate{
-		{RelPath: "packages/web", Type: "npm", DetectFile: "package.json"},
-		{RelPath: "services/api", Type: "go", DetectFile: "go.mod"},
+		{RelPath: "packages/web", Types: []string{"npm"}, DetectFile: "package.json"},
+		{RelPath: "services/api", Types: []string{"go"}, DetectFile: "go.mod"},
 	}
 	items := BuildWizardItems(cands, authored)
 
@@ -117,8 +118,8 @@ func TestBuildWizardItems_MergesConfigured(t *testing.T) {
 
 func TestGenerateConfig_RoundTrip(t *testing.T) {
 	locs := []config.Location{
-		{Name: "root", Location: ".", Type: "go"},
-		{Name: "web", Location: "packages/web", Type: "npm"},
+		{Name: "root", Location: ".", Types: config.Types{"go"}},
+		{Name: "web", Location: "packages/web", Types: config.Types{"npm"}},
 	}
 	out := GenerateConfig(locs, nil)
 
@@ -129,7 +130,8 @@ func TestGenerateConfig_RoundTrip(t *testing.T) {
 	if len(parsed.Locations) != 2 {
 		t.Fatalf("expected 2 locations, got %d", len(parsed.Locations))
 	}
-	if parsed.Locations[1].Location != "packages/web" || parsed.Locations[1].Type != "npm" {
+	if parsed.Locations[1].Location != "packages/web" ||
+		len(parsed.Locations[1].Types) != 1 || parsed.Locations[1].Types[0] != "npm" {
 		t.Errorf("location not round-tripped: %+v", parsed.Locations[1])
 	}
 	if strings.Contains(out, "frecency:") {
@@ -141,7 +143,7 @@ func TestGenerateConfig_PreservesFrecency(t *testing.T) {
 	preserved := &config.Config{
 		Frecency: config.FrecencyConfig{Enabled: true, RecencyWeight: 50, FrequencyWeight: 50},
 	}
-	out := GenerateConfig([]config.Location{{Name: "x", Location: "x", Type: "go"}}, preserved)
+	out := GenerateConfig([]config.Location{{Name: "x", Location: ".", Types: config.Types{"go"}}}, preserved)
 	if !strings.Contains(out, "frecency:") {
 		t.Errorf("expected frecency block to be preserved:\n%s", out)
 	}
@@ -152,7 +154,7 @@ func TestGenerateConfig_IncludeExcludeRoundTrip(t *testing.T) {
 		{
 			Name:     "web",
 			Location: "packages/web",
-			Type:     "npm",
+			Types:    config.Types{"npm"},
 			Include:  []string{"npm run dev"},
 			Exclude:  []string{"npm run test:watch"},
 		},
@@ -179,4 +181,32 @@ func findItem(items []ui.WizardItem, location string) *ui.WizardItem {
 		}
 	}
 	return nil
+}
+
+func TestGenerateConfig_MultiAndSingleType(t *testing.T) {
+	locs := []config.Location{
+		{Name: "svc", Location: "svc", Types: config.Types{"npm", "docker"}},
+		{Name: "api", Location: "api", Types: config.Types{"go"}},
+	}
+	out := GenerateConfig(locs, nil)
+
+	// Multi-type serializes as a YAML list...
+	if !strings.Contains(out, "type:") || !strings.Contains(out, "- npm") || !strings.Contains(out, "- docker") {
+		t.Errorf("expected multi-type list in output:\n%s", out)
+	}
+	// ...single-type stays a scalar.
+	if !strings.Contains(out, "type: go") {
+		t.Errorf("expected single-type scalar 'type: go' in output:\n%s", out)
+	}
+
+	// Round-trips back to the same Types.
+	var parsed config.Config
+	if err := yaml.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("invalid YAML: %v\n%s", err, out)
+	}
+	if len(parsed.Locations) != 2 ||
+		!reflect.DeepEqual(parsed.Locations[0].Types, config.Types{"npm", "docker"}) ||
+		!reflect.DeepEqual(parsed.Locations[1].Types, config.Types{"go"}) {
+		t.Errorf("types not round-tripped: %+v", parsed.Locations)
+	}
 }

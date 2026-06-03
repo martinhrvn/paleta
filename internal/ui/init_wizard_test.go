@@ -9,8 +9,8 @@ import (
 
 func wizardItems() []WizardItem {
 	return []WizardItem{
-		{Location: config.Location{Name: "root", Location: ".", Type: "go"}, Detected: true},
-		{Location: config.Location{Name: "web", Location: "packages/web", Type: "npm"}, Detected: true, Configured: true},
+		{Location: config.Location{Name: "root", Location: ".", Types: config.Types{"go"}}, Detected: true},
+		{Location: config.Location{Name: "web", Location: "packages/web", Types: config.Types{"npm"}}, Detected: true, Configured: true},
 		{Location: config.Location{Location: "packages/*"}, Configured: true},
 	}
 }
@@ -67,7 +67,7 @@ func TestWizard_SelectedLocationsAfterConfirm(t *testing.T) {
 		t.Errorf("unexpected selection order/content: %+v", locs)
 	}
 	// Authored fields preserved.
-	if locs[1].Name != "web" || locs[1].Type != "npm" {
+	if locs[1].Name != "web" || len(locs[1].Types) != 1 || locs[1].Types[0] != "npm" {
 		t.Errorf("authored fields not preserved: %+v", locs[1])
 	}
 }

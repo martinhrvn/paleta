@@ -9,25 +9,21 @@ import (
 // ListCommands returns a slice of location:command pairs
 func ListCommands(cfg *config.Config) []string {
 	var commands []string
-	
+
 	for _, location := range cfg.Locations {
 		// Use name if available, otherwise use location path
 		displayName := location.Name
 		if displayName == "" {
 			displayName = location.Location
 		}
-		
+
 		// Add each command for this location
 		for _, command := range location.Commands {
-			// Use command name if available, otherwise use full command
-			cmdDisplay := command.Name
-			if cmdDisplay == "" {
-				cmdDisplay = command.Command
-			}
+			cmdDisplay := config.CommandLabel(location, command)
 			commands = append(commands, fmt.Sprintf("%s:%s", displayName, cmdDisplay))
 		}
 	}
-	
+
 	return commands
 }
 
@@ -35,24 +31,20 @@ func ListCommands(cfg *config.Config) []string {
 // Format: [location-or-name] command
 func FormatForFzf(cfg *config.Config) []string {
 	var commands []string
-	
+
 	for _, location := range cfg.Locations {
 		// Use name if available, otherwise use location path
 		displayName := location.Name
 		if displayName == "" {
 			displayName = location.Location
 		}
-		
+
 		// Add each command for this location in fzf format
 		for _, command := range location.Commands {
-			// Use command name if available, otherwise use full command
-			cmdDisplay := command.Name
-			if cmdDisplay == "" {
-				cmdDisplay = command.Command
-			}
+			cmdDisplay := config.CommandLabel(location, command)
 			commands = append(commands, fmt.Sprintf("[%s] %s", displayName, cmdDisplay))
 		}
 	}
-	
+
 	return commands
 }

@@ -6,10 +6,10 @@ import (
 
 func TestFuzzySelect(t *testing.T) {
 	tests := []struct {
-		name      string
-		items     []string
-		search    string
-		expected  []string
+		name     string
+		items    []string
+		search   string
+		expected []string
 	}{
 		{
 			name: "exact match",
@@ -27,7 +27,7 @@ func TestFuzzySelect(t *testing.T) {
 			name: "fuzzy match",
 			items: []string{
 				"[frontend] start",
-				"[frontend] build", 
+				"[frontend] build",
 				"[backend] test",
 			},
 			search: "frst",
@@ -54,7 +54,7 @@ func TestFuzzySelect(t *testing.T) {
 				"[frontend] start",
 				"[backend] run",
 			},
-			search: "xyz",
+			search:   "xyz",
 			expected: []string{},
 		},
 		{

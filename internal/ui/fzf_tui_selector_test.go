@@ -23,13 +23,13 @@ func createTestConfig() *config.Config {
 			{
 				Name:     "frontend",
 				Location: "/path/to/frontend",
-				Type:     "npm",
+				Types:    config.Types{"npm"},
 				Commands: stringsToCommands([]string{"npm start", "npm test", "npm build"}),
 			},
 			{
 				Name:     "backend",
 				Location: "/path/to/backend",
-				Type:     "go",
+				Types:    config.Types{"go"},
 				Commands: stringsToCommands([]string{"go run main.go", "go test ./..."}),
 			},
 		},
@@ -220,7 +220,7 @@ func TestModel_GeneratePreview_EmptyType(t *testing.T) {
 			{
 				Name:     "scripts",
 				Location: "/scripts",
-				Type:     "", // No type
+				// No type
 				Commands: stringsToCommands([]string{"./deploy.sh"}),
 			},
 		},
@@ -727,4 +727,43 @@ func containsSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestModel_LoadCommands_MultiType(t *testing.T) {
+	cfg := &config.Config{
+		Locations: []config.Location{
+			{
+				Name:  "dotfiles",
+				Types: config.Types{"npm", "compose"},
+				Commands: []config.Command{
+					{Name: "build", Command: "npm run build", Type: "npm"},
+					{Name: "up", Command: "docker compose up", Type: "compose"},
+				},
+			},
+		},
+	}
+	m := createTestModel(cfg)
+
+	var build, up *CommandInfo
+	for i := range m.commands {
+		switch m.commands[i].Command {
+		case "npm run build":
+			build = &m.commands[i]
+		case "docker compose up":
+			up = &m.commands[i]
+		}
+	}
+	if build == nil || up == nil {
+		t.Fatalf("expected both commands loaded, got %+v", m.commands)
+	}
+	if build.Display != "dotfiles: [npm] build" {
+		t.Errorf("build display = %q, want 'dotfiles: [npm] build'", build.Display)
+	}
+	if up.Display != "dotfiles: [compose] up" {
+		t.Errorf("up display = %q, want 'dotfiles: [compose] up'", up.Display)
+	}
+	// CommandInfo.Type is per-command, driving the preview window.
+	if build.Type != "npm" || up.Type != "compose" {
+		t.Errorf("per-command types = %q/%q, want npm/compose", build.Type, up.Type)
+	}
 }

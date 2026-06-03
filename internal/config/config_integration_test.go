@@ -17,7 +17,7 @@ func TestLoadConfigWithGlobExpansion(t *testing.T) {
 	// Create test directories
 	testDirs := []string{
 		"packages/frontend",
-		"packages/backend", 
+		"packages/backend",
 		"packages/shared",
 	}
 	for _, dir := range testDirs {
@@ -79,8 +79,8 @@ func TestLoadConfigWithGlobExpansion(t *testing.T) {
 		if loc.Location != expectedLocations[i] {
 			t.Errorf("Location[%d].Location = %q, expected %q", i, loc.Location, expectedLocations[i])
 		}
-		if loc.Type != "npm" {
-			t.Errorf("Location[%d].Type = %q, expected %q", i, loc.Type, "npm")
+		if len(loc.Types) != 1 || loc.Types[0] != "npm" {
+			t.Errorf("Location[%d].Types = %v, expected [npm]", i, loc.Types)
 		}
 		expectedCommands := []string{"start", "build"}
 		if len(loc.Commands) != len(expectedCommands) {

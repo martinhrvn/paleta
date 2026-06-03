@@ -158,7 +158,7 @@ plt looks for a `.pltrc` file starting from the current directory and traversing
 locations:
   - name: "display-name"        # Optional: Display name in selection UI
     location: "path/to/project" # Required: Path to project directory
-    type: "npm"                 # Optional: Project type (npm, yarn, pnpm, go)
+    type: "npm"                 # Optional: Project type, or a list: [npm, docker]
     env:                        # Optional: Env vars for all commands here
       NODE_ENV: "development"
     commands:                   # Optional: Additional custom commands
@@ -175,7 +175,11 @@ locations:
 
 - **name** (optional): Display name shown in the command selector
 - **location** (required): Path to the project directory (supports glob patterns)
-- **type** (optional): Project type for automatic command detection
+- **type** (optional): Project type(s) for automatic command detection. Accepts a
+  single value (`type: npm`) or a list (`type: [npm, docker]`). When more than one
+  type is given, each command is labelled with its type in the selector, e.g.
+  `svc: [npm] build` and `svc: [docker] build`, so commands sharing a name stay
+  distinguishable.
 - **commands** (optional): Additional commands to include (supports both string and object formats)
 - **include** (optional): Whitelist patterns for filtering commands (glob patterns)
 - **exclude** (optional): Blacklist patterns for filtering commands (glob patterns)

@@ -6,10 +6,10 @@ import (
 
 func TestGetParser(t *testing.T) {
 	tests := []struct {
-		name        string
-		config      ParserConfig
+		name         string
+		config       ParserConfig
 		expectedType string
-		shouldError bool
+		shouldError  bool
 	}{
 		{
 			name: "builtin parser",
@@ -17,7 +17,7 @@ func TestGetParser(t *testing.T) {
 				BuiltinParser: "package_json_scripts",
 			},
 			expectedType: "*parsers.PackageJsonParser",
-			shouldError: false,
+			shouldError:  false,
 		},
 		{
 			name: "command parser",
@@ -25,15 +25,15 @@ func TestGetParser(t *testing.T) {
 				ParserCommand: "echo 'test'",
 			},
 			expectedType: "*parsers.CommandParser",
-			shouldError: false,
+			shouldError:  false,
 		},
 		{
-			name: "null parser",
+			name:   "null parser",
 			config: ParserConfig{
 				// Neither builtin nor command specified
 			},
 			expectedType: "*parsers.NullParser",
-			shouldError: false,
+			shouldError:  false,
 		},
 		{
 			name: "invalid builtin parser",
@@ -41,31 +41,31 @@ func TestGetParser(t *testing.T) {
 				BuiltinParser: "invalid_parser",
 			},
 			expectedType: "",
-			shouldError: true,
+			shouldError:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			parser, err := GetParser(tt.config)
-			
+
 			if tt.shouldError {
 				if err == nil {
 					t.Error("Expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
 			}
-			
+
 			if parser == nil {
 				t.Error("Expected parser but got nil")
 				return
 			}
-			
+
 			// Check parser type (this is a simplified check)
 			switch tt.expectedType {
 			case "*parsers.PackageJsonParser":
@@ -93,17 +93,17 @@ func TestParseAndFormatCommands(t *testing.T) {
 			"test":    "npm test",
 		},
 	}
-	
+
 	commands, err := ParseAndFormatCommands(".", config)
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 		return
 	}
-	
+
 	if len(commands) != 2 {
 		t.Errorf("Expected 2 commands, got %d", len(commands))
 	}
-	
+
 	if commands["install"] != "npm install" {
 		t.Errorf("Expected install command to be 'npm install', got '%s'", commands["install"])
 	}
@@ -111,12 +111,12 @@ func TestParseAndFormatCommands(t *testing.T) {
 
 func TestNullParser(t *testing.T) {
 	parser := &NullParser{}
-	
+
 	commands, err := parser.ParseCommands(".", ParserConfig{})
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
-	
+
 	if len(commands) != 0 {
 		t.Errorf("Expected 0 commands from null parser, got %d", len(commands))
 	}

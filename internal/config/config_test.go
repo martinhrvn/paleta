@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -127,7 +128,7 @@ func TestConfigYAMLParsing(t *testing.T) {
 					{
 						Name:     "frontend",
 						Location: "packages/frontend",
-						Type:     "npm",
+						Types:    Types{"npm"},
 						Commands: []Command{
 							{Name: "", Command: "start"},
 							{Name: "", Command: "build"},
@@ -158,7 +159,7 @@ func TestConfigYAMLParsing(t *testing.T) {
 					{
 						Name:     "frontend",
 						Location: "packages/frontend",
-						Type:     "npm",
+						Types:    Types{"npm"},
 						Commands: []Command{
 							{Name: "", Command: "start"},
 							{Name: "", Command: "build"},
@@ -167,7 +168,7 @@ func TestConfigYAMLParsing(t *testing.T) {
 					{
 						Name:     "backend",
 						Location: "packages/backend",
-						Type:     "go",
+						Types:    Types{"go"},
 						Commands: []Command{
 							{Name: "", Command: "run"},
 							{Name: "", Command: "test"},
@@ -188,7 +189,7 @@ func TestConfigYAMLParsing(t *testing.T) {
 				Locations: []Location{
 					{
 						Location: "packages/frontend",
-						Type:     "npm",
+						Types:    Types{"npm"},
 						Commands: []Command{
 							{Name: "", Command: "start"},
 						},
@@ -230,7 +231,7 @@ func TestConfigYAMLParsing(t *testing.T) {
 					{
 						Name:     "api",
 						Location: "api",
-						Type:     "go",
+						Types:    Types{"go"},
 					},
 				},
 			},
@@ -271,7 +272,7 @@ func TestConfigYAMLParsing(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var config Config
 			err := yaml.Unmarshal([]byte(tt.yaml), &config)
-			
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("yaml.Unmarshal() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -291,8 +292,8 @@ func TestConfigYAMLParsing(t *testing.T) {
 					if loc.Location != expected.Location {
 						t.Errorf("Location[%d].Location = %q, expected %q", i, loc.Location, expected.Location)
 					}
-					if loc.Type != expected.Type {
-						t.Errorf("Location[%d].Type = %q, expected %q", i, loc.Type, expected.Type)
+					if !reflect.DeepEqual(loc.Types, expected.Types) {
+						t.Errorf("Location[%d].Types = %v, expected %v", i, loc.Types, expected.Types)
 					}
 					if len(loc.Commands) != len(expected.Commands) {
 						t.Errorf("Location[%d] has %d commands, expected %d", i, len(loc.Commands), len(expected.Commands))
@@ -350,7 +351,7 @@ func TestProcessProjectTypesWithEmptyLocation(t *testing.T) {
 			{
 				Name:     "root",
 				Location: "",
-				Type:     "npm",
+				Types:    Types{"npm"},
 				Commands: []Command{
 					{Name: "", Command: "custom"},
 				},
@@ -459,7 +460,7 @@ func TestLoadConfig(t *testing.T) {
 					{
 						Name:     "frontend",
 						Location: "packages/frontend",
-						Type:     "npm",
+						Types:    Types{"npm"},
 						Commands: []Command{
 							{Name: "", Command: "start"},
 							{Name: "", Command: "build"},
@@ -553,8 +554,8 @@ func TestLoadConfig(t *testing.T) {
 				if loc.Location != expectedLocation {
 					t.Errorf("Location[%d].Location = %q, expected %q", i, loc.Location, expectedLocation)
 				}
-				if loc.Type != expected.Type {
-					t.Errorf("Location[%d].Type = %q, expected %q", i, loc.Type, expected.Type)
+				if !reflect.DeepEqual(loc.Types, expected.Types) {
+					t.Errorf("Location[%d].Types = %v, expected %v", i, loc.Types, expected.Types)
 				}
 				if len(loc.Commands) != len(expected.Commands) {
 					t.Errorf("Location[%d] has %d commands, expected %d", i, len(loc.Commands), len(expected.Commands))

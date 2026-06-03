@@ -9,11 +9,11 @@ func TestLoadEmbeddedDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load embedded defaults: %v", err)
 	}
-	
+
 	if defaults.Parsers == nil {
 		t.Fatal("Expected parsers to be initialized")
 	}
-	
+
 	// Test that default parsers are present
 	expectedParsers := []string{"npm", "yarn", "pnpm", "go", "python", "rust", "make", "docker", "gradle", "maven"}
 	for _, name := range expectedParsers {
@@ -21,7 +21,7 @@ func TestLoadEmbeddedDefaults(t *testing.T) {
 			t.Errorf("Expected parser %s to exist in defaults", name)
 		}
 	}
-	
+
 	// Test npm parser configuration
 	npmParser := defaults.Parsers["npm"]
 	if len(npmParser.DetectFiles) == 0 {
@@ -33,7 +33,7 @@ func TestLoadEmbeddedDefaults(t *testing.T) {
 	if npmParser.BuiltinParser != "package_json_scripts" {
 		t.Errorf("Expected npm parser to use package_json_scripts, got %s", npmParser.BuiltinParser)
 	}
-	
+
 	// Test go parser configuration
 	goParser := defaults.Parsers["go"]
 	if len(goParser.DetectFiles) == 0 {
@@ -45,7 +45,7 @@ func TestLoadEmbeddedDefaults(t *testing.T) {
 	if len(goParser.BaseCommands) == 0 {
 		t.Error("Expected go parser to have base commands")
 	}
-	
+
 	// Test python parser has multiple detect files
 	pythonParser := defaults.Parsers["python"]
 	if len(pythonParser.DetectFiles) == 0 {
@@ -72,11 +72,11 @@ func TestLoadParsersConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load parser config: %v", err)
 	}
-	
+
 	if config.Parsers == nil {
 		t.Fatal("Expected parsers to be initialized")
 	}
-	
+
 	// Should have default parsers
 	expectedParsers := []string{"npm", "yarn", "pnpm", "go"}
 	for _, name := range expectedParsers {
@@ -91,7 +91,7 @@ func TestParserConfigGetParser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load parser config: %v", err)
 	}
-	
+
 	// Test existing parser
 	parser, exists := config.GetParser("npm")
 	if !exists {
@@ -100,7 +100,7 @@ func TestParserConfigGetParser(t *testing.T) {
 	if parser.BuiltinParser != "package_json_scripts" {
 		t.Errorf("Expected npm parser to use package_json_scripts, got %s", parser.BuiltinParser)
 	}
-	
+
 	// Test non-existing parser
 	_, exists = config.GetParser("nonexistent")
 	if exists {

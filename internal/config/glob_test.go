@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -17,25 +18,25 @@ func stringsToCommands(strs []string) []Command {
 
 func TestExpandGlobPatterns(t *testing.T) {
 	tests := []struct {
-		name        string
-		setupDirs   []string
-		setupFiles  []string
-		locations   []Location
-		expected    []Location
-		wantErr     bool
+		name       string
+		setupDirs  []string
+		setupFiles []string
+		locations  []Location
+		expected   []Location
+		wantErr    bool
 	}{
 		{
 			name: "simple glob pattern",
 			setupDirs: []string{
 				"packages/frontend",
-				"packages/backend", 
+				"packages/backend",
 				"packages/shared",
 			},
 			locations: []Location{
 				{
 					Name:     "services",
 					Location: "packages/*",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start", "build"}),
 				},
 			},
@@ -43,19 +44,19 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Name:     "services",
 					Location: "packages/backend",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start", "build"}),
 				},
 				{
 					Name:     "services",
 					Location: "packages/frontend",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start", "build"}),
 				},
 				{
 					Name:     "services",
 					Location: "packages/shared",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start", "build"}),
 				},
 			},
@@ -70,7 +71,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Name:     "frontend",
 					Location: "packages/frontend",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start"}),
 				},
 			},
@@ -78,7 +79,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Name:     "frontend",
 					Location: "packages/frontend",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start"}),
 				},
 			},
@@ -95,12 +96,12 @@ func TestExpandGlobPatterns(t *testing.T) {
 			locations: []Location{
 				{
 					Location: "apps/*",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start"}),
 				},
 				{
 					Location: "packages/*",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"build"}),
 				},
 			},
@@ -108,25 +109,25 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Name:     "mobile",
 					Location: "apps/mobile",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start"}),
 				},
 				{
 					Name:     "web",
 					Location: "apps/web",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start"}),
 				},
 				{
 					Name:     "ui",
 					Location: "packages/ui",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"build"}),
 				},
 				{
 					Name:     "utils",
 					Location: "packages/utils",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"build"}),
 				},
 			},
@@ -140,12 +141,12 @@ func TestExpandGlobPatterns(t *testing.T) {
 			locations: []Location{
 				{
 					Location: "services/*",
-					Type:     "go",
+					Types:    Types{"go"},
 					Commands: stringsToCommands([]string{"run"}),
 				},
 			},
 			expected: []Location{},
-			wantErr: false,
+			wantErr:  false,
 		},
 		{
 			name: "glob pattern ignores files",
@@ -160,7 +161,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 			locations: []Location{
 				{
 					Location: "packages/*",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"test"}),
 				},
 			},
@@ -168,13 +169,13 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Name:     "backend",
 					Location: "packages/backend",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"test"}),
 				},
 				{
 					Name:     "frontend",
 					Location: "packages/frontend",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"test"}),
 				},
 			},
@@ -185,7 +186,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 			locations: []Location{
 				{
 					Location: "foo/*/bar/*",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"test"}),
 				},
 			},
@@ -196,7 +197,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 			locations: []Location{
 				{
 					Location: "packages/*/src",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"test"}),
 				},
 			},
@@ -207,7 +208,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 			locations: []Location{
 				{
 					Location: "packages*",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"test"}),
 				},
 			},
@@ -222,7 +223,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 			locations: []Location{
 				{
 					Location: "apps/*",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start"}),
 				},
 			},
@@ -230,13 +231,13 @@ func TestExpandGlobPatterns(t *testing.T) {
 				{
 					Name:     "mobile",
 					Location: "apps/mobile",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start"}),
 				},
 				{
 					Name:     "web",
 					Location: "apps/web",
-					Type:     "npm",
+					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start"}),
 				},
 			},
@@ -301,8 +302,8 @@ func TestExpandGlobPatterns(t *testing.T) {
 					if loc.Location != expected.Location {
 						t.Errorf("Location[%d].Location = %q, expected %q", i, loc.Location, expected.Location)
 					}
-					if loc.Type != expected.Type {
-						t.Errorf("Location[%d].Type = %q, expected %q", i, loc.Type, expected.Type)
+					if !reflect.DeepEqual(loc.Types, expected.Types) {
+						t.Errorf("Location[%d].Types = %v, expected %v", i, loc.Types, expected.Types)
 					}
 					if len(loc.Commands) != len(expected.Commands) {
 						t.Errorf("Location[%d] has %d commands, expected %d", i, len(loc.Commands), len(expected.Commands))
