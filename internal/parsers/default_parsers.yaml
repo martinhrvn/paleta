@@ -74,14 +74,20 @@ parsers:
     command_template: "make {key}"
     
   docker:
-    detect_files: ["Dockerfile", "docker-compose.yml", "docker-compose.yaml"]
+    detect_files: ["Dockerfile"]
     base_commands:
       build: "docker build ."
-      up: "docker-compose up"
-      down: "docker-compose down"
-      logs: "docker-compose logs"
-      ps: "docker-compose ps"
-      
+      run: "docker run --rm <image>"
+
+  compose:
+    detect_files: ["docker-compose.yml", "docker-compose.yaml", "docker-compose.*.yml", "docker-compose.*.yaml", "compose.yml", "compose.yaml"]
+    base_commands:
+      up: "docker compose up"
+      down: "docker compose down"
+      build: "docker compose build"
+      logs: "docker compose logs -f"
+      ps: "docker compose ps"
+
   gradle:
     detect_files: ["build.gradle", "build.gradle.kts"]
     base_commands:

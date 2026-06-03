@@ -34,6 +34,71 @@ func TestFindParserForDirectoryMatch(t *testing.T) {
 	}
 }
 
+func TestFindParserForDirectoryGlobMatch(t *testing.T) {
+	dir := t.TempDir()
+	// Only an env-specific override file is present, no plain docker-compose.yml.
+	touch(t, dir, "docker-compose.prod.yml")
+
+	pf := &ParsersFile{Parsers: map[string]ParserConfig{
+		"compose": {DetectFiles: []string{"docker-compose.yml", "docker-compose.*.yml"}},
+		"go":      {DetectFiles: []string{"go.mod"}},
+	}}
+
+	name, _, err := pf.FindParserForDirectory(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if name != "compose" {
+		t.Errorf("matched parser = %q, want compose", name)
+	}
+}
+
+func TestEmbeddedDefaultsDockerAndCompose(t *testing.T) {
+	defaults, err := loadEmbeddedDefaults()
+	if err != nil {
+		t.Fatalf("loadEmbeddedDefaults failed: %v", err)
+	}
+
+	docker, ok := defaults.Parsers["docker"]
+	if !ok {
+		t.Fatal("expected a 'docker' parser in embedded defaults")
+	}
+	if docker.BaseCommands["build"] != "docker build ." {
+		t.Errorf("docker build = %q, want 'docker build .'", docker.BaseCommands["build"])
+	}
+	if docker.BaseCommands["run"] == "" {
+		t.Error("expected docker parser to define a 'run' command")
+	}
+	// docker (Dockerfile) must not carry compose commands.
+	if _, has := docker.BaseCommands["up"]; has {
+		t.Error("docker parser should not define compose 'up'")
+	}
+
+	compose, ok := defaults.Parsers["compose"]
+	if !ok {
+		t.Fatal("expected a 'compose' parser in embedded defaults")
+	}
+	if compose.BaseCommands["up"] != "docker compose up" {
+		t.Errorf("compose up = %q, want 'docker compose up'", compose.BaseCommands["up"])
+	}
+	if compose.BaseCommands["down"] != "docker compose down" {
+		t.Errorf("compose down = %q, want 'docker compose down'", compose.BaseCommands["down"])
+	}
+	if compose.BaseCommands["build"] != "docker compose build" {
+		t.Errorf("compose build = %q, want 'docker compose build'", compose.BaseCommands["build"])
+	}
+	// compose must detect glob override files.
+	foundGlob := false
+	for _, f := range compose.DetectFiles {
+		if f == "docker-compose.*.yml" {
+			foundGlob = true
+		}
+	}
+	if !foundGlob {
+		t.Errorf("compose detect_files = %v, want it to include 'docker-compose.*.yml'", compose.DetectFiles)
+	}
+}
+
 func TestFindParserForDirectoryNoMatch(t *testing.T) {
 	dir := t.TempDir() // empty directory
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -16,16 +17,16 @@ var defaultParsersYAML []byte
 type ParserConfig struct {
 	// DetectFiles are the files to look for to detect this project type
 	DetectFiles []string `yaml:"detect_files"`
-	
+
 	// BaseCommands are commands that are always available, regardless of parsing
 	BaseCommands map[string]string `yaml:"base_commands"`
-	
+
 	// BuiltinParser specifies a built-in parser to use (e.g., "package_json_scripts")
 	BuiltinParser string `yaml:"builtin_parser,omitempty"`
-	
+
 	// ParserCommand is a shell command that outputs available commands (one per line)
 	ParserCommand string `yaml:"parser_command,omitempty"`
-	
+
 	// CommandTemplate is how to construct the final command (e.g., "npm run {key}")
 	CommandTemplate string `yaml:"command_template,omitempty"`
 }
@@ -51,7 +52,7 @@ func LoadParsersConfig() (*ParsersFile, error) {
 	}
 
 	configPath := filepath.Join(homeDir, ".paleta", "parsers.yaml")
-	
+
 	// If user config doesn't exist, return defaults
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return defaults, nil
@@ -72,12 +73,12 @@ func LoadParsersConfig() (*ParsersFile, error) {
 	merged := &ParsersFile{
 		Parsers: make(map[string]ParserConfig),
 	}
-	
+
 	// Start with defaults
 	for name, parser := range defaults.Parsers {
 		merged.Parsers[name] = parser
 	}
-	
+
 	// Override with user config
 	if userConfig.Parsers != nil {
 		for name, parser := range userConfig.Parsers {
@@ -97,7 +98,6 @@ func loadEmbeddedDefaults() (*ParsersFile, error) {
 	return &defaults, nil
 }
 
-
 // GetParser returns a parser configuration by name
 func (p *ParsersFile) GetParser(name string) (ParserConfig, bool) {
 	parser, exists := p.Parsers[name]
@@ -108,11 +108,22 @@ func (p *ParsersFile) GetParser(name string) (ParserConfig, bool) {
 func (p *ParsersFile) FindParserForDirectory(directory string) (string, ParserConfig, error) {
 	for name, parser := range p.Parsers {
 		for _, detectFile := range parser.DetectFiles {
-			filePath := filepath.Join(directory, detectFile)
-			if _, err := os.Stat(filePath); err == nil {
+			if detectFilePresent(directory, detectFile) {
 				return name, parser, nil
 			}
 		}
 	}
 	return "", ParserConfig{}, fmt.Errorf("no parser found for directory: %s", directory)
+}
+
+// detectFilePresent reports whether directory contains a file matching pattern.
+// A pattern without glob metacharacters is matched as an exact filename; one with
+// metacharacters (e.g. "docker-compose.*.yml") is matched with filepath.Match.
+func detectFilePresent(directory, pattern string) bool {
+	if !strings.ContainsAny(pattern, "*?[") {
+		_, err := os.Stat(filepath.Join(directory, pattern))
+		return err == nil
+	}
+	matches, err := filepath.Glob(filepath.Join(directory, pattern))
+	return err == nil && len(matches) > 0
 }

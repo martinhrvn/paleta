@@ -185,6 +185,10 @@ locations:
 
 - **npm/yarn/pnpm**: Automatically discovers scripts from `package.json`
 - **go**: Discovers standard Go commands (planned)
+- **docker**: Detects a `Dockerfile` and offers `docker build` / `docker run`
+- **compose**: Detects `docker-compose.yml`, `compose.yml`, and env-specific
+  overrides matching `docker-compose.*.yml`; offers `docker compose up` / `down`
+  / `build` / `logs` / `ps`
 
 ### Glob Patterns
 
@@ -296,7 +300,7 @@ locations:
     type: "npm"
     commands:
       - name: "local-deploy"
-        command: "docker-compose up"
+        command: "docker compose up"
     include:
       - "test*"      # Include test commands from package.json
       - "build*"     # Include build commands
@@ -527,9 +531,9 @@ locations:
     type: "npm"
     commands:
       - name: "docker-up"
-        command: "docker-compose up"
+        command: "docker compose up"
       - name: "docker-down"
-        command: "docker-compose down"
+        command: "docker compose down"
       - name: "migrate"
         command: "make migrate"
     include:

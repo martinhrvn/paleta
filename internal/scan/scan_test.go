@@ -91,6 +91,62 @@ func TestScan_JSPackageManagerByLockfile(t *testing.T) {
 	}
 }
 
+func TestScan_Dockerfile(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "svc", "Dockerfile"))
+
+	cands, err := Scan(root)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	svc := findCandidate(cands, "svc")
+	if svc == nil {
+		t.Fatal("expected a candidate for svc")
+	}
+	if svc.Type != "docker" {
+		t.Errorf("expected svc type docker, got %q", svc.Type)
+	}
+}
+
+func TestScan_ComposeGlobOverrideFile(t *testing.T) {
+	root := t.TempDir()
+	// Only an env-specific override file, no plain docker-compose.yml.
+	writeFile(t, filepath.Join(root, "infra", "docker-compose.prod.yml"))
+
+	cands, err := Scan(root)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	infra := findCandidate(cands, "infra")
+	if infra == nil {
+		t.Fatal("expected a candidate for infra")
+	}
+	if infra.Type != "compose" {
+		t.Errorf("expected infra type compose, got %q", infra.Type)
+	}
+}
+
+func TestScan_ComposeBeatsDockerfile(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "app", "Dockerfile"))
+	writeFile(t, filepath.Join(root, "app", "docker-compose.yml"))
+
+	cands, err := Scan(root)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	app := findCandidate(cands, "app")
+	if app == nil {
+		t.Fatal("expected a candidate for app")
+	}
+	if app.Type != "compose" {
+		t.Errorf("expected app type compose (compose outranks docker), got %q", app.Type)
+	}
+}
+
 func TestScan_SkipsIgnoredDirs(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "node_modules", "foo", "package.json"))

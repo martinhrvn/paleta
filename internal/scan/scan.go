@@ -40,12 +40,12 @@ var ignoredDirs = map[string]bool{
 
 // typePriority ranks detected types so a directory holding several project files
 // (e.g. a Go service with a Dockerfile) gets its most meaningful type.
-var typePriority = []string{"go", "rust", "npm", "yarn", "pnpm", "python", "maven", "gradle", "make", "docker"}
+var typePriority = []string{"go", "rust", "npm", "yarn", "pnpm", "python", "maven", "gradle", "make", "compose", "docker"}
 
 // Scan walks root and returns one Candidate per directory that contains a
 // recognized project file. Results are sorted by RelPath with the root first.
 func Scan(root string) ([]Candidate, error) {
-	typeMap, err := detectTypeMap()
+	matcher, err := buildDetectMatcher()
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func Scan(root string) ([]Candidate, error) {
 	byDir := make(map[string][]string)
 	for _, rel := range files {
 		base := filepath.Base(rel)
-		if _, ok := typeMap[base]; !ok {
+		if _, ok := matcher.match(base); !ok {
 			continue
 		}
 		dir := filepath.Dir(rel)
@@ -68,7 +68,7 @@ func Scan(root string) ([]Candidate, error) {
 
 	candidates := make([]Candidate, 0, len(byDir))
 	for dir, detectFiles := range byDir {
-		detectFile, typ := chooseType(filepath.Join(root, dir), detectFiles, typeMap)
+		detectFile, typ := chooseType(filepath.Join(root, dir), detectFiles, matcher)
 		candidates = append(candidates, Candidate{
 			RelPath:    dir,
 			Type:       typ,
@@ -83,14 +83,17 @@ func Scan(root string) ([]Candidate, error) {
 // chooseType picks the most meaningful (detectFile, type) for a directory that
 // may contain several project files. package.json is refined to the concrete JS
 // package manager by inspecting lockfiles in absDir.
-func chooseType(absDir string, detectFiles []string, typeMap map[string]string) (string, string) {
+func chooseType(absDir string, detectFiles []string, matcher detectMatcher) (string, string) {
 	sort.Strings(detectFiles)
 
 	bestFile, bestType := "", ""
 	bestRank := len(typePriority) + 1
 
 	for _, file := range detectFiles {
-		typ := typeMap[file]
+		typ, ok := matcher.match(file)
+		if !ok {
+			continue
+		}
 		if file == "package.json" {
 			typ = detectJSPackageManager(absDir)
 		}
@@ -137,13 +140,51 @@ func sortCandidates(candidates []Candidate) {
 	})
 }
 
-// detectTypeMap builds a detect-file -> paleta-type map from the parser
-// configuration. When several parsers claim the same file (e.g. package.json),
-// the higher-priority type wins so the map is deterministic.
-func detectTypeMap() (map[string]string, error) {
+// globRule pairs a filename glob pattern (e.g. "docker-compose.*.yml") with the
+// paleta type it detects.
+type globRule struct {
+	pattern string
+	typ     string
+}
+
+// detectMatcher resolves a filename (basename) to a paleta type. Literal detect
+// files are matched exactly; glob detect patterns are matched with filepath.Match.
+type detectMatcher struct {
+	literals map[string]string // basename -> type
+	globs    []globRule
+}
+
+// match returns the highest-priority type that claims base, and whether any did.
+func (m detectMatcher) match(base string) (string, bool) {
+	best, bestRank := "", len(typePriority)+1
+	if typ, ok := m.literals[base]; ok {
+		if r := typeRank(typ); r < bestRank {
+			best, bestRank = typ, r
+		}
+	}
+	for _, g := range m.globs {
+		if ok, _ := filepath.Match(g.pattern, base); ok {
+			if r := typeRank(g.typ); r < bestRank {
+				best, bestRank = g.typ, r
+			}
+		}
+	}
+	return best, best != ""
+}
+
+// hasGlobMeta reports whether a detect-file entry is a glob pattern rather than a
+// literal filename.
+func hasGlobMeta(s string) bool {
+	return strings.ContainsAny(s, "*?[")
+}
+
+// buildDetectMatcher constructs a detectMatcher from the parser configuration.
+// When several parsers claim the same literal file (e.g. package.json), the
+// higher-priority type wins so matching is deterministic.
+func buildDetectMatcher() (detectMatcher, error) {
 	cfg, err := parsers.LoadParsersConfig()
 	if err != nil {
-		return nil, err
+		return detectMatcher{}, err
 	}
 
 	// Sort parser names for deterministic iteration.
@@ -153,16 +194,31 @@ func detectTypeMap() (map[string]string, error) {
 	}
 	sort.Strings(names)
 
-	m := make(map[string]string)
+	matcher := detectMatcher{literals: make(map[string]string)}
 	for _, name := range names {
 		for _, file := range cfg.Parsers[name].DetectFiles {
-			existing, ok := m[file]
+			if hasGlobMeta(file) {
+				matcher.globs = append(matcher.globs, globRule{pattern: file, typ: name})
+				continue
+			}
+			existing, ok := matcher.literals[file]
 			if !ok || typeRank(name) < typeRank(existing) {
-				m[file] = name
+				matcher.literals[file] = name
 			}
 		}
 	}
-	return m, nil
+	return matcher, nil
+}
+
+// detectTypeMap builds a detect-file -> paleta-type map of literal detect files
+// from the parser configuration. When several parsers claim the same file (e.g.
+// package.json), the higher-priority type wins so the map is deterministic.
+func detectTypeMap() (map[string]string, error) {
+	matcher, err := buildDetectMatcher()
+	if err != nil {
+		return nil, err
+	}
+	return matcher.literals, nil
 }
 
 // enumerateFiles returns project-relevant file paths relative to root. Inside a
