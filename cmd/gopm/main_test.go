@@ -86,6 +86,56 @@ func TestMarshalSelectionMultiple(t *testing.T) {
 	}
 }
 
+func TestMarshalSelectionWithEnv(t *testing.T) {
+	results := []commands.SelectionResult{
+		{
+			Directory:   "/app",
+			Command:     "npm run dev",
+			DisplayName: "app",
+			Env:         map[string]string{"PORT": "3001", "DEBUG": "1"},
+		},
+	}
+
+	data, err := marshalSelection(results)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var obj map[string]interface{}
+	decode(t, data, &obj)
+
+	// command stays raw — env must NOT be baked into it (keeps history key stable)
+	if obj["command"] != "npm run dev" {
+		t.Errorf("command = %v, want raw 'npm run dev'", obj["command"])
+	}
+
+	env, ok := obj["env"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("env missing or wrong type: %v", obj["env"])
+	}
+	if env["PORT"] != "3001" || env["DEBUG"] != "1" {
+		t.Errorf("env = %v, want PORT=3001 DEBUG=1", env)
+	}
+}
+
+func TestMarshalSelectionOmitsEmptyEnv(t *testing.T) {
+	results := []commands.SelectionResult{
+		{Directory: "/app", Command: "npm test", DisplayName: "app"},
+	}
+
+	data, err := marshalSelection(results)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var obj map[string]interface{}
+	decode(t, data, &obj)
+
+	if _, ok := obj["env"]; ok {
+		t.Errorf("env should be omitted when empty, got %v", obj["env"])
+	}
+}
+
 // TestMarshalSelectionSpecialChars is the regression test for the old
 // hand-rolled escaper, which only handled \\ " \n \t and produced invalid
 // JSON for other control characters and unicode.

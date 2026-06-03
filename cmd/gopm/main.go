@@ -124,10 +124,11 @@ func handleSelectCommand() {
 // selectionJSON is the wire format emitted for a selection. The action field
 // is only present when it carries meaning (currently just "edit").
 type selectionJSON struct {
-	Directory   string `json:"directory"`
-	Command     string `json:"command"`
-	DisplayName string `json:"display_name"`
-	Action      string `json:"action,omitempty"`
+	Directory   string            `json:"directory"`
+	Command     string            `json:"command"`
+	DisplayName string            `json:"display_name"`
+	Action      string            `json:"action,omitempty"`
+	Env         map[string]string `json:"env,omitempty"`
 }
 
 func toSelectionJSON(r commands.SelectionResult) selectionJSON {
@@ -135,6 +136,7 @@ func toSelectionJSON(r commands.SelectionResult) selectionJSON {
 		Directory:   r.Directory,
 		Command:     r.Command,
 		DisplayName: r.DisplayName,
+		Env:         r.Env,
 	}
 	// Preserve historical behavior: only "edit" surfaces an action field.
 	if r.Action == "edit" {

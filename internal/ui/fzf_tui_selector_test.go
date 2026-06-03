@@ -128,6 +128,40 @@ func TestModel_GetSelectedCommands_WithSelections(t *testing.T) {
 	}
 }
 
+func TestModel_GetSelectedCommands_CarriesEnv(t *testing.T) {
+	cfg := &config.Config{
+		Locations: []config.Location{
+			{
+				Name:     "api",
+				Location: "/path/to/api",
+				Env:      map[string]string{"PORT": "3000", "REGION": "eu"},
+				Commands: []config.Command{
+					{
+						Name:    "dev",
+						Command: "npm run dev",
+						Env:     map[string]string{"PORT": "3001"}, // overrides location
+					},
+				},
+			},
+		},
+	}
+
+	m := createTestModel(cfg)
+	m.toggleSelection(0)
+	results := m.getSelectedCommands()
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 selected command, got %d", len(results))
+	}
+	// Command-level PORT overrides location-level; REGION inherited from location.
+	if results[0].Env["PORT"] != "3001" {
+		t.Errorf("PORT = %q, want 3001 (command overrides location)", results[0].Env["PORT"])
+	}
+	if results[0].Env["REGION"] != "eu" {
+		t.Errorf("REGION = %q, want eu (inherited from location)", results[0].Env["REGION"])
+	}
+}
+
 func TestModel_GetSelectedCommands_NoSelection_ReturnsCurrent(t *testing.T) {
 	m := createTestModel(createTestConfig())
 

@@ -104,21 +104,32 @@ run_command() {
         local compound_cmd=""
         local i=0
         while [ "$i" -lt "$count" ]; do
-            local dir cmd name
+            local dir cmd name envprefix segment
             dir=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].directory")
             cmd=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].command")
             name=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].display_name")
 
-            # Record each command
+            # Record each command (uses the raw command, not the env-wrapped form)
             if [ -n "$name" ] && [ "$name" != "null" ]; then
                 "$GOPM_BINARY" record "$name" "$cmd" 2>/dev/null || true
             fi
 
+            # Build a safely-quoted "KEY='val' ..." prefix from the env object.
+            envprefix=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].env // {} | to_entries | map(\"\(.key)=\" + (.value|@sh)) | join(\" \")")
+
+            # Apply env in a subshell so $VAR in the command expands against it
+            # and the variables don't leak into later commands or the shell.
+            if [ -n "$envprefix" ]; then
+                segment="cd '$dir' && ( export $envprefix; $cmd )"
+            else
+                segment="cd '$dir' && $cmd"
+            fi
+
             # Build compound command
             if [ -z "$compound_cmd" ]; then
-                compound_cmd="cd '$dir' && $cmd"
+                compound_cmd="$segment"
             else
-                compound_cmd="$compound_cmd && cd '$dir' && $cmd"
+                compound_cmd="$compound_cmd && $segment"
             fi
 
             i=$((i + 1))
@@ -160,9 +171,20 @@ run_command() {
         # Change to the directory and run the command
         cd "$dir"
 
+        # Build a safely-quoted "KEY='val' ..." prefix from the env object.
+        local envprefix
+        envprefix=$(echo "$selection_json" | "$jq_cmd" -r '.env // {} | to_entries | map("\(.key)=" + (.value|@sh)) | join(" ")')
+
         # Use BASH_CMD if set (for Nix), otherwise use bash
         local bash_cmd="${BASH_CMD:-bash}"
-        exec "$bash_cmd" -c "$cmd"
+
+        # Export env first (separate statement) so $VAR in the command expands
+        # against it; the child bash isolates it from the parent shell.
+        if [ -n "$envprefix" ]; then
+            exec "$bash_cmd" -c "export $envprefix; $cmd"
+        else
+            exec "$bash_cmd" -c "$cmd"
+        fi
     fi
 }
 

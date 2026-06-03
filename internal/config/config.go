@@ -32,8 +32,9 @@ func DefaultFrecencyConfig() FrecencyConfig {
 }
 
 type Command struct {
-	Name    string `yaml:"name,omitempty"`
-	Command string `yaml:"command"`
+	Name    string            `yaml:"name,omitempty"`
+	Command string            `yaml:"command"`
+	Env     map[string]string `yaml:"env,omitempty"`
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Command
@@ -58,12 +59,13 @@ func (c *Command) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type Location struct {
-	Name     string    `yaml:"name,omitempty"`
-	Location string    `yaml:"location,omitempty"`
-	Type     string    `yaml:"type,omitempty"`
-	Commands []Command `yaml:"commands,omitempty"`
-	Include  []string  `yaml:"include,omitempty"`
-	Exclude  []string  `yaml:"exclude,omitempty"`
+	Name     string            `yaml:"name,omitempty"`
+	Location string            `yaml:"location,omitempty"`
+	Type     string            `yaml:"type,omitempty"`
+	Commands []Command         `yaml:"commands,omitempty"`
+	Include  []string          `yaml:"include,omitempty"`
+	Exclude  []string          `yaml:"exclude,omitempty"`
+	Env      map[string]string `yaml:"env,omitempty"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {

@@ -70,10 +70,21 @@ func ProcessFzfSelection(cfg *config.Config, fzfSelection string) (*SelectionRes
 		return nil, err
 	}
 
+	// Resolve env for the matched command (location-level env still applies
+	// even when the exact command can't be matched by text).
+	var matched config.Command
+	for _, c := range location.Commands {
+		if c.Name == command || c.Command == command {
+			matched = c
+			break
+		}
+	}
+
 	return &SelectionResult{
 		Directory:   location.Location,
 		Command:     command,
 		DisplayName: displayName,
+		Env:         config.EffectiveEnv(*location, matched),
 	}, nil
 }
 
@@ -83,7 +94,8 @@ type CommandInfo struct {
 	Directory     string
 	Command       string
 	DisplayName   string
-	FrecencyScore float64 // Score for sorting
+	Env           map[string]string // Resolved environment variables for this command
+	FrecencyScore float64           // Score for sorting
 }
 
 // PrepareCommandInfo prepares command information for fuzzy finder
@@ -123,6 +135,7 @@ func PrepareCommandInfoWithHistory(cfg *config.Config, hist *history.History, en
 				Directory:     location.Location,
 				Command:       command.Command,
 				DisplayName:   displayName,
+				Env:           config.EffectiveEnv(location, command),
 				FrecencyScore: score,
 			}
 			infos = append(infos, info)

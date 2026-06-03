@@ -53,7 +53,9 @@ The project types we should support intitally are:
 ## Nice-to-Have Features
 
 ### Enhanced Configuration
-- [ ] Support for environment variables in commands
+- [x] Support for environment variables in commands
+  - [x] env definable at location and command level (command overrides location)
+  - [x] ${VAR}/$VAR expansion against ambient + sibling vars (undefined → empty)
 - [ ] Support for command aliases/shortcuts
 - [ ] Support for default commands per location
 - [ ] Support for inheriting/extending configurations

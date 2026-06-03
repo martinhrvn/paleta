@@ -53,6 +53,7 @@ type Model struct {
 	editCommand     string
 	editDirectory   string
 	editDisplayName string
+	editEnv         map[string]string
 
 	// Bubbletea components
 	searchInput textinput.Model
@@ -385,6 +386,7 @@ func (m *Model) loadCommands() {
 				Command:       command.Command,
 				DisplayName:   displayName,
 				Type:          location.Type,
+				Env:           config.EffectiveEnv(location, command),
 				FrecencyScore: score,
 			}
 			m.commands = append(m.commands, info)
@@ -535,6 +537,7 @@ func (m Model) getSelectedCommands() []SelectionResult {
 				Directory:   cmd.Directory,
 				Command:     cmd.Command,
 				DisplayName: cmd.DisplayName,
+				Env:         cmd.Env,
 			})
 		}
 	}
@@ -546,6 +549,7 @@ func (m Model) getSelectedCommands() []SelectionResult {
 			Directory:   cmd.Directory,
 			Command:     cmd.Command,
 			DisplayName: cmd.DisplayName,
+			Env:         cmd.Env,
 		})
 	}
 
@@ -566,6 +570,7 @@ func (m *Model) enterEditMode() {
 	m.editCommand = cmd.Command
 	m.editDirectory = cmd.Directory
 	m.editDisplayName = cmd.DisplayName
+	m.editEnv = cmd.Env
 
 	m.editInput.SetValue(cmd.Command)
 	m.editInput.Focus()
@@ -579,6 +584,7 @@ func (m *Model) confirmEdit() {
 			Command:     m.editCommand,
 			DisplayName: m.editDisplayName,
 			Action:      "edit",
+			Env:         m.editEnv,
 		},
 	}
 }
@@ -588,6 +594,7 @@ func (m *Model) cancelEdit() {
 	m.editCommand = ""
 	m.editDirectory = ""
 	m.editDisplayName = ""
+	m.editEnv = nil
 
 	m.editInput.Blur()
 	m.searchInput.Focus()
@@ -631,6 +638,16 @@ func (m *Model) adjustViewport() {
 	}
 }
 
+// sortedKeys returns the map keys in deterministic alphabetical order.
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func (m Model) generatePreview(cmd CommandInfo) string {
 	var lines []string
 
@@ -642,6 +659,13 @@ func (m Model) generatePreview(cmd CommandInfo) string {
 
 	if cmd.Type != "" {
 		lines = append(lines, previewLabelStyle.Render("Type      ")+previewValueStyle.Render(cmd.Type))
+	}
+
+	if len(cmd.Env) > 0 {
+		lines = append(lines, previewLabelStyle.Render("Env"))
+		for _, k := range sortedKeys(cmd.Env) {
+			lines = append(lines, previewValueStyle.Render(fmt.Sprintf("  %s=%s", k, cmd.Env[k])))
+		}
 	}
 
 	if m.frecencyEnabled && cmd.FrecencyScore > 0 {

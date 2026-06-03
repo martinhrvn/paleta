@@ -115,12 +115,16 @@ locations:
   - name: "display-name"        # Optional: Display name in selection UI
     location: "path/to/project" # Required: Path to project directory
     type: "npm"                 # Optional: Project type (npm, yarn, pnpm, go)
+    env:                        # Optional: Env vars for all commands here
+      NODE_ENV: "development"
     commands:                   # Optional: Additional custom commands
       - "npm run legacy"        # String format (backward compatible)
       - name: "build"           # Object format with name
         command: "npm run build"
       - name: "test"
         command: "npm test"
+        env:                    # Optional: per-command env (overrides location)
+          CI: "true"
 ```
 
 ### Location Fields
@@ -131,6 +135,7 @@ locations:
 - **commands** (optional): Additional commands to include (supports both string and object formats)
 - **include** (optional): Whitelist patterns for filtering commands (glob patterns)
 - **exclude** (optional): Blacklist patterns for filtering commands (glob patterns)
+- **env** (optional): Environment variables applied to every command in the location
 
 ### Supported Project Types
 
@@ -178,6 +183,35 @@ commands:
 - **Better UI**: Command names appear clearly in the selector
 - **Filtering**: Use `include` and `exclude` patterns to filter by name
 - **Clarity**: Easier to understand what each command does
+
+### Environment Variables
+
+Set environment variables at the **location** level (applied to every command in
+that location) or the **command** level (applied to just that command). When the
+same key is defined at both levels, the command-level value wins.
+
+```yaml
+locations:
+  - location: "api"
+    env:
+      BIN: "${HOME}/.local/bin"   # references the ambient environment
+      PATH: "${BIN}:$PATH"        # references a sibling var + ambient
+      PORT: "3000"
+    commands:
+      - name: "dev"
+        command: "npm run dev"
+        env:
+          PORT: "3001"            # overrides the location-level PORT
+```
+
+**Expansion rules:**
+- Values may reference the ambient process environment (`${HOME}`, `$PATH`).
+- Values may reference other variables defined in the same scope (siblings),
+  in any order.
+- An undefined variable expands to an empty string.
+
+Variables are applied only while the selected command runs — they do not leak
+into your shell session, and in multi-select each command gets its own env.
 
 **Mixed Format Example:**
 ```yaml
