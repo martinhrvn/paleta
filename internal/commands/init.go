@@ -72,7 +72,7 @@ locations:
 #   npm, yarn, pnpm: Automatically discovers scripts from package.json
 #   go: Discovers standard Go commands (planned)
 #
-# For more information, see: https://github.com/martin/go-pm
+# For more information, see: https://github.com/martinhrvn/go-pm
 `
 }
 

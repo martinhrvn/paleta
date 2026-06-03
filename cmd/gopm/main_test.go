@@ -4,8 +4,20 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/martin/go-pm/internal/commands"
+	"github.com/martinhrvn/go-pm/internal/commands"
 )
+
+func TestVersionString(t *testing.T) {
+	old := version
+	defer func() { version = old }()
+
+	version = "1.2.3"
+	got := versionString()
+	want := "gopm version 1.2.3"
+	if got != want {
+		t.Errorf("versionString() = %q, want %q", got, want)
+	}
+}
 
 // decode unmarshals JSON output into a generic value for assertions.
 func decode(t *testing.T, data []byte, v interface{}) {

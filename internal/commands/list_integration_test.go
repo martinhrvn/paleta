@@ -6,8 +6,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/martin/go-pm/internal/commands"
-	"github.com/martin/go-pm/internal/config"
+	"github.com/martinhrvn/go-pm/internal/commands"
+	"github.com/martinhrvn/go-pm/internal/config"
 )
 
 func TestListCommandsIntegration(t *testing.T) {

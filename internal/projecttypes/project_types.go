@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/martin/go-pm/internal/parsers"
+	"github.com/martinhrvn/go-pm/internal/parsers"
 )
 
 // ProjectType represents a project type that can discover and provide commands

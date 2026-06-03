@@ -27,6 +27,7 @@ show_usage() {
     echo "    run        Interactive command selection and execution (default)"
     echo "    edit       Open nearest .gopmrc in \$EDITOR"
     echo "    list       List all available commands"
+    echo "    version    Show the gopm version"
     echo "    help       Show this help message"
     echo
     echo "EXAMPLES:"
@@ -218,6 +219,9 @@ gopm_main() {
             ;;
         help|--help|-h)
             show_usage
+            ;;
+        version|--version|-v)
+            "$GOPM_BINARY" version
             ;;
         select|record)
             "$GOPM_BINARY" "$@"

@@ -3,7 +3,7 @@ package commands
 import (
 	"fmt"
 
-	"github.com/martin/go-pm/internal/config"
+	"github.com/martinhrvn/go-pm/internal/config"
 )
 
 // ListCommands returns a slice of location:command pairs

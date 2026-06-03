@@ -32,7 +32,7 @@
           meta = with pkgs.lib; {
             description =
               "Go Project Manager - A utility for quickly running commands in monorepos";
-            homepage = "https://github.com/martin/go-pm";
+            homepage = "https://github.com/martinhrvn/go-pm";
             license = licenses.mit;
             maintainers = [ "martin" ];
             platforms = platforms.unix;
@@ -72,7 +72,7 @@
           meta = with pkgs.lib; {
             description =
               "Go Project Manager - A utility for quickly running commands in monorepos";
-            homepage = "https://github.com/martin/go-pm";
+            homepage = "https://github.com/martinhrvn/go-pm";
             license = licenses.mit;
             maintainers = [ "martin" ];
             platforms = platforms.unix;
@@ -107,10 +107,10 @@
           shellHook = ''
             echo "🚀 Welcome to gopm development environment!"
             echo "Available commands:"
-            echo "  go build -o gopm     # Build the binary"
+            echo "  go build -o gopm-bin ./cmd/gopm   # Build the binary"
             echo "  go test ./...        # Run tests"
-            echo "  go run .             # Run directly"
-            echo "  ./gopm.sh            # Test the shell wrapper"
+            echo "  go run ./cmd/gopm    # Run directly"
+            echo "  ./packaging/gopm     # Test the shell wrapper"
             echo ""
             echo "Nix environment includes:"
             echo "  - Go ${pkgs.go.version}"

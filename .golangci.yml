@@ -1,0 +1,14 @@
+# golangci-lint v2 configuration.
+# Conservative baseline: the standard linter set plus gofmt formatting.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  # standard = errcheck, govet, ineffassign, staticcheck, unused
+
+formatters:
+  enable:
+    - gofmt

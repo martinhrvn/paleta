@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/martin/go-pm/internal/config"
+	"github.com/martinhrvn/go-pm/internal/config"
 )
 
 // Helper to convert strings to Commands for tests

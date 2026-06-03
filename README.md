@@ -1,5 +1,9 @@
 # gopm - Go Project Manager
 
+[![CI](https://github.com/martinhrvn/go-pm/actions/workflows/ci.yml/badge.svg)](https://github.com/martinhrvn/go-pm/actions/workflows/ci.yml)
+[![Release](https://github.com/martinhrvn/go-pm/actions/workflows/release.yml/badge.svg)](https://github.com/martinhrvn/go-pm/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A fast, lightweight CLI tool for managing and executing commands across multiple projects in monorepos using fuzzy search.
 
 ## Features
@@ -16,44 +20,84 @@ A fast, lightweight CLI tool for managing and executing commands across multiple
 
 ## Installation
 
-### Using the Install Script
+> gopm is two parts: the `gopm-bin` binary (runs the TUI) and a `gopm` shell
+> wrapper that performs the actual `cd` + command execution. Every package below
+> installs both, plus the `gopm-core.sh` helper and shell completions.
+> Runtime dependencies: **`jq`** and **`bash`**.
+
+### Arch Linux (AUR)
 
 ```bash
-# Clone the repository
-git clone https://github.com/martin/go-pm
-cd go-pm
-
-# Run the installer
-./install.sh
+yay -S gopm-bin        # or: paru -S gopm-bin
 ```
 
-The installer will:
-- Build and install the `gopm-bin` binary to `~/.local/bin`
-- Install the `gopm` shell wrapper script
-- Set up shell completion (bash/zsh)
-- Configure zsh keyboard shortcut (Ctrl+P) for instant access
-- Add the installation directory to your PATH
+### Homebrew (macOS / Linux)
+
+```bash
+brew install martinhrvn/tap/gopm
+```
+
+### Debian / Ubuntu (.deb) and Fedora / RHEL (.rpm)
+
+Download the package for your architecture from the
+[latest release](https://github.com/martinhrvn/go-pm/releases/latest):
+
+```bash
+# Debian/Ubuntu
+sudo dpkg -i gopm_*_linux_amd64.deb
+
+# Fedora/RHEL
+sudo rpm -i gopm_*_linux_amd64.rpm
+```
+
+### Pre-built binaries (tarball)
+
+Download and extract the archive for your platform from the
+[releases page](https://github.com/martinhrvn/go-pm/releases/latest), then put
+the extracted directory on your `PATH` (the `gopm` wrapper finds its siblings):
+
+```bash
+tar -xzf gopm_*_linux_amd64.tar.gz
+sudo cp -r gopm_* /opt/gopm
+sudo ln -s /opt/gopm/gopm /usr/local/bin/gopm
+```
+
+### Using `go install`
+
+Installs only the binary (`gopm-bin`); use the wrapper from a release archive
+or the repo for the full experience:
+
+```bash
+go install github.com/martinhrvn/go-pm/cmd/gopm@latest
+```
 
 ### Using Nix
 
 ```bash
-# Build and install using Nix flakes
-nix build
-nix profile install
-
-# Or run directly
-nix run
+nix build           # build
+nix profile install # install
+nix run             # or run directly
 ```
 
-### Manual Installation
+### From source (install script)
 
 ```bash
-# Build the binary
-go build -o gopm-bin ./cmd/gopm
+git clone https://github.com/martinhrvn/go-pm
+cd go-pm
+./install.sh
+```
 
-# Copy to a location in your PATH
+The installer builds and installs the `gopm-bin` binary plus the `gopm`
+wrapper to `~/.local/bin`, sets up bash/zsh completion, and configures the
+zsh Ctrl+P keyboard shortcut.
+
+### Manual build
+
+```bash
+go build -o gopm-bin ./cmd/gopm
 cp gopm-bin ~/.local/bin/
-cp gopm.sh ~/.local/bin/gopm
+cp packaging/gopm ~/.local/bin/gopm
+cp gopm-core.sh ~/.local/bin/      # the wrapper sources this beside itself
 chmod +x ~/.local/bin/gopm
 ```
 
@@ -584,7 +628,7 @@ go test -cover ./...
 │   ├── projecttypes/   # Project type parsers
 │   └── ui/            # TUI components
 ├── examples/          # Example configurations
-├── gopm.sh           # Shell wrapper script
+├── packaging/gopm    # Shell wrapper script (installed as `gopm`)
 ├── install.sh        # Installation script
 └── flake.nix         # Nix flake configuration
 ```

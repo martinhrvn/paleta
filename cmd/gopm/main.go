@@ -5,10 +5,19 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/martin/go-pm/internal/commands"
-	"github.com/martin/go-pm/internal/config"
-	"github.com/martin/go-pm/internal/history"
+	"github.com/martinhrvn/go-pm/internal/commands"
+	"github.com/martinhrvn/go-pm/internal/config"
+	"github.com/martinhrvn/go-pm/internal/history"
 )
+
+// version is the gopm version. It is overridden at build time via
+// -ldflags "-X main.version=<tag>" (see .goreleaser.yaml / flake.nix).
+var version = "dev"
+
+// versionString renders the version banner printed by the version command.
+func versionString() string {
+	return fmt.Sprintf("gopm version %s", version)
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -31,6 +40,8 @@ func main() {
 		handleRecordCommand()
 	case "help":
 		showUsage()
+	case "version", "--version", "-v":
+		fmt.Println(versionString())
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		showUsage()
@@ -223,6 +234,7 @@ func showUsage() {
 	fmt.Println("    list                     List all available location:command pairs")
 	fmt.Println("    list --format=fzf        List commands in fzf format")
 	fmt.Println("    select                   Interactive TUI command selection (multi-select with Tab)")
+	fmt.Println("    version                  Show the gopm version")
 	fmt.Println("    help                     Show this help message")
 	fmt.Println()
 	fmt.Println("EXAMPLES:")

@@ -116,7 +116,7 @@ The project types we should support intitally are:
 - [x] Unit tests for core functionality
 
 ### Distribution
-- [x] Enhanced shell wrapper script (gopm.sh)
+- [x] Enhanced shell wrapper script (packaging/gopm)
 - [x] Installation script (install.sh)
 - [x] Shell completion (bash/zsh)
 - [x] Zsh keyboard shortcut integration (Ctrl+P, with multi-select support)
@@ -126,9 +126,12 @@ The project types we should support intitally are:
 - [x] Cross-platform support (Linux/macOS)
 - [ ] Usage documentation
 - [ ] Example .gopmrc files
-- [ ] GitHub releases with binaries
-- [ ] Homebrew formula (optional)
-- [ ] AUR package (optional)
+- [x] GitHub releases with binaries (GoReleaser + Actions on `v*` tags)
+- [x] Homebrew formula (GoReleaser brews -> martinhrvn/homebrew-tap)
+- [x] AUR package (GoReleaser-generated PKGBUILD for gopm-bin)
+- [x] deb/rpm packages (GoReleaser nfpm)
+- [x] CI pipeline (build/test/lint on push & PR)
+- [x] Version injected via -ldflags (`gopm version`)
 
 ## Testing Checklist
 
@@ -187,11 +190,12 @@ The project types we should support intitally are:
 - [x] Closest match preferred when multiple projects match
 
 ## Release Checklist
-- [ ] Version tagging
-- [ ] Changelog updates
-- [ ] Binary releases for major platforms
-- [ ] Release notes
-- [ ] Update documentation
+- [x] Release automation (GoReleaser + GitHub Actions on `v*` tags)
+- [x] Changelog generation (GoReleaser, conventional-commit filters)
+- [x] Binary releases for major platforms (linux/darwin x amd64/arm64)
+- [ ] Create `martinhrvn/homebrew-tap` repo + `HOMEBREW_TAP_TOKEN` secret (before first stable release)
+- [ ] First publish of AUR `gopm-bin` PKGBUILD (manual, from release artifact)
+- [ ] Tag and push `v0.1.0`
 
 ## Current Status
 - [x] Initial concept defined

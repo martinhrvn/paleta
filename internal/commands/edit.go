@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/martin/go-pm/internal/config"
+	"github.com/martinhrvn/go-pm/internal/config"
 )
 
 // GetEditor returns the editor to use, checking $EDITOR and falling back to vi

@@ -13,5 +13,12 @@ result
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# GoReleaser build output
+dist/
+
+# Locally built binaries
+/gopm
+/gopm-bin
+
 # Dependency directories (remove the comment below to include it)
 # vendor/

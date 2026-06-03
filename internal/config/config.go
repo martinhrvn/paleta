@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/martin/go-pm/internal/projecttypes"
+	"github.com/martinhrvn/go-pm/internal/projecttypes"
 	"gopkg.in/yaml.v3"
 )
 
