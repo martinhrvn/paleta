@@ -14,7 +14,10 @@ _plt() {
         command)
             _values 'plt commands' \
                 'run[Interactive command selection and execution]' \
+                'init[Interactively scan for projects and build .pltrc]' \
+                'edit[Open nearest .pltrc in $EDITOR]' \
                 'list[List all available commands]' \
+                'version[Show the plt version]' \
                 'help[Show help message]'
             ;;
     esac
