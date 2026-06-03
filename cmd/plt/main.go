@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -143,6 +144,19 @@ func handleEditCommand() {
 	}
 }
 
+// exitConfigError reports a config-load failure and exits. When no configuration
+// exists at all, it prints a friendly hint to run `plt init` instead of the raw
+// error.
+func exitConfigError(err error) {
+	if errors.Is(err, config.ErrConfigNotFound) {
+		fmt.Fprintln(os.Stderr, "No paleta configuration found here.")
+		fmt.Fprintln(os.Stderr, "Run 'plt init' to scan this folder and create a .pltrc.")
+	} else {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+	}
+	os.Exit(1)
+}
+
 func handleListCommand() {
 	// Check for format flag
 	format := "default"
@@ -153,8 +167,7 @@ func handleListCommand() {
 	// Load config from discovery
 	cfg, err := config.LoadConfigFromDiscovery()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		os.Exit(1)
+		exitConfigError(err)
 	}
 
 	// Generate command list
@@ -175,8 +188,7 @@ func handleSelectCommand() {
 	// Load config from discovery
 	cfg, err := config.LoadConfigFromDiscovery()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		os.Exit(1)
+		exitConfigError(err)
 	}
 
 	// Run TUI selection

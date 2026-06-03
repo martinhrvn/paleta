@@ -1,10 +1,40 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+// TestLoadConfigFromDiscoveryNotFound verifies the not-found path returns an
+// error that callers can detect with errors.Is, so the CLI can print a friendly
+// "run plt init" hint instead of a raw error.
+func TestLoadConfigFromDiscoveryNotFound(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "plt-notfound-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(oldWd)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+
+	emptyProjectsDir := filepath.Join(tmpDir, "no-projects")
+	_, err = loadConfigFromDiscoveryWithGlobalFallback(emptyProjectsDir)
+	if err == nil {
+		t.Fatal("expected an error when no config is found")
+	}
+	if !errors.Is(err, ErrConfigNotFound) {
+		t.Errorf("expected error to match ErrConfigNotFound, got %v", err)
+	}
+}
 
 func TestFindConfigFile(t *testing.T) {
 	tests := []struct {
@@ -223,11 +253,11 @@ func TestLoadConfigFromDiscovery(t *testing.T) {
 
 func TestLoadGlobalProjects(t *testing.T) {
 	tests := []struct {
-		name           string
-		projectFiles   map[string]string // filename -> content
-		expectedCount  int
-		validateFunc   func(*testing.T, []*Config)
-		wantErr        bool
+		name          string
+		projectFiles  map[string]string // filename -> content
+		expectedCount int
+		validateFunc  func(*testing.T, []*Config)
+		wantErr       bool
 	}{
 		{
 			name: "load multiple project files",

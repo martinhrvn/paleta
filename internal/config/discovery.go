@@ -1,12 +1,18 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 )
 
 const ConfigFileName = ".pltrc"
+
+// ErrConfigNotFound is returned (wrapped) when no local .pltrc is found in the
+// current directory or its parents and no matching global project configuration
+// exists. Callers can detect it with errors.Is to show a friendly hint.
+var ErrConfigNotFound = errors.New("no paleta configuration found")
 
 // FindConfigFile searches for .pltrc starting from the current working directory
 // and traversing up the directory tree until it finds one or reaches the root.
@@ -23,26 +29,26 @@ func FindConfigFile() (string, error) {
 // and traversing up the directory tree.
 func findConfigFileFromPath(startPath string) (string, error) {
 	currentPath := startPath
-	
+
 	for {
 		configPath := filepath.Join(currentPath, ConfigFileName)
-		
+
 		// Check if config file exists
 		if _, err := os.Stat(configPath); err == nil {
 			return configPath, nil
 		}
-		
+
 		// Move to parent directory
 		parentPath := filepath.Dir(currentPath)
-		
+
 		// Check if we've reached the root directory
 		if parentPath == currentPath {
 			break
 		}
-		
+
 		currentPath = parentPath
 	}
-	
+
 	return "", fmt.Errorf("no %s found in current directory or any parent directories", ConfigFileName)
 }
 
@@ -94,7 +100,7 @@ func loadConfigFromDiscoveryWithGlobalFallback(projectsDir string) (*Config, err
 
 	matchedProject := FindMatchingProject(cwd, projects)
 	if matchedProject == nil {
-		return nil, fmt.Errorf("no %s found in current directory or any parent directories, and no matching global project configuration", ConfigFileName)
+		return nil, fmt.Errorf("%w: no %s in this directory or any parent, and no matching global project", ErrConfigNotFound, ConfigFileName)
 	}
 
 	// Change to the project root directory for glob expansion

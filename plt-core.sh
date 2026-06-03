@@ -75,13 +75,21 @@ run_command() {
         exit 1
     fi
 
-    # Call plt select to get the selection as JSON
-    print_info "Loading configuration and starting selection..."
-    local selection_json
-    if ! selection_json=$("$PLT_BINARY" select 2>/dev/null); then
-        print_error "Selection cancelled or failed."
+    # Call plt select to get the selection as JSON. Capture stderr so the
+    # binary's own messages (e.g. the "run plt init" hint when no .pltrc exists)
+    # reach the user instead of being swallowed.
+    local selection_json select_err
+    select_err=$(mktemp)
+    if ! selection_json=$("$PLT_BINARY" select 2>"$select_err"); then
+        if [ -s "$select_err" ]; then
+            cat "$select_err" >&2
+        else
+            print_error "Selection cancelled or failed."
+        fi
+        rm -f "$select_err"
         exit 1
     fi
+    rm -f "$select_err"
 
     # Check if we got valid JSON
     if [ -z "$selection_json" ]; then
