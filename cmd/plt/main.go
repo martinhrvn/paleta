@@ -8,6 +8,8 @@ import (
 	"github.com/martinhrvn/paleta/internal/commands"
 	"github.com/martinhrvn/paleta/internal/config"
 	"github.com/martinhrvn/paleta/internal/history"
+	"github.com/martinhrvn/paleta/internal/scan"
+	"github.com/martinhrvn/paleta/internal/ui"
 )
 
 // version is the paleta version. It is overridden at build time via
@@ -50,29 +52,85 @@ func main() {
 }
 
 func handleInitCommand() {
-	// Check for force flag
+	// Parse flags
 	force := false
+	template := false
 	for _, arg := range os.Args[2:] {
-		if arg == "--force" || arg == "-f" {
+		switch arg {
+		case "--force", "-f":
 			force = true
-			break
+		case "--template", "-t":
+			template = true
 		}
 	}
 
-	// Default config path
-	configPath := ".pltrc"
+	const configPath = ".pltrc"
 
-	// Create the config file
-	err := commands.CreateDefaultConfigWithForce(configPath, force)
+	if template {
+		// Legacy behavior: write the static starter template.
+		if err := commands.CreateDefaultConfigWithForce(configPath, force); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating config: %v\n", err)
+			os.Exit(1)
+		}
+		printInitSuccess(configPath)
+		return
+	}
+
+	runInitWizard(configPath)
+}
+
+// runInitWizard scans for projects, lets the user pick which to include, and
+// writes the resulting .pltrc. An existing config is loaded as the starting
+// state so a repeat run shows and preserves what is already configured.
+func runInitWizard(configPath string) {
+	cands, err := scan.Scan(".")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error scanning for projects: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Created default config file: %s\n", configPath)
+	authored, err := commands.LoadAuthoredConfig(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading existing config: %v\n", err)
+		os.Exit(1)
+	}
+
+	items := commands.BuildWizardItems(cands, authored)
+	if len(items) == 0 {
+		fmt.Println("No projects detected in this directory tree.")
+		fmt.Println("Run 'plt init --template' to start from a sample configuration.")
+		return
+	}
+
+	wizard := ui.NewWizardModel(items)
+	locations, confirmed, err := wizard.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error running wizard: %v\n", err)
+		os.Exit(1)
+	}
+	if !confirmed {
+		fmt.Println("Init canceled.")
+		os.Exit(1)
+	}
+	if len(locations) == 0 {
+		fmt.Println("No locations selected; .pltrc was not written.")
+		return
+	}
+
+	content := commands.GenerateConfig(locations, authored)
+	if err := commands.WriteConfig(configPath, content); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing config: %v\n", err)
+		os.Exit(1)
+	}
+
+	printInitSuccess(configPath)
+}
+
+func printInitSuccess(configPath string) {
+	fmt.Printf("Wrote config file: %s\n", configPath)
 	fmt.Println()
 	fmt.Println("Next steps:")
-	fmt.Println("  1. Edit .pltrc to configure your project locations")
+	fmt.Println("  1. Review .pltrc and tweak locations as needed")
 	fmt.Println("  2. Run 'plt list' to see available commands")
 	fmt.Println("  3. Run 'plt select' to interactively select and run commands")
 }
@@ -228,8 +286,9 @@ func showUsage() {
 	fmt.Println("    plt <command> [options]")
 	fmt.Println()
 	fmt.Println("COMMANDS:")
-	fmt.Println("    init                     Create a default .pltrc configuration file")
-	fmt.Println("    init --force             Overwrite existing .pltrc file")
+	fmt.Println("    init                     Interactively scan for projects and build .pltrc")
+	fmt.Println("    init --template          Write a static starter .pltrc template")
+	fmt.Println("    init --template --force  Overwrite existing .pltrc with the template")
 	fmt.Println("    edit                     Open nearest .pltrc in $EDITOR")
 	fmt.Println("    list                     List all available location:command pairs")
 	fmt.Println("    list --format=fzf        List commands in fzf format")
@@ -239,7 +298,7 @@ func showUsage() {
 	fmt.Println()
 	fmt.Println("EXAMPLES:")
 	fmt.Println("    plt init")
-	fmt.Println("    plt init --force")
+	fmt.Println("    plt init --template")
 	fmt.Println("    plt list")
 	fmt.Println("    plt list --format=fzf")
 	fmt.Println("    plt select")

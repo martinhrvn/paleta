@@ -73,7 +73,11 @@ The project types we should support intitally are:
   - either using .pltrc.local.yaml (something like `only: location/foo` or command line argument
   - keyboard shortcut to focus/unfocus while searching
 - [ ] aliases
-- [ ] automatically detect type of a location based on presence of package.json/go.mod/etc.
+- [x] automatically detect type of a location based on presence of package.json/go.mod/etc.
+  - [x] interactive `plt init` wizard: scans the tree (git-aware, skips gitignored/`node_modules`/etc.), multi-select detected projects, generates `.pltrc`
+  - [x] repeatable: existing `.pltrc` loaded as starting state (configured locations pre-selected & tagged, merged on save)
+  - [x] static template preserved behind `plt init --template`
+  - [ ] (future) drill into a selected folder to include/exclude individual detected commands
 - [x] history of executed commands
    - [x] store in a file (per project in ~/.paleta/history/)
    - [x] default sort by frecency of use (50/50 balance)
