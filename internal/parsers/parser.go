@@ -2,7 +2,6 @@ package parsers
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 )
 
@@ -91,13 +90,4 @@ func DetectAndParseCommands(directory string, parsersConfig *ParsersFile) (map[s
 	}
 
 	return commands, nil
-}
-
-// Helper function to check if file exists
-func fileExists(path string) bool {
-	_, err := filepath.Abs(path)
-	if err != nil {
-		return false
-	}
-	return true
 }

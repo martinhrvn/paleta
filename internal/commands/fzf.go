@@ -11,13 +11,10 @@ import (
 	"github.com/martin/go-pm/internal/ui"
 )
 
-// SelectionResult represents the result of a user selection from fzf
-type SelectionResult struct {
-	Directory   string // The actual directory path where command should be executed
-	Command     string // The command to run
-	DisplayName string // The display name shown in fzf (for reference)
-	Action      string // "execute" (default, empty) or "edit"
-}
+// SelectionResult represents the result of a user selection from fzf.
+// It is an alias for ui.SelectionResult so the two packages share one
+// definition and no conversion is needed between them.
+type SelectionResult = ui.SelectionResult
 
 // ParseFzfSelection parses a fzf selection in format "location: command" and returns command and location
 func ParseFzfSelection(selection string) (string, string, error) {
@@ -151,16 +148,7 @@ func RunFzfTUI(cfg *config.Config) ([]SelectionResult, error) {
 		return nil, err
 	}
 
-	// Convert ui.SelectionResult slice to commands.SelectionResult slice
-	cmdResults := make([]SelectionResult, len(results))
-	for i, r := range results {
-		cmdResults[i] = SelectionResult{
-			Directory:   r.Directory,
-			Command:     r.Command,
-			DisplayName: r.DisplayName,
-			Action:      r.Action,
-		}
-	}
-
-	return cmdResults, nil
+	// ui.SelectionResult and commands.SelectionResult are the same type, so
+	// the model's results can be returned directly with no conversion.
+	return results, nil
 }

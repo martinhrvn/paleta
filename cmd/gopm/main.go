@@ -1,9 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/martin/go-pm/internal/commands"
 	"github.com/martin/go-pm/internal/config"
@@ -121,48 +121,56 @@ func handleSelectCommand() {
 	outputSelectionJSON(results)
 }
 
+// selectionJSON is the wire format emitted for a selection. The action field
+// is only present when it carries meaning (currently just "edit").
+type selectionJSON struct {
+	Directory   string `json:"directory"`
+	Command     string `json:"command"`
+	DisplayName string `json:"display_name"`
+	Action      string `json:"action,omitempty"`
+}
+
+func toSelectionJSON(r commands.SelectionResult) selectionJSON {
+	j := selectionJSON{
+		Directory:   r.Directory,
+		Command:     r.Command,
+		DisplayName: r.DisplayName,
+	}
+	// Preserve historical behavior: only "edit" surfaces an action field.
+	if r.Action == "edit" {
+		j.Action = "edit"
+	}
+	return j
+}
+
+// marshalSelection renders selection results as JSON. A single result is
+// rendered as an object (for backward compatibility with the shell wrapper);
+// multiple results are rendered as an array.
+func marshalSelection(results []commands.SelectionResult) ([]byte, error) {
+	if len(results) == 1 {
+		return json.Marshal(toSelectionJSON(results[0]))
+	}
+
+	arr := make([]selectionJSON, len(results))
+	for i, r := range results {
+		arr[i] = toSelectionJSON(r)
+	}
+	return json.Marshal(arr)
+}
+
 func outputSelectionJSON(results []commands.SelectionResult) {
 	if len(results) == 0 {
 		fmt.Fprintln(os.Stderr, "No selection made")
 		os.Exit(1)
 	}
 
-	// Single selection - output as single object for backward compatibility
-	if len(results) == 1 {
-		r := results[0]
-		actionField := ""
-		if r.Action == "edit" {
-			actionField = `,"action":"edit"`
-		}
-		fmt.Printf(`{"directory":"%s","command":"%s","display_name":"%s"%s}`,
-			escapeJSON(r.Directory), escapeJSON(r.Command), escapeJSON(r.DisplayName), actionField)
-		fmt.Println()
-		return
+	data, err := marshalSelection(results)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error encoding selection: %v\n", err)
+		os.Exit(1)
 	}
 
-	// Multiple selections - output as JSON array
-	fmt.Print("[")
-	for i, r := range results {
-		if i > 0 {
-			fmt.Print(",")
-		}
-		actionField := ""
-		if r.Action == "edit" {
-			actionField = `,"action":"edit"`
-		}
-		fmt.Printf(`{"directory":"%s","command":"%s","display_name":"%s"%s}`,
-			escapeJSON(r.Directory), escapeJSON(r.Command), escapeJSON(r.DisplayName), actionField)
-	}
-	fmt.Println("]")
-}
-
-func escapeJSON(s string) string {
-	// Escape special characters for JSON
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, `"`, `\"`)
-	s = strings.ReplaceAll(s, "\n", `\n`)
-	s = strings.ReplaceAll(s, "\t", `\t`)
-	return s
+	fmt.Println(string(data))
 }
 
 func handleRecordCommand() {
