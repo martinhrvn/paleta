@@ -25,15 +25,18 @@ show_usage() {
     echo
     echo "COMMANDS:"
     echo "    run        Interactive command selection and execution (default)"
+    echo "    init       Interactively scan for projects and build .pltrc"
     echo "    edit       Open nearest .pltrc in \$EDITOR"
     echo "    list       List all available commands"
     echo "    version    Show the plt version"
     echo "    help       Show this help message"
     echo
     echo "EXAMPLES:"
-    echo "    plt           # Interactive selection and execution"
-    echo "    plt run       # Same as above"
-    echo "    plt list      # List all commands"
+    echo "    plt              # Interactive selection and execution"
+    echo "    plt run          # Same as above"
+    echo "    plt init         # Build .pltrc from detected projects"
+    echo "    plt init --template  # Write a static starter .pltrc"
+    echo "    plt list         # List all commands"
     echo
     echo "CONFIGURATION:"
     echo "    plt looks for .pltrc files starting from the current directory"
@@ -210,6 +213,11 @@ plt_main() {
     case "${1:-run}" in
         run|tui|"")
             run_command
+            ;;
+        init)
+            # Interactive wizard (or --template). Runs attached to the terminal
+            # and writes .pltrc itself, so pass through args and all fds.
+            "$PLT_BINARY" "$@"
             ;;
         edit)
             "$PLT_BINARY" edit
