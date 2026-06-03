@@ -312,11 +312,11 @@ func TestProjectIdentification(t *testing.T) {
 		t.Fatalf("Failed to create directories: %v", err)
 	}
 
-	// Create .gopmrc to mark project root
-	gopmrc := filepath.Join(projectRoot, ".gopmrc")
-	err = os.WriteFile(gopmrc, []byte("{}"), 0644)
+	// Create .pltrc to mark project root
+	pltrc := filepath.Join(projectRoot, ".pltrc")
+	err = os.WriteFile(pltrc, []byte("{}"), 0644)
 	if err != nil {
-		t.Fatalf("Failed to create .gopmrc: %v", err)
+		t.Fatalf("Failed to create .pltrc: %v", err)
 	}
 
 	// Find project root from subdirectory

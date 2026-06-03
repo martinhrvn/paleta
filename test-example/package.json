@@ -1,5 +1,5 @@
 {
-  "name": "go-pm",
+  "name": "paleta-example",
   "version": "1.0.0",
   "scripts": {
     "start": "echo 'Starting application...'",

@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 )
 
-const ConfigFileName = ".gopmrc"
+const ConfigFileName = ".pltrc"
 
-// FindConfigFile searches for .gopmrc starting from the current working directory
+// FindConfigFile searches for .pltrc starting from the current working directory
 // and traversing up the directory tree until it finds one or reaches the root.
 func FindConfigFile() (string, error) {
 	cwd, err := os.Getwd()
@@ -19,7 +19,7 @@ func FindConfigFile() (string, error) {
 	return findConfigFileFromPath(cwd)
 }
 
-// findConfigFileFromPath searches for .gopmrc starting from the given path
+// findConfigFileFromPath searches for .pltrc starting from the given path
 // and traversing up the directory tree.
 func findConfigFileFromPath(startPath string) (string, error) {
 	currentPath := startPath
@@ -46,21 +46,21 @@ func findConfigFileFromPath(startPath string) (string, error) {
 	return "", fmt.Errorf("no %s found in current directory or any parent directories", ConfigFileName)
 }
 
-// LoadConfigFromDiscovery finds and loads the nearest .gopmrc file
-// If no local .gopmrc is found, it falls back to global project configurations
+// LoadConfigFromDiscovery finds and loads the nearest .pltrc file
+// If no local .pltrc is found, it falls back to global project configurations
 func LoadConfigFromDiscovery() (*Config, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	projectsDir := filepath.Join(homeDir, ".config", "gopm", "projects")
+	projectsDir := filepath.Join(homeDir, ".config", "paleta", "projects")
 	return loadConfigFromDiscoveryWithGlobalFallback(projectsDir)
 }
 
 // loadConfigFromDiscoveryWithGlobalFallback is a helper that allows testing with custom projects directory
 func loadConfigFromDiscoveryWithGlobalFallback(projectsDir string) (*Config, error) {
-	// Try to find local .gopmrc first
+	// Try to find local .pltrc first
 	configPath, err := FindConfigFile()
 
 	if err == nil {
@@ -117,14 +117,14 @@ func loadConfigFromDiscoveryWithGlobalFallback(projectsDir string) (*Config, err
 	return matchedProject, nil
 }
 
-// LoadGlobalProjects loads all project configurations from ~/.config/gopm/projects/
+// LoadGlobalProjects loads all project configurations from ~/.config/paleta/projects/
 func LoadGlobalProjects() ([]*Config, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	projectsDir := filepath.Join(homeDir, ".config", "gopm", "projects")
+	projectsDir := filepath.Join(homeDir, ".config", "paleta", "projects")
 	return loadGlobalProjectsFromDir(projectsDir)
 }
 

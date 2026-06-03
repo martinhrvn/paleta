@@ -11,8 +11,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/martinhrvn/go-pm/internal/config"
-	"github.com/martinhrvn/go-pm/internal/history"
+	"github.com/martinhrvn/paleta/internal/config"
+	"github.com/martinhrvn/paleta/internal/history"
 )
 
 // Muted "Slate" color palette

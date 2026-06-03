@@ -5,9 +5,9 @@ import (
 	"os"
 )
 
-// DefaultConfigTemplate returns the default .gopmrc template
+// DefaultConfigTemplate returns the default .pltrc template
 func DefaultConfigTemplate() string {
-	return `# gopm configuration file
+	return `# paleta configuration file
 # This file defines locations and commands for your project
 
 locations:
@@ -72,17 +72,17 @@ locations:
 #   npm, yarn, pnpm: Automatically discovers scripts from package.json
 #   go: Discovers standard Go commands (planned)
 #
-# For more information, see: https://github.com/martinhrvn/go-pm
+# For more information, see: https://github.com/martinhrvn/paleta
 `
 }
 
-// CreateDefaultConfig creates a default .gopmrc file at the specified path
+// CreateDefaultConfig creates a default .pltrc file at the specified path
 // Returns an error if the file already exists
 func CreateDefaultConfig(configPath string) error {
 	return CreateDefaultConfigWithForce(configPath, false)
 }
 
-// CreateDefaultConfigWithForce creates a default .gopmrc file at the specified path
+// CreateDefaultConfigWithForce creates a default .pltrc file at the specified path
 // If force is true, overwrites existing file
 func CreateDefaultConfigWithForce(configPath string, force bool) error {
 	// Check if file already exists

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/martinhrvn/go-pm/internal/config"
+	"github.com/martinhrvn/paleta/internal/config"
 )
 
 func TestListCommands(t *testing.T) {

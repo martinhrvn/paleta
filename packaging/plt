@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+# paleta - a command palette for your monorepo
+# Shell wrapper that locates and sources the core logic, then dispatches.
+#
+# This single wrapper works across every install layout:
+#   - flat release tarball : binary + core sit beside this script
+#   - FHS install (AUR/deb/rpm/brew) : wrapper in bin/, core in share/paleta/
+#   - development checkout : run ./packaging/plt from the repo root
+# PLT_CORE / PLT_BINARY env vars override the lookups entirely.
+
+set -e
+
+# Resolve this script's real directory, following symlinks. This matters for
+# Homebrew casks and `ln -s` tarball installs, where `plt` is a symlink in a
+# bin/ dir but plt-core.sh + plt-bin live in the real (staging) directory.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+# Locate plt-core.sh across the supported layouts.
+find_plt_core() {
+    local candidates=(
+        "$PLT_CORE"
+        "$SCRIPT_DIR/plt-core.sh"                 # flat tarball
+        "$SCRIPT_DIR/../plt-core.sh"              # dev: packaging/ -> repo root
+        "$SCRIPT_DIR/../share/paleta/plt-core.sh"   # FHS: bin/ -> share/paleta/
+        "/usr/share/paleta/plt-core.sh"
+        "/usr/local/share/paleta/plt-core.sh"
+    )
+    local candidate
+    for candidate in "${candidates[@]}"; do
+        if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+PLT_CORE_PATH=$(find_plt_core)
+if [ -z "$PLT_CORE_PATH" ]; then
+    echo "Error: plt-core.sh not found (looked beside the wrapper and in share/paleta)." >&2
+    echo "Set PLT_CORE to its path to override." >&2
+    exit 1
+fi
+source "$PLT_CORE_PATH"
+
+# Locate the plt-bin binary across the supported layouts.
+find_plt_binary() {
+    if [ -n "$PLT_BINARY" ] && [ -f "$PLT_BINARY" ] && [ -x "$PLT_BINARY" ]; then
+        echo "$PLT_BINARY"
+        return 0
+    fi
+
+    local candidates=(
+        "$SCRIPT_DIR/plt-bin"           # flat tarball
+        "$SCRIPT_DIR/../plt-bin"        # dev: packaging/ -> repo root
+        "$(command -v plt-bin 2>/dev/null)" # on PATH
+        "$HOME/.local/bin/plt-bin"      # user local bin
+        "/usr/bin/plt-bin"              # FHS system install (deb/rpm/AUR)
+        "/usr/local/bin/plt-bin"        # system local bin
+    )
+
+    local candidate
+    for candidate in "${candidates[@]}"; do
+        if [ -n "$candidate" ] && [ -f "$candidate" ] && [ -x "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+PLT_BINARY=$(find_plt_binary)
+if [ -z "$PLT_BINARY" ]; then
+    print_error "plt binary not found."
+    echo "Please ensure plt is installed or plt-bin is in your PATH."
+    echo "If you're in development, run: go build -o plt-bin ./cmd/plt"
+    exit 1
+fi
+export PLT_BINARY
+
+# Dispatch to the core entry point.
+plt_main "$@"

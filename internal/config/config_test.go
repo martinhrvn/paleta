@@ -314,7 +314,7 @@ func TestConfigYAMLParsing(t *testing.T) {
 
 func TestProcessProjectTypesWithEmptyLocation(t *testing.T) {
 	// Create a temp directory with a package.json in the root
-	tmpDir, err := os.MkdirTemp("", "gopm-test")
+	tmpDir, err := os.MkdirTemp("", "plt-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -380,7 +380,7 @@ func TestProcessProjectTypesWithEmptyLocation(t *testing.T) {
 
 func TestLoadConfigWithEmptyLocation(t *testing.T) {
 	// Create a temp directory
-	tmpDir, err := os.MkdirTemp("", "gopm-test")
+	tmpDir, err := os.MkdirTemp("", "plt-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -393,7 +393,7 @@ func TestLoadConfigWithEmptyLocation(t *testing.T) {
       - "go test"
       - "go build"`
 
-	configPath := filepath.Join(tmpDir, ".gopmrc")
+	configPath := filepath.Join(tmpDir, ".pltrc")
 	err = os.WriteFile(configPath, []byte(configYAML), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write config file: %v", err)
@@ -446,7 +446,7 @@ func TestLoadConfig(t *testing.T) {
 	}{
 		{
 			name:       "valid config file",
-			configPath: ".gopmrc",
+			configPath: ".pltrc",
 			configYAML: `locations:
   - name: "frontend"
     location: "packages/frontend"
@@ -471,13 +471,13 @@ func TestLoadConfig(t *testing.T) {
 		},
 		{
 			name:        "config file not found",
-			configPath:  ".gopmrc",
+			configPath:  ".pltrc",
 			wantErr:     true,
 			errContains: "no such file or directory",
 		},
 		{
 			name:       "invalid YAML",
-			configPath: ".gopmrc",
+			configPath: ".pltrc",
 			configYAML: `locations:
   - name: "frontend"
     location: "packages/frontend"
@@ -493,7 +493,7 @@ func TestLoadConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "gopm-test")
+			tmpDir, err := os.MkdirTemp("", "plt-test")
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
@@ -708,7 +708,7 @@ func TestFilterCommands(t *testing.T) {
 
 func TestLoadConfigWithIncludeExclude(t *testing.T) {
 	// Create a temp directory with package.json
-	tmpDir, err := os.MkdirTemp("", "gopm-test")
+	tmpDir, err := os.MkdirTemp("", "plt-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -759,7 +759,7 @@ func TestLoadConfigWithIncludeExclude(t *testing.T) {
     commands:
       - "custom-command"`
 
-	configPath := filepath.Join(tmpDir, ".gopmrc")
+	configPath := filepath.Join(tmpDir, ".pltrc")
 	err = os.WriteFile(configPath, []byte(configYAML), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write config file: %v", err)

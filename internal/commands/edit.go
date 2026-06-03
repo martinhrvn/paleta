@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/martinhrvn/go-pm/internal/config"
+	"github.com/martinhrvn/paleta/internal/config"
 )
 
 // GetEditor returns the editor to use, checking $EDITOR and falling back to vi
@@ -17,16 +17,16 @@ func GetEditor() string {
 	return "vi"
 }
 
-// FindConfigForEdit finds the nearest .gopmrc file path for editing
+// FindConfigForEdit finds the nearest .pltrc file path for editing
 func FindConfigForEdit() (string, error) {
 	configPath, err := config.FindConfigFile()
 	if err != nil {
-		return "", fmt.Errorf("no .gopmrc found: %w", err)
+		return "", fmt.Errorf("no .pltrc found: %w", err)
 	}
 	return configPath, nil
 }
 
-// EditConfig finds the nearest .gopmrc and opens it in the user's editor
+// EditConfig finds the nearest .pltrc and opens it in the user's editor
 func EditConfig() error {
 	configPath, err := FindConfigForEdit()
 	if err != nil {

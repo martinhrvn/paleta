@@ -55,14 +55,14 @@ func TestFindConfigForEdit(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "finds .gopmrc in current directory",
+			name: "finds .pltrc in current directory",
 			setup: func(tmpDir string) error {
-				return os.WriteFile(tmpDir+"/.gopmrc", []byte("locations: []"), 0644)
+				return os.WriteFile(tmpDir+"/.pltrc", []byte("locations: []"), 0644)
 			},
 			wantErr: false,
 		},
 		{
-			name:    "returns error when no .gopmrc found",
+			name:    "returns error when no .pltrc found",
 			setup:   func(tmpDir string) error { return nil },
 			wantErr: true,
 		},
@@ -70,7 +70,7 @@ func TestFindConfigForEdit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "gopm-edit-test")
+			tmpDir, err := os.MkdirTemp("", "plt-edit-test")
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}

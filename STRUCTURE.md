@@ -1,13 +1,13 @@
-# gopm Project Structure
+# paleta Project Structure
 
-This document describes the organization of the gopm codebase.
+This document describes the organization of the paleta codebase.
 
 ## Directory Structure
 
 ```
 .
 ├── cmd/
-│   └── gopm/
+│   └── plt/
 │       └── main.go              # Application entry point
 ├── internal/
 │   ├── config/                  # Configuration management
@@ -30,10 +30,10 @@ This document describes the organization of the gopm codebase.
 │       ├── project_types_test.go # Project type tests
 │       └── npm_project_type.go # npm/yarn/pnpm implementations
 ├── test-example/               # Test configuration examples
-│   ├── .gopmrc                # Example config file
+│   ├── .pltrc                # Example config file
 │   └── package.json           # Example package.json
 ├── scripts/                   # Distribution and installation
-│   ├── gopm.sh               # Enhanced shell wrapper
+│   ├── packaging/plt               # Enhanced shell wrapper
 │   ├── install.sh            # Installation script
 │   ├── completion.bash       # Bash completion
 │   └── completion.zsh        # Zsh completion
@@ -44,7 +44,7 @@ This document describes the organization of the gopm codebase.
 
 ## Package Organization
 
-### `cmd/gopm`
+### `cmd/plt`
 - **Purpose**: Application entry point
 - **Responsibilities**: Command-line argument parsing, coordinating between internal packages
 - **Key files**: `main.go`
@@ -88,7 +88,7 @@ Each package has a single, well-defined responsibility:
 - `projecttypes` handles project-specific integrations
 
 ### 2. **Internal Package Usage**
-The `internal/` directory prevents external packages from importing gopm's internal APIs, following Go best practices for applications.
+The `internal/` directory prevents external packages from importing paleta's internal APIs, following Go best practices for applications.
 
 ### 3. **Testability**
 Each package has comprehensive tests, with clear separation between unit tests and integration tests.
@@ -103,10 +103,10 @@ Each package has comprehensive tests, with clear separation between unit tests a
 ### Building
 ```bash
 # Build the binary
-go build -o gopm ./cmd/gopm
+go build -o plt ./cmd/plt
 
 # Or use make/scripts
-./gopm.sh  # Uses local binary
+./packaging/plt  # Uses local binary
 ```
 
 ### Testing
@@ -126,8 +126,8 @@ go test ./internal/projecttypes
 nix develop
 
 # Or use traditional Go tools
-go run ./cmd/gopm list
-go run ./cmd/gopm select
+go run ./cmd/plt list
+go run ./cmd/plt select
 ```
 
 ## Dependencies

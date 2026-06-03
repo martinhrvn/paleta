@@ -1,7 +1,7 @@
-# gopm - Go Project Manager
+# paleta — a command palette for your monorepo
 
-[![CI](https://github.com/martinhrvn/go-pm/actions/workflows/ci.yml/badge.svg)](https://github.com/martinhrvn/go-pm/actions/workflows/ci.yml)
-[![Release](https://github.com/martinhrvn/go-pm/actions/workflows/release.yml/badge.svg)](https://github.com/martinhrvn/go-pm/actions/workflows/release.yml)
+[![CI](https://github.com/martinhrvn/paleta/actions/workflows/ci.yml/badge.svg)](https://github.com/martinhrvn/paleta/actions/workflows/ci.yml)
+[![Release](https://github.com/martinhrvn/paleta/actions/workflows/release.yml/badge.svg)](https://github.com/martinhrvn/paleta/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A fast, lightweight CLI tool for managing and executing commands across multiple projects in monorepos using fuzzy search.
@@ -9,8 +9,8 @@ A fast, lightweight CLI tool for managing and executing commands across multiple
 ## Features
 
 - **Interactive Command Selection**: Use fuzzy search (via fzf or built-in TUI) to quickly find and run commands
-- **Zsh Keyboard Shortcut**: Press Ctrl+P from anywhere to launch gopm (auto-configured during installation)
-- **Global Project Configuration**: Centralized config management in `~/.config/gopm/projects/` with automatic project detection
+- **Zsh Keyboard Shortcut**: Press Ctrl+P from anywhere to launch plt (auto-configured during installation)
+- **Global Project Configuration**: Centralized config management in `~/.config/paleta/projects/` with automatic project detection
 - **Monorepo Support**: Manage commands across multiple projects in a single configuration
 - **Project Type Detection**: Automatically discovers commands from package.json, go.mod, and other project files
 - **Glob Pattern Support**: Define locations using glob patterns to match multiple directories
@@ -20,55 +20,55 @@ A fast, lightweight CLI tool for managing and executing commands across multiple
 
 ## Installation
 
-> gopm is two parts: the `gopm-bin` binary (runs the TUI) and a `gopm` shell
+> plt is two parts: the `plt-bin` binary (runs the TUI) and a `plt` shell
 > wrapper that performs the actual `cd` + command execution. Every package below
-> installs both, plus the `gopm-core.sh` helper and shell completions.
+> installs both, plus the `plt-core.sh` helper and shell completions.
 > Runtime dependencies: **`jq`** and **`bash`**.
 
 ### Arch Linux (AUR)
 
 ```bash
-yay -S gopm-bin        # or: paru -S gopm-bin
+yay -S plt-bin        # or: paru -S plt-bin
 ```
 
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew install martinhrvn/tap/gopm
+brew install martinhrvn/tap/plt
 ```
 
 ### Debian / Ubuntu (.deb) and Fedora / RHEL (.rpm)
 
 Download the package for your architecture from the
-[latest release](https://github.com/martinhrvn/go-pm/releases/latest):
+[latest release](https://github.com/martinhrvn/paleta/releases/latest):
 
 ```bash
 # Debian/Ubuntu
-sudo dpkg -i gopm_*_linux_amd64.deb
+sudo dpkg -i paleta_*_linux_amd64.deb
 
 # Fedora/RHEL
-sudo rpm -i gopm_*_linux_amd64.rpm
+sudo rpm -i paleta_*_linux_amd64.rpm
 ```
 
 ### Pre-built binaries (tarball)
 
 Download and extract the archive for your platform from the
-[releases page](https://github.com/martinhrvn/go-pm/releases/latest), then put
-the extracted directory on your `PATH` (the `gopm` wrapper finds its siblings):
+[releases page](https://github.com/martinhrvn/paleta/releases/latest), then put
+the extracted directory on your `PATH` (the `plt` wrapper finds its siblings):
 
 ```bash
-tar -xzf gopm_*_linux_amd64.tar.gz
-sudo cp -r gopm_* /opt/gopm
-sudo ln -s /opt/gopm/gopm /usr/local/bin/gopm
+tar -xzf paleta_*_linux_amd64.tar.gz
+sudo cp -r paleta_* /opt/paleta
+sudo ln -s /opt/paleta/plt /usr/local/bin/plt
 ```
 
 ### Using `go install`
 
-Installs only the binary (`gopm-bin`); use the wrapper from a release archive
+Installs only the binary (`plt-bin`); use the wrapper from a release archive
 or the repo for the full experience:
 
 ```bash
-go install github.com/martinhrvn/go-pm/cmd/gopm@latest
+go install github.com/martinhrvn/paleta/cmd/plt@latest
 ```
 
 ### Using Nix
@@ -82,23 +82,23 @@ nix run             # or run directly
 ### From source (install script)
 
 ```bash
-git clone https://github.com/martinhrvn/go-pm
-cd go-pm
+git clone https://github.com/martinhrvn/paleta
+cd paleta
 ./install.sh
 ```
 
-The installer builds and installs the `gopm-bin` binary plus the `gopm`
+The installer builds and installs the `plt-bin` binary plus the `plt`
 wrapper to `~/.local/bin`, sets up bash/zsh completion, and configures the
 zsh Ctrl+P keyboard shortcut.
 
 ### Manual build
 
 ```bash
-go build -o gopm-bin ./cmd/gopm
-cp gopm-bin ~/.local/bin/
-cp packaging/gopm ~/.local/bin/gopm
-cp gopm-core.sh ~/.local/bin/      # the wrapper sources this beside itself
-chmod +x ~/.local/bin/gopm
+go build -o plt-bin ./cmd/plt
+cp plt-bin ~/.local/bin/
+cp packaging/plt ~/.local/bin/plt
+cp plt-core.sh ~/.local/bin/      # the wrapper sources this beside itself
+chmod +x ~/.local/bin/plt
 ```
 
 ## Quick Start
@@ -106,12 +106,12 @@ chmod +x ~/.local/bin/gopm
 1. Initialize a new configuration file in your project root:
 
 ```bash
-gopm init
+plt init
 ```
 
-This creates a `.gopmrc` file with helpful examples and documentation.
+This creates a `.pltrc` file with helpful examples and documentation.
 
-2. Edit the `.gopmrc` file to configure your project locations:
+2. Edit the `.pltrc` file to configure your project locations:
 
 ```yaml
 locations:
@@ -135,24 +135,24 @@ locations:
       - "./backup.sh"
 ```
 
-3. Run gopm:
+3. Run plt:
 
 ```bash
 # Interactive selection (default)
-gopm
+plt
 
 # List all available commands
-gopm list
+plt list
 
 # Enhanced selection with location filtering
-gopm select --enhanced
+plt select --enhanced
 ```
 
 ## Configuration
 
 ### Configuration File Format
 
-gopm looks for a `.gopmrc` file starting from the current directory and traversing up the directory tree.
+plt looks for a `.pltrc` file starting from the current directory and traversing up the directory tree.
 
 ```yaml
 locations:
@@ -308,7 +308,7 @@ locations:
 
 ### Custom Parsers
 
-Create `~/.gopm/parsers.yaml` to define custom command parsers:
+Create `~/.paleta/parsers.yaml` to define custom command parsers:
 
 ```yaml
 parsers:
@@ -326,19 +326,19 @@ parsers:
 
 ### Global Project Configuration
 
-Instead of having `.gopmrc` files in each project, you can maintain centralized configurations in `~/.config/gopm/projects/`. This is useful for backing up your project configurations or managing them across multiple machines.
+Instead of having `.pltrc` files in each project, you can maintain centralized configurations in `~/.config/paleta/projects/`. This is useful for backing up your project configurations or managing them across multiple machines.
 
 **Setup:**
 
-Create project configuration files in `~/.config/gopm/projects/`:
+Create project configuration files in `~/.config/paleta/projects/`:
 
 ```bash
-mkdir -p ~/.config/gopm/projects
+mkdir -p ~/.config/paleta/projects
 ```
 
 **Example Project Configuration:**
 
-Create `~/.config/gopm/projects/my-project.yaml`:
+Create `~/.config/paleta/projects/my-project.yaml`:
 
 ```yaml
 root: /home/user/projects/my-project
@@ -353,22 +353,22 @@ locations:
 
 **How It Works:**
 
-1. gopm first looks for `.gopmrc` in the current directory and parent directories
-2. If a local `.gopmrc` is found, it takes priority (global frecency settings still apply)
-3. If no local config is found, gopm scans `~/.config/gopm/projects/*.yaml`
+1. plt first looks for `.pltrc` in the current directory and parent directories
+2. If a local `.pltrc` is found, it takes priority (global frecency settings still apply)
+3. If no local config is found, plt scans `~/.config/paleta/projects/*.yaml`
 4. It finds the project whose `root` matches or is a parent of the current directory
 5. If multiple projects match, the closest (most specific) one is used
 
 **Benefits:**
 
 - **Centralized Configuration**: Keep all project configs in one place for easy backup
-- **No Per-Project Files**: Useful for projects where you can't or don't want to add a `.gopmrc`
-- **Multiple Machines**: Sync your `~/.config/gopm/projects/` across machines
-- **Flexible Override**: Local `.gopmrc` still takes priority when needed
+- **No Per-Project Files**: Useful for projects where you can't or don't want to add a `.pltrc`
+- **Multiple Machines**: Sync your `~/.config/paleta/projects/` across machines
+- **Flexible Override**: Local `.pltrc` still takes priority when needed
 
 **Global Settings:**
 
-You can also configure global frecency settings in `~/.config/gopm/config.yaml`:
+You can also configure global frecency settings in `~/.config/paleta/config.yaml`:
 
 ```yaml
 frecency:
@@ -377,34 +377,34 @@ frecency:
   frequency_weight: 0.5  # 0.0 to 1.0
 ```
 
-These settings apply to all projects unless overridden in a local `.gopmrc`.
+These settings apply to all projects unless overridden in a local `.pltrc`.
 
 ## Usage
 
 ### Commands
 
 ```bash
-# Initialize a new .gopmrc configuration file
-gopm init
+# Initialize a new .pltrc configuration file
+plt init
 
-# Overwrite existing .gopmrc file
-gopm init --force
+# Overwrite existing .pltrc file
+plt init --force
 
 # Interactive command selection and execution
-gopm
-gopm select
+plt
+plt select
 
 # Enhanced selection with location filtering
-gopm select --enhanced
+plt select --enhanced
 
 # List all available commands
-gopm list
+plt list
 
 # List in fzf format
-gopm list --format=fzf
+plt list --format=fzf
 
 # Show help
-gopm help
+plt help
 ```
 
 ### Enhanced Mode
@@ -419,7 +419,7 @@ The enhanced mode (`--enhanced` flag) provides:
 
 #### Wrapper Script
 
-The gopm wrapper script automatically:
+The plt wrapper script automatically:
 - Changes to the correct directory
 - Executes the selected command
 - Handles errors gracefully
@@ -427,7 +427,7 @@ The gopm wrapper script automatically:
 
 #### Zsh Keyboard Shortcut (Ctrl+P)
 
-The installer automatically sets up zsh integration that allows you to launch gopm from anywhere with a keyboard shortcut.
+The installer automatically sets up zsh integration that allows you to launch plt from anywhere with a keyboard shortcut.
 
 **Default Setup (Automatic):**
 
@@ -437,7 +437,7 @@ After running `./install.sh`, the integration is automatically configured in you
 source ~/.zshrc
 ```
 
-Now press **Ctrl+P** to launch gopm's interactive selector from anywhere!
+Now press **Ctrl+P** to launch plt's interactive selector from anywhere!
 
 **Customization:**
 
@@ -445,13 +445,13 @@ You can customize the behavior by setting environment variables in your `~/.zshr
 
 ```bash
 # Use a different keybinding (e.g., Ctrl+G instead of Ctrl+P)
-export GOPM_KEYBIND='^G'
+export PLT_KEYBIND='^G'
 
 # Use enhanced mode by default
-export GOPM_MODE='--enhanced'
+export PLT_MODE='--enhanced'
 
 # Custom binary location (if needed)
-export GOPM_BINARY="$HOME/custom/path/gopm-bin"
+export PLT_BINARY="$HOME/custom/path/plt-bin"
 ```
 
 **Manual Setup:**
@@ -460,11 +460,11 @@ If you need to set up the integration manually:
 
 ```bash
 # Download the integration file
-mkdir -p ~/.local/share/gopm
-cp gopm-integration.zsh ~/.local/share/gopm/
+mkdir -p ~/.local/share/paleta
+cp plt-integration.zsh ~/.local/share/paleta/
 
 # Add to your .zshrc
-echo '[ -f "$HOME/.local/share/gopm/gopm-integration.zsh" ] && source "$HOME/.local/share/gopm/gopm-integration.zsh"' >> ~/.zshrc
+echo '[ -f "$HOME/.local/share/paleta/plt-integration.zsh" ] && source "$HOME/.local/share/paleta/plt-integration.zsh"' >> ~/.zshrc
 
 # Reload your shell
 source ~/.zshrc
@@ -472,7 +472,7 @@ source ~/.zshrc
 
 **Features:**
 
-- Launch gopm with a single keypress from anywhere
+- Launch plt with a single keypress from anywhere
 - Selected command is executed in the correct directory
 - Command appears in your shell history
 - Automatically records command usage for frecency sorting
@@ -593,7 +593,7 @@ locations:
 
 ```bash
 # Build the binary
-go build -o gopm ./cmd/gopm
+go build -o plt ./cmd/plt
 
 # Run tests
 go test ./...
@@ -621,21 +621,21 @@ go test -cover ./...
 ```
 .
 ├── cmd/
-│   └── gopm/           # Main application entry point
+│   └── plt/           # Main application entry point
 ├── internal/
 │   ├── config/         # Configuration parsing and discovery
 │   ├── commands/       # Command execution and formatting
 │   ├── projecttypes/   # Project type parsers
 │   └── ui/            # TUI components
 ├── examples/          # Example configurations
-├── packaging/gopm    # Shell wrapper script (installed as `gopm`)
+├── packaging/plt    # Shell wrapper script (installed as `plt`)
 ├── install.sh        # Installation script
 └── flake.nix         # Nix flake configuration
 ```
 
 ## Troubleshooting
 
-### gopm binary not found
+### plt binary not found
 
 Ensure `~/.local/bin` is in your PATH:
 
@@ -662,11 +662,11 @@ sudo dnf install jq
 
 ### Config file not found
 
-gopm searches for `.gopmrc` in the current directory and all parent directories. Create one in your project root.
+plt searches for `.pltrc` in the current directory and all parent directories. Create one in your project root.
 
 ### Commands not showing up
 
-1. Check your `.gopmrc` syntax with `gopm list`
+1. Check your `.pltrc` syntax with `plt list`
 2. Verify the `location` paths exist
 3. For type-based detection, ensure the config file exists (e.g., `package.json` for npm)
 

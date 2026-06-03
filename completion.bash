@@ -1,7 +1,7 @@
-# Bash completion for gopm
+# Bash completion for plt
 # Source this file or copy to your bash completion directory
 
-_gopm_completion() {
+_plt_completion() {
     local cur prev opts
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
@@ -15,11 +15,11 @@ _gopm_completion() {
     fi
     
     case "${prev}" in
-        gopm)
+        plt)
             COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
             return 0
             ;;
     esac
 }
 
-complete -F _gopm_completion gopm
+complete -F _plt_completion plt

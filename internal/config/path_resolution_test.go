@@ -14,14 +14,14 @@ func TestPathResolutionFromSubdirectory(t *testing.T) {
 	// Create a temp directory structure:
 	// tmpDir/
 	//   project/
-	//     .gopmrc (with location: "packages/frontend")
+	//     .pltrc (with location: "packages/frontend")
 	//     packages/
 	//       frontend/
 	//         package.json
 	//     subdir/
 	//       nested/ (we'll run from here)
 
-	tmpDir, err := os.MkdirTemp("", "gopm-path-resolution-test")
+	tmpDir, err := os.MkdirTemp("", "plt-path-resolution-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -56,13 +56,13 @@ func TestPathResolutionFromSubdirectory(t *testing.T) {
 		t.Fatalf("Failed to create package.json: %v", err)
 	}
 
-	// Create .gopmrc in project root with relative path
+	// Create .pltrc in project root with relative path
 	configContent := `locations:
   - name: "frontend"
     location: "packages/frontend"
     type: "npm"`
 
-	configPath := filepath.Join(projectDir, ".gopmrc")
+	configPath := filepath.Join(projectDir, ".pltrc")
 	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create config file: %v", err)
@@ -80,7 +80,7 @@ func TestPathResolutionFromSubdirectory(t *testing.T) {
 		t.Fatalf("Failed to change to nested directory: %v", err)
 	}
 
-	// Load config from discovery (which should find .gopmrc in parent)
+	// Load config from discovery (which should find .pltrc in parent)
 	config, err := LoadConfigFromDiscovery()
 	if err != nil {
 		t.Fatalf("LoadConfigFromDiscovery() error = %v", err)

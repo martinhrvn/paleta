@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# gopm installer — builds from source and installs the binary, the gopm
-# wrapper, gopm-core.sh, shell completions, and the zsh Ctrl+P integration.
+# paleta installer — builds from source and installs the binary, the plt
+# wrapper, plt-core.sh, shell completions, and the zsh Ctrl+P integration.
 #
 # For pre-built packages instead, see the README (AUR / Homebrew / deb / rpm /
 # release tarballs). This script is the "git clone && ./install.sh" path.
@@ -41,18 +41,18 @@ check_dependencies() {
 }
 
 build_binary() {
-    print_step "Building gopm-bin..."
-    ( cd "$REPO_DIR" && go build -ldflags "-s -w" -o "$INSTALL_DIR/gopm-bin" ./cmd/gopm )
-    chmod +x "$INSTALL_DIR/gopm-bin"
-    print_success "Installed binary: $INSTALL_DIR/gopm-bin"
+    print_step "Building plt-bin..."
+    ( cd "$REPO_DIR" && go build -ldflags "-s -w" -o "$INSTALL_DIR/plt-bin" ./cmd/plt )
+    chmod +x "$INSTALL_DIR/plt-bin"
+    print_success "Installed binary: $INSTALL_DIR/plt-bin"
 }
 
 install_wrapper() {
-    print_step "Installing gopm wrapper and core script..."
-    install -m 0755 "$REPO_DIR/packaging/gopm" "$INSTALL_DIR/gopm"
-    # The wrapper sources gopm-core.sh from beside itself first, so co-locate it.
-    install -m 0644 "$REPO_DIR/gopm-core.sh" "$INSTALL_DIR/gopm-core.sh"
-    print_success "Installed wrapper: $INSTALL_DIR/gopm"
+    print_step "Installing plt wrapper and core script..."
+    install -m 0755 "$REPO_DIR/packaging/plt" "$INSTALL_DIR/plt"
+    # The wrapper sources plt-core.sh from beside itself first, so co-locate it.
+    install -m 0644 "$REPO_DIR/plt-core.sh" "$INSTALL_DIR/plt-core.sh"
+    print_success "Installed wrapper: $INSTALL_DIR/plt"
 }
 
 install_completions() {
@@ -60,30 +60,30 @@ install_completions() {
 
     local bash_dir="$HOME/.local/share/bash-completion/completions"
     mkdir -p "$bash_dir"
-    install -m 0644 "$REPO_DIR/completion.bash" "$bash_dir/gopm"
-    print_success "Bash completion: $bash_dir/gopm"
+    install -m 0644 "$REPO_DIR/completion.bash" "$bash_dir/plt"
+    print_success "Bash completion: $bash_dir/plt"
 
     local zsh_dir="$HOME/.zsh/completions"
     mkdir -p "$zsh_dir"
-    install -m 0644 "$REPO_DIR/completion.zsh" "$zsh_dir/_gopm"
-    print_success "Zsh completion: $zsh_dir/_gopm"
+    install -m 0644 "$REPO_DIR/completion.zsh" "$zsh_dir/_plt"
+    print_success "Zsh completion: $zsh_dir/_plt"
     print_info "Ensure '$zsh_dir' is on your \$fpath (in ~/.zshrc, before compinit)."
 }
 
 setup_zsh_integration() {
     print_step "Setting up zsh Ctrl+P integration..."
-    local dir="$HOME/.local/share/gopm"
-    local file="$dir/gopm-integration.zsh"
+    local dir="$HOME/.local/share/paleta"
+    local file="$dir/plt-integration.zsh"
     local zshrc="$HOME/.zshrc"
 
     mkdir -p "$dir"
-    install -m 0644 "$REPO_DIR/gopm-integration.zsh" "$file"
+    install -m 0644 "$REPO_DIR/plt-integration.zsh" "$file"
     print_success "Integration installed: $file"
 
-    if [ -f "$zshrc" ] && ! grep -q "gopm-integration.zsh" "$zshrc" 2>/dev/null; then
+    if [ -f "$zshrc" ] && ! grep -q "plt-integration.zsh" "$zshrc" 2>/dev/null; then
         {
             echo ""
-            echo "# gopm keyboard shortcut (Ctrl+P)"
+            echo "# paleta keyboard shortcut (Ctrl+P)"
             echo "[ -f \"$file\" ] && source \"$file\""
         } >> "$zshrc"
         print_success "Added integration source line to $zshrc"
@@ -99,7 +99,7 @@ setup_path() {
 }
 
 main() {
-    print_step "Installing gopm from $REPO_DIR..."
+    print_step "Installing paleta from $REPO_DIR..."
     mkdir -p "$INSTALL_DIR"
     check_dependencies
     build_binary
@@ -109,11 +109,11 @@ main() {
     setup_path
 
     echo
-    print_success "gopm installed!"
-    echo "  gopm           # Interactive selection"
-    echo "  gopm list      # List commands"
-    echo "  gopm version   # Show version"
-    echo "  gopm help      # Help"
+    print_success "paleta installed!"
+    echo "  plt           # Interactive selection"
+    echo "  plt list      # List commands"
+    echo "  plt version   # Show version"
+    echo "  plt help      # Help"
 }
 
 if [ "${EUID:-$(id -u)}" -eq 0 ]; then

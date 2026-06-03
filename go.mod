@@ -1,4 +1,4 @@
-module github.com/martinhrvn/go-pm
+module github.com/martinhrvn/paleta
 
 go 1.24.2
 

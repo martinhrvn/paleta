@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/martinhrvn/go-pm/internal/projecttypes"
+	"github.com/martinhrvn/paleta/internal/projecttypes"
 	"gopkg.in/yaml.v3"
 )
 
@@ -140,7 +140,7 @@ func makeLocationPathsAbsolute(config *Config) error {
 			// Join location with root directory
 			absPath = filepath.Join(config.Root, config.Locations[i].Location)
 		} else {
-			// Use current working directory (local .gopmrc case)
+			// Use current working directory (local .pltrc case)
 			var err error
 			absPath, err = filepath.Abs(config.Locations[i].Location)
 			if err != nil {
@@ -303,7 +303,7 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// LoadGlobalConfig loads the global configuration from ~/.config/gopm/config.yaml
+// LoadGlobalConfig loads the global configuration from ~/.config/paleta/config.yaml
 func LoadGlobalConfig() (*Config, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -313,7 +313,7 @@ func LoadGlobalConfig() (*Config, error) {
 		}, nil
 	}
 
-	globalConfigPath := filepath.Join(homeDir, ".config", "gopm", "config.yaml")
+	globalConfigPath := filepath.Join(homeDir, ".config", "paleta", "config.yaml")
 
 	// If global config doesn't exist, return defaults
 	if !fileExists(globalConfigPath) {

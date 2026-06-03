@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/martinhrvn/go-pm/internal/parsers"
+	"github.com/martinhrvn/paleta/internal/parsers"
 )
 
 // ConfigurableProjectType implements ProjectType using the new parser system

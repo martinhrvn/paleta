@@ -9,7 +9,7 @@ import (
 func TestCreateDefaultConfig(t *testing.T) {
 	// Create a temporary directory
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, ".gopmrc")
+	configPath := filepath.Join(tmpDir, ".pltrc")
 
 	// Test creating config in an empty directory
 	err := CreateDefaultConfig(configPath)
@@ -52,7 +52,7 @@ func TestCreateDefaultConfig(t *testing.T) {
 func TestCreateDefaultConfigFileExists(t *testing.T) {
 	// Create a temporary directory with an existing config
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, ".gopmrc")
+	configPath := filepath.Join(tmpDir, ".pltrc")
 
 	// Create an existing file
 	existingContent := "existing content"
@@ -77,7 +77,7 @@ func TestCreateDefaultConfigFileExists(t *testing.T) {
 func TestCreateDefaultConfigWithForce(t *testing.T) {
 	// Create a temporary directory with an existing config
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, ".gopmrc")
+	configPath := filepath.Join(tmpDir, ".pltrc")
 
 	// Create an existing file
 	existingContent := "existing content"

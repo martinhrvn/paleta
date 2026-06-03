@@ -19,51 +19,51 @@ func TestFindConfigFile(t *testing.T) {
 			name:      "config in current directory",
 			setupDirs: []string{"project"},
 			setupConfigs: map[string]string{
-				"project/.gopmrc": `locations:
+				"project/.pltrc": `locations:
   - location: "src"
     commands: ["build"]`,
 			},
 			startDir:       "project",
-			expectedConfig: "project/.gopmrc",
+			expectedConfig: "project/.pltrc",
 			wantErr:        false,
 		},
 		{
 			name:      "config in parent directory",
 			setupDirs: []string{"project", "project/subdir"},
 			setupConfigs: map[string]string{
-				"project/.gopmrc": `locations:
+				"project/.pltrc": `locations:
   - location: "src"
     commands: ["build"]`,
 			},
 			startDir:       "project/subdir",
-			expectedConfig: "project/.gopmrc",
+			expectedConfig: "project/.pltrc",
 			wantErr:        false,
 		},
 		{
 			name:      "config in grandparent directory",
 			setupDirs: []string{"project", "project/subdir", "project/subdir/nested"},
 			setupConfigs: map[string]string{
-				"project/.gopmrc": `locations:
+				"project/.pltrc": `locations:
   - location: "src"
     commands: ["build"]`,
 			},
 			startDir:       "project/subdir/nested",
-			expectedConfig: "project/.gopmrc",
+			expectedConfig: "project/.pltrc",
 			wantErr:        false,
 		},
 		{
 			name:      "config in closer directory takes precedence",
 			setupDirs: []string{"project", "project/subdir"},
 			setupConfigs: map[string]string{
-				"project/.gopmrc": `locations:
+				"project/.pltrc": `locations:
   - location: "root"
     commands: ["build"]`,
-				"project/subdir/.gopmrc": `locations:
+				"project/subdir/.pltrc": `locations:
   - location: "subdir"
     commands: ["test"]`,
 			},
 			startDir:       "project/subdir",
-			expectedConfig: "project/subdir/.gopmrc",
+			expectedConfig: "project/subdir/.pltrc",
 			wantErr:        false,
 		},
 		{
@@ -76,19 +76,19 @@ func TestFindConfigFile(t *testing.T) {
 			name:      "config in root directory",
 			setupDirs: []string{"project", "project/subdir", "project/subdir/nested", "project/subdir/nested/deep"},
 			setupConfigs: map[string]string{
-				"project/.gopmrc": `locations:
+				"project/.pltrc": `locations:
   - location: "root"
     commands: ["build"]`,
 			},
 			startDir:       "project/subdir/nested/deep",
-			expectedConfig: "project/.gopmrc",
+			expectedConfig: "project/.pltrc",
 			wantErr:        false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "gopm-discovery-test")
+			tmpDir, err := os.MkdirTemp("", "plt-discovery-test")
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
@@ -149,7 +149,7 @@ func TestFindConfigFile(t *testing.T) {
 }
 
 func TestLoadConfigFromDiscovery(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "gopm-discovery-integration-test")
+	tmpDir, err := os.MkdirTemp("", "plt-discovery-integration-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestLoadConfigFromDiscovery(t *testing.T) {
     type: "npm"
     commands: ["start", "build"]`
 
-	configPath := filepath.Join(tmpDir, "project/.gopmrc")
+	configPath := filepath.Join(tmpDir, "project/.pltrc")
 	err = os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create config file: %v", err)
@@ -296,7 +296,7 @@ locations:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temporary projects directory
-			tmpDir, err := os.MkdirTemp("", "gopm-global-projects-test")
+			tmpDir, err := os.MkdirTemp("", "plt-global-projects-test")
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
@@ -440,7 +440,7 @@ func TestLoadConfigFromDiscoveryWithGlobalFallback(t *testing.T) {
 		wantErr            bool
 	}{
 		{
-			name:             "local .gopmrc takes precedence",
+			name:             "local .pltrc takes precedence",
 			setupLocalConfig: true,
 			localConfigContent: `locations:
   - location: "local-src"
@@ -484,7 +484,7 @@ locations:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temporary directory structure
-			tmpDir, err := os.MkdirTemp("", "gopm-discovery-fallback-test")
+			tmpDir, err := os.MkdirTemp("", "plt-discovery-fallback-test")
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
@@ -499,7 +499,7 @@ locations:
 
 			// Setup local config if needed
 			if tt.setupLocalConfig {
-				configPath := filepath.Join(projectDir, ".gopmrc")
+				configPath := filepath.Join(projectDir, ".pltrc")
 				err = os.WriteFile(configPath, []byte(tt.localConfigContent), 0644)
 				if err != nil {
 					t.Fatalf("Failed to create local config: %v", err)

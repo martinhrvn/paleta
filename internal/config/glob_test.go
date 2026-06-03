@@ -246,7 +246,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "gopm-glob-test")
+			tmpDir, err := os.MkdirTemp("", "plt-glob-test")
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}

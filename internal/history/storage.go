@@ -115,10 +115,10 @@ func GetHistoryPath(projectRoot string) string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		// Fallback to /tmp if home directory can't be determined
-		return filepath.Join("/tmp", ".gopm", "history", hashProjectRoot(projectRoot)+".json")
+		return filepath.Join("/tmp", ".paleta", "history", hashProjectRoot(projectRoot)+".json")
 	}
 
-	historyDir := filepath.Join(homeDir, ".gopm", "history")
+	historyDir := filepath.Join(homeDir, ".paleta", "history")
 	return filepath.Join(historyDir, hashProjectRoot(projectRoot)+".json")
 }
 

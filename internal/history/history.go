@@ -123,7 +123,7 @@ func (h *History) Prune(maxEntries int) {
 	}
 }
 
-// FindProjectRoot finds the project root directory by looking for .gopmrc or .git
+// FindProjectRoot finds the project root directory by looking for .pltrc or .git
 func FindProjectRoot(startPath string) (string, error) {
 	currentPath, err := filepath.Abs(startPath)
 	if err != nil {
@@ -132,9 +132,9 @@ func FindProjectRoot(startPath string) (string, error) {
 
 	// Walk up the directory tree
 	for {
-		// Check for .gopmrc
-		gopmrc := filepath.Join(currentPath, ".gopmrc")
-		if _, err := os.Stat(gopmrc); err == nil {
+		// Check for .pltrc
+		pltrc := filepath.Join(currentPath, ".pltrc")
+		if _, err := os.Stat(pltrc); err == nil {
 			return currentPath, nil
 		}
 

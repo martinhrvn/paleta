@@ -8,7 +8,7 @@ import (
 )
 
 func TestLoadConfigWithGlobExpansion(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "gopm-config-glob-test")
+	tmpDir, err := os.MkdirTemp("", "plt-config-glob-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestLoadConfigWithGlobExpansion(t *testing.T) {
       - "start"
       - "build"`
 
-	configPath := filepath.Join(tmpDir, ".gopmrc")
+	configPath := filepath.Join(tmpDir, ".pltrc")
 	err = os.WriteFile(configPath, []byte(configYAML), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write config file: %v", err)
@@ -95,7 +95,7 @@ func TestLoadConfigWithGlobExpansion(t *testing.T) {
 }
 
 func TestLoadConfigWithInvalidGlobPattern(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "gopm-config-invalid-glob-test")
+	tmpDir, err := os.MkdirTemp("", "plt-config-invalid-glob-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestLoadConfigWithInvalidGlobPattern(t *testing.T) {
     commands:
       - "start"`
 
-	configPath := filepath.Join(tmpDir, ".gopmrc")
+	configPath := filepath.Join(tmpDir, ".pltrc")
 	err = os.WriteFile(configPath, []byte(configYAML), 0644)
 	if err != nil {
 		t.Fatalf("Failed to write config file: %v", err)

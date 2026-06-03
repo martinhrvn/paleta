@@ -35,7 +35,7 @@ type ParsersFile struct {
 	Parsers map[string]ParserConfig `yaml:"parsers"`
 }
 
-// LoadParsersConfig loads parser configuration from ~/.gopm/parsers.yaml
+// LoadParsersConfig loads parser configuration from ~/.paleta/parsers.yaml
 func LoadParsersConfig() (*ParsersFile, error) {
 	// Start with embedded defaults
 	defaults, err := loadEmbeddedDefaults()
@@ -50,7 +50,7 @@ func LoadParsersConfig() (*ParsersFile, error) {
 		return defaults, nil
 	}
 
-	configPath := filepath.Join(homeDir, ".gopm", "parsers.yaml")
+	configPath := filepath.Join(homeDir, ".paleta", "parsers.yaml")
 	
 	// If user config doesn't exist, return defaults
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {

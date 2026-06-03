@@ -28,7 +28,7 @@ func TestNpmParseCommands(t *testing.T) {
 	npmType := &NpmProjectType{}
 
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "gopm-test-")
+	tempDir, err := os.MkdirTemp("", "plt-test-")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestNpmParseCommandsInvalidJSON(t *testing.T) {
 	npmType := &NpmProjectType{}
 
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "gopm-test-")
+	tempDir, err := os.MkdirTemp("", "plt-test-")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestGetProjectType(t *testing.T) {
 
 func TestDiscoverProjectType(t *testing.T) {
 	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "gopm-test-")
+	tempDir, err := os.MkdirTemp("", "plt-test-")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestDiscoverProjectType(t *testing.T) {
 	}
 
 	// Test with no config files
-	emptyDir, err := os.MkdirTemp("", "gopm-test-empty-")
+	emptyDir, err := os.MkdirTemp("", "plt-test-empty-")
 	if err != nil {
 		t.Fatalf("Failed to create empty temp dir: %v", err)
 	}

@@ -1,8 +1,0 @@
-locations:
-  - name: "test"
-    location: "."
-    type: "npm"
-    commands:
-      - "echo 'Hello from gopm!'"
-      - "pwd"
-      - "ls -la"

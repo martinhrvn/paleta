@@ -17,8 +17,8 @@ result
 dist/
 
 # Locally built binaries
-/gopm
-/gopm-bin
+/plt
+/plt-bin
 
 # Dependency directories (remove the comment below to include it)
 # vendor/

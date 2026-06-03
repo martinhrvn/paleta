@@ -5,7 +5,7 @@ import "os"
 // EffectiveEnv computes the environment variables that apply to a command.
 // Location-level env provides defaults; command-level env overrides them per
 // key. Values may reference the ambient process environment and sibling
-// gopm-defined variables (e.g. "${HOME}/bin" or "${BIN}:$PATH"); references are
+// paleta-defined variables (e.g. "${HOME}/bin" or "${BIN}:$PATH"); references are
 // resolved before the command runs. Returns nil when no env is defined.
 func EffectiveEnv(loc Location, cmd Command) map[string]string {
 	if len(loc.Env) == 0 && len(cmd.Env) == 0 {

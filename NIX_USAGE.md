@@ -1,4 +1,4 @@
-# Nix Usage Guide for gopm
+# Nix Usage Guide for paleta
 
 This project includes a comprehensive Nix flake for easy installation and development.
 
@@ -10,10 +10,10 @@ Install directly from the repository:
 
 ```bash
 # Install to your profile
-nix profile install github:martin/go-pm
+nix profile install github:martinhrvn/paleta
 
 # Or run without installing
-nix run github:martin/go-pm
+nix run github:martinhrvn/paleta
 ```
 
 ### Development
@@ -22,8 +22,8 @@ Enter the development environment:
 
 ```bash
 # Clone the repository
-git clone https://github.com/martin/go-pm
-cd go-pm
+git clone https://github.com/martinhrvn/paleta
+cd paleta
 
 # Enter development shell
 nix develop
@@ -37,34 +37,34 @@ direnv allow
 
 The flake provides several packages:
 
-- `gopm` - Complete package with binary and wrapper (default)
-- `gopm-bin` - Just the Go binary
-- `gopm-wrapper` - Just the shell wrapper
-- `gopm-completions` - Shell completions for bash/zsh
+- `plt` - Complete package with binary and wrapper (default)
+- `plt-bin` - Just the Go binary
+- `plt-wrapper` - Just the shell wrapper
+- `plt-completions` - Shell completions for bash/zsh
 
 ## Usage Examples
 
-### Run gopm
+### Run plt
 
 ```bash
 # Interactive command selection
-nix run .#gopm
+nix run .#plt
 
 # List available commands
-nix run .#gopm -- list
+nix run .#plt -- list
 
 # Show help
-nix run .#gopm -- help
+nix run .#plt -- help
 ```
 
 ### Development Commands
 
 ```bash
 # Build the binary
-nix build .#gopm-bin
+nix build .#plt-bin
 
 # Build everything
-nix build .#gopm
+nix build .#plt
 
 # Run tests
 nix develop -c go test ./...
@@ -87,8 +87,8 @@ The development environment includes:
 
 The flake automatically installs shell completions:
 
-- **Bash**: `$out/share/bash-completion/completions/gopm`
-- **Zsh**: `$out/share/zsh/site-functions/_gopm`
+- **Bash**: `$out/share/bash-completion/completions/plt`
+- **Zsh**: `$out/share/zsh/site-functions/_plt`
 
 ## Integration with NixOS
 
@@ -98,7 +98,7 @@ Add to your NixOS configuration:
 # configuration.nix
 {
   environment.systemPackages = with pkgs; [
-    (import (fetchTarball "https://github.com/martin/go-pm/archive/main.tar.gz")).packages.${system}.gopm
+    (import (fetchTarball "https://github.com/martinhrvn/paleta/archive/main.tar.gz")).packages.${system}.plt
   ];
 }
 ```
@@ -108,14 +108,14 @@ Or using flakes in your system configuration:
 ```nix
 # flake.nix
 {
-  inputs.gopm.url = "github:martin/go-pm";
+  inputs.plt.url = "github:martinhrvn/paleta";
   
-  outputs = { self, nixpkgs, gopm, ... }: {
+  outputs = { self, nixpkgs, plt, ... }: {
     nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
         {
-          environment.systemPackages = [ gopm.packages.x86_64-linux.gopm ];
+          environment.systemPackages = [ plt.packages.x86_64-linux.plt ];
         }
       ];
     };
@@ -129,7 +129,7 @@ Or using flakes in your system configuration:
 # home.nix
 {
   home.packages = with pkgs; [
-    (import (fetchTarball "https://github.com/martin/go-pm/archive/main.tar.gz")).packages.${system}.gopm
+    (import (fetchTarball "https://github.com/martinhrvn/paleta/archive/main.tar.gz")).packages.${system}.plt
   ];
 }
 ```
@@ -150,7 +150,7 @@ The flake supports multiple platforms:
 If you get a vendor hash mismatch error, run:
 
 ```bash
-nix build .#gopm-bin --extra-experimental-features "nix-command flakes"
+nix build .#plt-bin --extra-experimental-features "nix-command flakes"
 ```
 
 Update the `vendorHash` in `flake.nix` with the correct hash from the error message.

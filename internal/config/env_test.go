@@ -32,10 +32,10 @@ func TestEffectiveEnvEmptyReturnsNil(t *testing.T) {
 }
 
 func TestEffectiveEnvAmbientExpansion(t *testing.T) {
-	t.Setenv("GOPM_TEST_HOME", "/home/tester")
+	t.Setenv("PLT_TEST_HOME", "/home/tester")
 
 	loc := Location{Env: map[string]string{
-		"BINDIR": "${GOPM_TEST_HOME}/bin",
+		"BINDIR": "${PLT_TEST_HOME}/bin",
 	}}
 	env := EffectiveEnv(loc, Command{})
 
@@ -45,11 +45,11 @@ func TestEffectiveEnvAmbientExpansion(t *testing.T) {
 }
 
 func TestEffectiveEnvSiblingExpansion(t *testing.T) {
-	t.Setenv("GOPM_TEST_PATH", "/usr/bin")
+	t.Setenv("PLT_TEST_PATH", "/usr/bin")
 
 	loc := Location{Env: map[string]string{
 		"BIN":  "/opt/bin",
-		"PATH": "${BIN}:$GOPM_TEST_PATH", // references sibling + ambient
+		"PATH": "${BIN}:$PLT_TEST_PATH", // references sibling + ambient
 	}}
 	env := EffectiveEnv(loc, Command{})
 
@@ -73,7 +73,7 @@ func TestEffectiveEnvMultiHopChain(t *testing.T) {
 
 func TestEffectiveEnvUndefinedExpandsToEmpty(t *testing.T) {
 	loc := Location{Env: map[string]string{
-		"OUT": "${GOPM_DEFINITELY_UNSET_VAR}/x",
+		"OUT": "${PLT_DEFINITELY_UNSET_VAR}/x",
 	}}
 	env := EffectiveEnv(loc, Command{})
 

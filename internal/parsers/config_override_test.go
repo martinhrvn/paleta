@@ -9,16 +9,16 @@ import (
 
 func TestUserConfigOverride(t *testing.T) {
 	// Create a temporary directory for test
-	tmpDir, err := ioutil.TempDir("", "gopm_test")
+	tmpDir, err := ioutil.TempDir("", "plt_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tmpDir)
 	
-	// Create .gopm directory
-	gopmDir := filepath.Join(tmpDir, ".gopm")
-	if err := os.MkdirAll(gopmDir, 0755); err != nil {
-		t.Fatalf("Failed to create .gopm dir: %v", err)
+	// Create .paleta directory
+	paletaDir := filepath.Join(tmpDir, ".paleta")
+	if err := os.MkdirAll(paletaDir, 0755); err != nil {
+		t.Fatalf("Failed to create .paleta dir: %v", err)
 	}
 	
 	// Create user config that overrides npm and adds a custom parser
@@ -37,7 +37,7 @@ func TestUserConfigOverride(t *testing.T) {
       hello: "echo hello"
     command_template: "custom {key}"`
 	
-	configPath := filepath.Join(gopmDir, "parsers.yaml")
+	configPath := filepath.Join(paletaDir, "parsers.yaml")
 	if err := ioutil.WriteFile(configPath, []byte(userConfig), 0644); err != nil {
 		t.Fatalf("Failed to write user config: %v", err)
 	}
@@ -101,16 +101,16 @@ func TestUserConfigOverride(t *testing.T) {
 
 func TestUserConfigPartialOverride(t *testing.T) {
 	// Create a temporary directory for test
-	tmpDir, err := ioutil.TempDir("", "gopm_test")
+	tmpDir, err := ioutil.TempDir("", "plt_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tmpDir)
 	
-	// Create .gopm directory
-	gopmDir := filepath.Join(tmpDir, ".gopm")
-	if err := os.MkdirAll(gopmDir, 0755); err != nil {
-		t.Fatalf("Failed to create .gopm dir: %v", err)
+	// Create .paleta directory
+	paletaDir := filepath.Join(tmpDir, ".paleta")
+	if err := os.MkdirAll(paletaDir, 0755); err != nil {
+		t.Fatalf("Failed to create .paleta dir: %v", err)
 	}
 	
 	// Create user config that only overrides one parser
@@ -122,7 +122,7 @@ func TestUserConfigPartialOverride(t *testing.T) {
       test: "go test -v ./..."
     builtin_parser: "go_standard"`
 	
-	configPath := filepath.Join(gopmDir, "parsers.yaml")
+	configPath := filepath.Join(paletaDir, "parsers.yaml")
 	if err := ioutil.WriteFile(configPath, []byte(userConfig), 0644); err != nil {
 		t.Fatalf("Failed to write user config: %v", err)
 	}

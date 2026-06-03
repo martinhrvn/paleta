@@ -1,24 +1,24 @@
-# GoReleaser configuration for gopm.
+# GoReleaser configuration for paleta.
 # https://goreleaser.com
 #
-# gopm ships as a Go binary (gopm-bin) plus a Bash wrapper (gopm) that sources
-# gopm-core.sh and performs the actual cd+exec. Every artifact therefore bundles
+# paleta ships as a Go binary (plt-bin) plus a Bash wrapper (plt) that sources
+# plt-core.sh and performs the actual cd+exec. Every artifact therefore bundles
 # the binary + wrapper + core script + shell completions. Runtime deps: jq, bash.
 #
 # Validate locally:  goreleaser check
 # Dry-run a release:  goreleaser release --snapshot --clean
 version: 2
 
-project_name: gopm
+project_name: paleta
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: gopm
-    main: ./cmd/gopm
-    binary: gopm-bin
+  - id: plt
+    main: ./cmd/plt
+    binary: plt-bin
     env:
       - CGO_ENABLED=0
     goos:
@@ -33,18 +33,18 @@ builds:
 archives:
   - id: default
     formats: [tar.gz]
-    # Flat layout: the wrapper resolves its siblings (gopm-bin, gopm-core.sh).
+    # Flat layout: the wrapper resolves its siblings (plt-bin, plt-core.sh).
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     files:
-      # Flatten packaging/gopm -> gopm at the archive root so the wrapper sits
-      # beside its siblings (gopm-bin, gopm-core.sh).
+      # Flatten packaging/plt -> plt at the archive root so the wrapper sits
+      # beside its siblings (plt-bin, plt-core.sh).
       - src: packaging/*
         strip_parent: true
-      - gopm-core.sh
+      - plt-core.sh
       - completion.bash
       - completion.zsh
-      - gopm-integration.zsh
+      - plt-integration.zsh
       - README.md
       - LICENSE
 
@@ -61,12 +61,12 @@ changelog:
       - "^chore:"
 
 # Debian / RPM packages installed into FHS locations. The wrapper finds
-# gopm-core.sh in /usr/share/gopm and the binary in /usr/bin.
+# plt-core.sh in /usr/share/paleta and the binary in /usr/bin.
 nfpms:
-  - id: gopm
-    package_name: gopm
+  - id: plt
+    package_name: plt
     vendor: Martin Harvan
-    homepage: https://github.com/martinhrvn/go-pm
+    homepage: https://github.com/martinhrvn/paleta
     maintainer: Martin Harvan <martinhrvn@gmail.com>
     description: Fast TUI for running commands across projects in a monorepo.
     license: MIT
@@ -78,43 +78,43 @@ nfpms:
       - bash
     bindir: /usr/bin
     contents:
-      - src: packaging/gopm
-        dst: /usr/bin/gopm
+      - src: packaging/plt
+        dst: /usr/bin/plt
         file_info:
           mode: 0755
-      - src: gopm-core.sh
-        dst: /usr/share/gopm/gopm-core.sh
-      - src: gopm-integration.zsh
-        dst: /usr/share/gopm/gopm-integration.zsh
+      - src: plt-core.sh
+        dst: /usr/share/paleta/plt-core.sh
+      - src: plt-integration.zsh
+        dst: /usr/share/paleta/plt-integration.zsh
       - src: completion.bash
-        dst: /usr/share/bash-completion/completions/gopm
+        dst: /usr/share/bash-completion/completions/plt
       - src: completion.zsh
-        dst: /usr/share/zsh/site-functions/_gopm
+        dst: /usr/share/zsh/site-functions/_plt
       - src: LICENSE
-        dst: /usr/share/licenses/gopm/LICENSE
+        dst: /usr/share/licenses/plt/LICENSE
 
 # Homebrew tap (cask — `brews` formulae are deprecated in GoReleaser v2).
-# The cask symlinks gopm + gopm-bin into the Homebrew bin; the gopm wrapper
-# resolves the symlink back to its Caskroom staging dir to find gopm-core.sh.
+# The cask symlinks plt + plt-bin into the Homebrew bin; the plt wrapper
+# resolves the symlink back to its Caskroom staging dir to find plt-core.sh.
 # Requires a martinhrvn/homebrew-tap repo; uploads are skipped automatically
 # until it exists (and on snapshot builds).
 homebrew_casks:
-  - name: gopm
+  - name: plt
     repository:
       owner: martinhrvn
       name: homebrew-tap
       # Pushing to a separate tap repo needs a PAT with write access stored as
       # the HOMEBREW_TAP_TOKEN secret. Falls back to GITHUB_TOKEN if unset.
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: https://github.com/martinhrvn/go-pm
+    homepage: https://github.com/martinhrvn/paleta
     description: Fast TUI for running commands across projects in a monorepo.
     license: MIT
     skip_upload: auto
     dependencies:
       - formula: jq
     binaries:
-      - gopm-bin
-      - gopm
+      - plt-bin
+      - plt
     completions:
       bash: completion.bash
       zsh: completion.zsh
@@ -124,34 +124,34 @@ homebrew_casks:
 # first publish. Set skip_upload to "false" and add an SSH deploy key later to
 # automate pushes.
 aurs:
-  - name: gopm-bin
-    homepage: https://github.com/martinhrvn/go-pm
+  - name: plt-bin
+    homepage: https://github.com/martinhrvn/paleta
     description: Fast TUI for running commands across projects in a monorepo.
     license: MIT
     maintainers:
       - "Martin Harvan <martinhrvn@gmail.com>"
     skip_upload: true
-    git_url: ssh://aur@aur.archlinux.org/gopm-bin.git
+    git_url: ssh://aur@aur.archlinux.org/plt-bin.git
     depends:
       - jq
       - bash
     package: |-
       # binary
-      install -Dm755 "./gopm-bin" "${pkgdir}/usr/bin/gopm-bin"
+      install -Dm755 "./plt-bin" "${pkgdir}/usr/bin/plt-bin"
       # wrapper
-      install -Dm755 "./gopm" "${pkgdir}/usr/bin/gopm"
+      install -Dm755 "./plt" "${pkgdir}/usr/bin/plt"
       # core + integration
-      install -Dm644 "./gopm-core.sh" "${pkgdir}/usr/share/gopm/gopm-core.sh"
-      install -Dm644 "./gopm-integration.zsh" "${pkgdir}/usr/share/gopm/gopm-integration.zsh"
+      install -Dm644 "./plt-core.sh" "${pkgdir}/usr/share/paleta/plt-core.sh"
+      install -Dm644 "./plt-integration.zsh" "${pkgdir}/usr/share/paleta/plt-integration.zsh"
       # completions
-      install -Dm644 "./completion.bash" "${pkgdir}/usr/share/bash-completion/completions/gopm"
-      install -Dm644 "./completion.zsh" "${pkgdir}/usr/share/zsh/site-functions/_gopm"
+      install -Dm644 "./completion.bash" "${pkgdir}/usr/share/bash-completion/completions/plt"
+      install -Dm644 "./completion.zsh" "${pkgdir}/usr/share/zsh/site-functions/_plt"
       # license
-      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/gopm-bin/LICENSE"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/plt-bin/LICENSE"
 
 release:
   github:
     owner: martinhrvn
-    name: go-pm
+    name: paleta
   draft: false
   prerelease: auto

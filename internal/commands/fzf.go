@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/martinhrvn/go-pm/internal/config"
-	"github.com/martinhrvn/go-pm/internal/history"
-	"github.com/martinhrvn/go-pm/internal/ui"
+	"github.com/martinhrvn/paleta/internal/config"
+	"github.com/martinhrvn/paleta/internal/history"
+	"github.com/martinhrvn/paleta/internal/ui"
 )
 
 // SelectionResult represents the result of a user selection from fzf.

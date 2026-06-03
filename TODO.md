@@ -1,11 +1,11 @@
-# CLAUDE.md - gopm Development Checklist
+# paleta — Development Checklist
 
 ## Project Overview
-**gopm** (Go Project Manager) - A utility for quickly running commands in monorepos using fzf selection.
+**paleta** — a command palette for your monorepo (invoked via the `plt` command), using fuzzy selection.
 
 ## Core Requirements
 
-### Configuration File (.gopmrc)
+### Configuration File (.pltrc)
 - [x] Support YAML-like format parsing
 - [x] Support for `locations` array
 - [x] Support for `name` field (optional display name)
@@ -28,10 +28,10 @@
 - [x] Support for keyboard interrupts (Ctrl+C)
 - [x] Show helpful error messages
 - [ ] The cli interface should have following commands
-  - [x] gopm list - output all available location:command pairs
-  - [x] gopm list --format=fzf - format for fzf selection
-  - [ ] gopm get --location=X --command=Y - get execution details as JSON
-  - [x] gopm help - show usage and available commands
+  - [x] plt list - output all available location:command pairs
+  - [x] plt list --format=fzf - format for fzf selection
+  - [ ] plt get --location=X --command=Y - get execution details as JSON
+  - [x] plt help - show usage and available commands
   - [x] Handle command-line argument parsing
 
 ### Command Execution
@@ -70,16 +70,16 @@ The project types we should support intitally are:
 - [ ] Verbose mode for debugging
 - [ ] Do not show locations that do not exist
 - [ ] ability to focus specific locations
-  - either using .gopmrc.local.yaml (something like `only: location/foo` or command line argument
+  - either using .pltrc.local.yaml (something like `only: location/foo` or command line argument
   - keyboard shortcut to focus/unfocus while searching
 - [ ] aliases
 - [ ] automatically detect type of a location based on presence of package.json/go.mod/etc.
 - [x] history of executed commands
-   - [x] store in a file (per project in ~/.gopm/history/)
+   - [x] store in a file (per project in ~/.paleta/history/)
    - [x] default sort by frecency of use (50/50 balance)
    - [x] allow to change sorting by keyboard shortcut (Ctrl+F in TUI mode)
-   - [x] global config support (~/.config/gopm/config.yaml)
-   - [x] per-project config override via .gopmrc
+   - [x] global config support (~/.config/paleta/config.yaml)
+   - [x] per-project config override via .pltrc
 ### Advanced Features
 - [ ] Support for pre/post command hooks
 - [ ] Support for command templates/variables
@@ -88,7 +88,7 @@ The project types we should support intitally are:
 - [ ] Integration with different package managers based on `type`
 - [ ] Watch mode for repeated command execution
 - [x] Shell completion (bash/zsh)
-- [x] Zsh keyboard shortcut integration (Ctrl+P to launch gopm)
+- [x] Zsh keyboard shortcut integration (Ctrl+P to launch plt)
 
 ## Implementation Details
 
@@ -99,7 +99,7 @@ The project types we should support intitally are:
 - [ ] Ensure cross-platform compatibility (Linux/Mac/Windows)
 
 ### Distribution Strategy
-- **Two-component approach**: Go binary (`gopm-bin`) + shell wrapper (`gopm`)
+- **Two-component approach**: Go binary (`plt-bin`) + shell wrapper (`plt`)
 - **Flexible installation**: Auto-detects binary location in multiple paths
 - **Shell integration**: Bash/zsh completion and colored output
 - **Easy installation**: Single script installation with `install.sh`
@@ -116,7 +116,7 @@ The project types we should support intitally are:
 - [x] Unit tests for core functionality
 
 ### Distribution
-- [x] Enhanced shell wrapper script (packaging/gopm)
+- [x] Enhanced shell wrapper script (packaging/plt)
 - [x] Installation script (install.sh)
 - [x] Shell completion (bash/zsh)
 - [x] Zsh keyboard shortcut integration (Ctrl+P, with multi-select support)
@@ -125,13 +125,13 @@ The project types we should support intitally are:
 - [x] Nix flake with complete package and development environment
 - [x] Cross-platform support (Linux/macOS)
 - [ ] Usage documentation
-- [ ] Example .gopmrc files
+- [ ] Example .pltrc files
 - [x] GitHub releases with binaries (GoReleaser + Actions on `v*` tags)
 - [x] Homebrew formula (GoReleaser brews -> martinhrvn/homebrew-tap)
-- [x] AUR package (GoReleaser-generated PKGBUILD for gopm-bin)
+- [x] AUR package (GoReleaser-generated PKGBUILD for plt-bin)
 - [x] deb/rpm packages (GoReleaser nfpm)
 - [x] CI pipeline (build/test/lint on push & PR)
-- [x] Version injected via -ldflags (`gopm version`)
+- [x] Version injected via -ldflags (`plt version`)
 
 ## Testing Checklist
 
@@ -143,7 +143,7 @@ The project types we should support intitally are:
 
 ### Integration Tests
 - [x] Test with real monorepo structure
-- [ ] Test with various .gopmrc formats
+- [ ] Test with various .pltrc formats
 - [ ] Test with missing fzf
 - [x] Test with malformed configs
 - [ ] Test with non-existent locations
@@ -166,13 +166,13 @@ The project types we should support intitally are:
 - [ ] Contributing guidelines
 
 ### Examples
-- [ ] Example .gopmrc for npm/yarn/pnpm monorepo
-- [ ] Example .gopmrc for Go workspace
-- [ ] Example .gopmrc for mixed-language monorepo
+- [ ] Example .pltrc for npm/yarn/pnpm monorepo
+- [ ] Example .pltrc for Go workspace
+- [ ] Example .pltrc for mixed-language monorepo
 - [ ] Advanced configuration examples
 
 ### Parser Configuration System
-- [x] Support ~/.gopm/parsers.yaml configuration file
+- [x] Support ~/.paleta/parsers.yaml configuration file
 - [x] Built-in parsers (package_json_scripts, go_standard)
 - [x] Custom command-based parsers
 - [x] Command templates with {key} substitution
@@ -182,11 +182,11 @@ The project types we should support intitally are:
 - [x] Parser command execution with proper error handling
 
 ### Global Project Configuration
-- [x] Support for centralized project configs in `~/.config/gopm/projects/`
+- [x] Support for centralized project configs in `~/.config/paleta/projects/`
 - [x] Per-project YAML files with root directory specification
 - [x] Automatic matching based on current directory vs project root
-- [x] Precedence: local .gopmrc takes priority over global configs
-- [x] Global frecency settings still apply from `~/.config/gopm/config.yaml`
+- [x] Precedence: local .pltrc takes priority over global configs
+- [x] Global frecency settings still apply from `~/.config/paleta/config.yaml`
 - [x] Closest match preferred when multiple projects match
 
 ## Release Checklist
@@ -194,7 +194,7 @@ The project types we should support intitally are:
 - [x] Changelog generation (GoReleaser, conventional-commit filters)
 - [x] Binary releases for major platforms (linux/darwin x amd64/arm64)
 - [ ] Create `martinhrvn/homebrew-tap` repo + `HOMEBREW_TAP_TOKEN` secret (before first stable release)
-- [ ] First publish of AUR `gopm-bin` PKGBUILD (manual, from release artifact)
+- [ ] First publish of AUR `plt-bin` PKGBUILD (manual, from release artifact)
 - [ ] Tag and push `v0.1.0`
 
 ## Current Status
@@ -218,13 +218,13 @@ The project types we should support intitally are:
 
 ### Frecency Sorting (Completed)
 Added intelligent command ranking based on frequency and recency:
-- **History Tracking**: Per-project command execution history stored in `~/.gopm/history/`
+- **History Tracking**: Per-project command execution history stored in `~/.paleta/history/`
 - **Frecency Algorithm**: 50/50 balanced scoring (configurable)
   - Frequency score: `log(count + 1) × 100`
   - Recency score: `100 / (1 + days_since_access)`
 - **Configuration**:
-  - Global config: `~/.config/gopm/config.yaml`
-  - Local override: `.gopmrc` in project root
+  - Global config: `~/.config/paleta/config.yaml`
+  - Local override: `.pltrc` in project root
   - Default: enabled with 50/50 balance
 - **UI Integration**:
   - Standard fzf: Commands sorted by frecency (controlled by config)
@@ -234,7 +234,7 @@ Added intelligent command ranking based on frequency and recency:
   - `internal/history/`: Core tracking, storage, and scoring
   - File locking for concurrent access safety
   - Automatic pruning (keeps last 1000 entries)
-  - Project detection via .git or .gopmrc
+  - Project detection via .git or .pltrc
 - **Shell Integration**: Automatic recording after command selection
 
 ### fzf-style TUI with Multi-Select (Completed)
@@ -253,11 +253,11 @@ Added a new fzf-like TUI interface with improved UX:
   - Type to filter (input has focus by default)
   - Esc/Ctrl+C: Cancel
 - **Integration**:
-  - `gopm select --tui`: Run the new TUI directly
-  - `gopm tui`: Shell command for the new TUI
+  - `plt select --tui`: Run the new TUI directly
+  - `plt tui`: Shell command for the new TUI
   - Ctrl+G (zsh): Keyboard shortcut for gpm TUI mode
 - **Implementation**:
   - `internal/ui/fzf_tui_selector.go`: New TUI component
   - `internal/ui/fzf_tui_selector_test.go`: Unit tests (TDD)
-  - Updated `gopm-core.sh` with `gpm_run` function
-  - Updated `gopm-integration.zsh` with `__gpm_tui_select_widget`
+  - Updated `plt-core.sh` with `gpm_run` function
+  - Updated `plt-integration.zsh` with `__gpm_tui_select_widget`
