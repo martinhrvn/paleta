@@ -71,6 +71,7 @@ func LoadHistory(filePath string) (*History, error) {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return &History{
 			Commands:     make(map[string]CommandEntry),
+			weights:      DefaultWeights,
 			timeProvider: &RealTime{},
 		}, nil
 	}
@@ -99,6 +100,7 @@ func LoadHistory(filePath string) (*History, error) {
 	h := &History{
 		ProjectRoot:  hf.ProjectRoot,
 		Commands:     hf.Commands,
+		weights:      DefaultWeights,
 		timeProvider: &RealTime{},
 	}
 

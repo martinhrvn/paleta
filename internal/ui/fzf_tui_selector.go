@@ -95,6 +95,9 @@ func NewModel(cfg *config.Config) Model {
 	// but the preview pane shows run/recency stats in either mode.
 	if projectRoot, err := history.FindProjectRoot("."); err == nil {
 		m.history, _ = history.LoadOrCreateHistory(projectRoot)
+		if m.history != nil {
+			m.history.SetWeights(history.NewWeights(cfg.Frecency.FrequencyWeight, cfg.Frecency.RecencyWeight))
+		}
 	}
 
 	return m

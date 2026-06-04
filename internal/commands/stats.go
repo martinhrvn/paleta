@@ -47,7 +47,7 @@ func FormatStats(hist *history.History, opts StatsOptions, now time.Time) string
 		rows = append(rows, statRow{
 			label: labelFromKey(key),
 			entry: entry,
-			score: history.CalculateScore(entry.Count, entry.LastAccess, now, history.DefaultWeights),
+			score: hist.ScoreEntry(entry, now),
 		})
 	}
 

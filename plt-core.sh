@@ -28,6 +28,7 @@ show_usage() {
     echo "    init       Interactively scan for projects and build .pltrc"
     echo "    edit       Open nearest .pltrc in \$EDITOR"
     echo "    list       List all available commands"
+    echo "    stats      Show command usage history (runs, recency, frecency)"
     echo "    version    Show the plt version"
     echo "    help       Show this help message"
     echo
@@ -37,6 +38,7 @@ show_usage() {
     echo "    plt init         # Build .pltrc from detected projects"
     echo "    plt init --template  # Write a static starter .pltrc"
     echo "    plt list         # List all commands"
+    echo "    plt stats        # Usage history table (--by=count|recent, --limit=N)"
     echo
     echo "CONFIGURATION:"
     echo "    plt looks for .pltrc files starting from the current directory"
@@ -232,6 +234,10 @@ plt_main() {
             ;;
         list)
             list_commands
+            ;;
+        stats)
+            # Usage history table. Pass through flags like --by= and --limit=.
+            "$PLT_BINARY" "$@"
             ;;
         help|--help|-h)
             show_usage

@@ -31,6 +31,7 @@ type CommandEntry struct {
 type History struct {
 	ProjectRoot  string                  `json:"project_root"`
 	Commands     map[string]CommandEntry `json:"commands"`
+	weights      FrecencyWeights         `json:"-"`
 	timeProvider TimeProvider            `json:"-"`
 	mu           sync.RWMutex            `json:"-"`
 }
@@ -40,8 +41,25 @@ func NewHistory(projectRoot string) (*History, error) {
 	return &History{
 		ProjectRoot:  projectRoot,
 		Commands:     make(map[string]CommandEntry),
+		weights:      DefaultWeights,
 		timeProvider: &RealTime{},
 	}, nil
+}
+
+// SetWeights configures the frequency/recency balance used when scoring. Pass
+// weights built with NewWeights so they are normalized.
+func (h *History) SetWeights(w FrecencyWeights) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.weights = w
+}
+
+// ScoreEntry returns the frecency score for an entry using the history's
+// configured weights. now is the reference time (injected for testability).
+func (h *History) ScoreEntry(entry CommandEntry, now time.Time) float64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return calculateFrecencyScoreWithWeights(entry, now, effectiveWeights(h.weights))
 }
 
 // RecordExecution records that a command was executed
@@ -101,7 +119,7 @@ func (h *History) GetScore(location, command string) float64 {
 		return 0
 	}
 
-	return calculateFrecencyScore(entry, h.timeProvider.Now())
+	return calculateFrecencyScoreWithWeights(entry, h.timeProvider.Now(), effectiveWeights(h.weights))
 }
 
 // Prune keeps only the N most recent commands

@@ -17,6 +17,7 @@ _plt() {
                 'init[Interactively scan for projects and build .pltrc]' \
                 'edit[Open nearest .pltrc in $EDITOR]' \
                 'list[List all available commands]' \
+                'stats[Show command usage history (runs, recency, frecency)]' \
                 'version[Show the plt version]' \
                 'help[Show help message]'
             ;;

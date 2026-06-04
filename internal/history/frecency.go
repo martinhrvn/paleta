@@ -17,15 +17,33 @@ var DefaultWeights = FrecencyWeights{
 	RecencyWeight:   0.5,
 }
 
-// calculateFrecencyScore computes a score based on frequency and recency
-// Uses a 50/50 balanced approach:
-//   - Frequency: logarithmic scale to prevent very frequent commands from dominating
-//   - Recency: inverse decay based on days since last access
-func calculateFrecencyScore(entry CommandEntry, now time.Time) float64 {
-	return calculateFrecencyScoreWithWeights(entry, now, DefaultWeights)
+// NewWeights builds normalized weights from raw frequency/recency values so that
+// only their ratio matters — 50/50 and 0.5/0.5 behave identically. A non-positive
+// total falls back to DefaultWeights.
+func NewWeights(frequency, recency float64) FrecencyWeights {
+	total := frequency + recency
+	if total <= 0 {
+		return DefaultWeights
+	}
+	return FrecencyWeights{
+		FrequencyWeight: frequency / total,
+		RecencyWeight:   recency / total,
+	}
 }
 
-// calculateFrecencyScoreWithWeights allows custom weight configuration
+// effectiveWeights returns w, or DefaultWeights when w is the zero value (e.g. a
+// History constructed without weights).
+func effectiveWeights(w FrecencyWeights) FrecencyWeights {
+	if w.FrequencyWeight == 0 && w.RecencyWeight == 0 {
+		return DefaultWeights
+	}
+	return w
+}
+
+// calculateFrecencyScoreWithWeights computes a score based on frequency and
+// recency:
+//   - Frequency: logarithmic scale to prevent very frequent commands from dominating
+//   - Recency: inverse decay based on days since last access
 func calculateFrecencyScoreWithWeights(entry CommandEntry, now time.Time, weights FrecencyWeights) float64 {
 	// Frequency score: logarithmic to prevent runaway scaling
 	// log(count + 1) normalized to 0-100 scale

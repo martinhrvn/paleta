@@ -223,8 +223,22 @@ func handleStatsCommand() {
 		fmt.Fprintf(os.Stderr, "Error loading history: %v\n", err)
 		os.Exit(1)
 	}
+	hist.SetWeights(statsWeights())
 
 	fmt.Println(commands.FormatStats(hist, opts, time.Now()))
+}
+
+// statsWeights resolves the frecency weights to score stats with. It prefers the
+// effective (global + local merged) project config, falls back to the global
+// config when there is no local .pltrc, and finally to the balanced default.
+func statsWeights() history.FrecencyWeights {
+	fr := config.DefaultFrecencyConfig()
+	if cfg, err := config.LoadConfigFromDiscovery(); err == nil {
+		fr = cfg.Frecency
+	} else if gc, gerr := config.LoadGlobalConfig(); gerr == nil {
+		fr = gc.Frecency
+	}
+	return history.NewWeights(fr.FrequencyWeight, fr.RecencyWeight)
 }
 
 func handleSelectCommand() {

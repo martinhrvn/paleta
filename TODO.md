@@ -87,7 +87,8 @@ The project types we should support intitally are:
    - [x] allow to change sorting by keyboard shortcut (Ctrl+F in TUI mode)
    - [x] global config support (~/.config/paleta/config.yaml)
    - [x] per-project config override via .pltrc
-   - [x] surface usage stats: `plt stats` table (runs / last used / frecency, with `--by` and `--limit`) and run/recency/score in the `plt select` preview pane
+   - [x] surface usage stats: `plt stats` table (runs / last used / frecency, with `--by` and `--limit`, wired into the shell wrapper + completions) and run/recency/score in the `plt select` preview pane
+   - [x] wire configurable `recency_weight`/`frequency_weight` (global + local, normalized) into actual scoring — previously hard-coded 50/50
    - [x] fix: history was saved under an empty project-root hash when no prior file existed, so counts never accumulated across runs
 ### Advanced Features
 - [ ] Support for pre/post command hooks
