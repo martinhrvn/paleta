@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -89,12 +91,10 @@ func NewModel(cfg *config.Config) Model {
 		editInput:       ei,
 	}
 
-	// Load history if frecency is enabled
-	if m.frecencyEnabled {
-		projectRoot, err := history.FindProjectRoot(".")
-		if err == nil {
-			m.history, _ = history.LoadOrCreateHistory(projectRoot)
-		}
+	// Load history regardless of frecency: frecencyEnabled only controls sorting,
+	// but the preview pane shows run/recency stats in either mode.
+	if projectRoot, err := history.FindProjectRoot("."); err == nil {
+		m.history, _ = history.LoadOrCreateHistory(projectRoot)
 	}
 
 	return m
@@ -665,8 +665,16 @@ func (m Model) generatePreview(cmd CommandInfo) string {
 		}
 	}
 
-	if m.frecencyEnabled && cmd.FrecencyScore > 0 {
-		lines = append(lines, previewLabelStyle.Render("Score     ")+previewValueStyle.Render(fmt.Sprintf("%.2f", cmd.FrecencyScore)))
+	// History / recency stats, shown whenever this command has been run before.
+	if m.history != nil {
+		if entry, ok := m.history.GetEntry(cmd.DisplayName, cmd.Command); ok {
+			now := time.Now()
+			lines = append(lines, previewLabelStyle.Render("Runs      ")+previewValueStyle.Render(strconv.Itoa(entry.Count)))
+			lines = append(lines, previewLabelStyle.Render("Last used ")+previewValueStyle.Render(history.FormatSince(now.Sub(entry.LastAccess))))
+			lines = append(lines, previewLabelStyle.Render("First run ")+previewValueStyle.Render(history.FormatSince(now.Sub(entry.FirstAccess))))
+			score := m.history.GetScore(cmd.DisplayName, cmd.Command)
+			lines = append(lines, previewLabelStyle.Render("Score     ")+previewValueStyle.Render(fmt.Sprintf("%.2f", score)))
+		}
 	}
 
 	return strings.Join(lines, "\n")

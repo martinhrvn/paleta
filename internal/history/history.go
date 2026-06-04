@@ -67,6 +67,19 @@ func (h *History) RecordExecution(location, command string) error {
 	return nil
 }
 
+// All returns a copy of every recorded command entry, keyed by
+// "location:command". The copy lets callers iterate without holding the lock.
+func (h *History) All() map[string]CommandEntry {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	out := make(map[string]CommandEntry, len(h.Commands))
+	for k, v := range h.Commands {
+		out[k] = v
+	}
+	return out
+}
+
 // GetEntry retrieves the command entry for a given location and command
 func (h *History) GetEntry(location, command string) (CommandEntry, bool) {
 	h.mu.RLock()

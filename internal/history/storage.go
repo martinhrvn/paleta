@@ -128,10 +128,18 @@ func hashProjectRoot(projectRoot string) string {
 	return hex.EncodeToString(hash[:])[:16] // Use first 16 chars for brevity
 }
 
-// LoadOrCreateHistory loads existing history or creates a new one for a project
+// LoadOrCreateHistory loads existing history or creates a new one for a project.
+// It always stamps ProjectRoot on the result so a later SaveToDefaultLocation
+// writes back to the correct per-project file, even when no history existed yet
+// (LoadHistory leaves ProjectRoot empty for a missing file).
 func LoadOrCreateHistory(projectRoot string) (*History, error) {
 	historyPath := GetHistoryPath(projectRoot)
-	return LoadHistory(historyPath)
+	h, err := LoadHistory(historyPath)
+	if err != nil {
+		return nil, err
+	}
+	h.ProjectRoot = projectRoot
+	return h, nil
 }
 
 // SaveToDefaultLocation saves history to the default location based on project root

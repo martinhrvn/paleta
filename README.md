@@ -411,9 +411,17 @@ plt list
 # List in fzf format
 plt list --format=fzf
 
+# Show command usage history (runs, recency, frecency score)
+plt stats
+plt stats --by=count      # or --by=recent
+plt stats --limit=10
+
 # Show help
 plt help
 ```
+
+The interactive selector's preview pane also shows per-command stats — run count,
+last/first use, and frecency score — for any command you've run before.
 
 ### Enhanced Mode
 

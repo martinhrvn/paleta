@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/martinhrvn/paleta/internal/config"
+	"github.com/martinhrvn/paleta/internal/history"
 )
 
 // Helper to convert strings to Commands for tests
@@ -765,5 +766,28 @@ func TestModel_LoadCommands_MultiType(t *testing.T) {
 	// CommandInfo.Type is per-command, driving the preview window.
 	if build.Type != "npm" || up.Type != "compose" {
 		t.Errorf("per-command types = %q/%q, want npm/compose", build.Type, up.Type)
+	}
+}
+
+func TestModel_GeneratePreview_ShowsStats(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	// Inject a controlled history with one run of "frontend: npm start".
+	h, _ := history.NewHistory("/tmp")
+	_ = h.RecordExecution("frontend", "npm start")
+	m.history = h
+
+	// filteredCommands[0] is "frontend: npm start".
+	preview := m.generatePreview(m.filteredCommands[0])
+	for _, want := range []string{"Runs", "Last used", "First run", "Score"} {
+		if !contains(preview, want) {
+			t.Errorf("preview missing %q:\n%s", want, preview)
+		}
+	}
+
+	// A command with no history shows no stats lines.
+	noHist := m.generatePreview(m.filteredCommands[1]) // "frontend: npm test", never run
+	if contains(noHist, "Runs") {
+		t.Errorf("expected no stats for an unrun command:\n%s", noHist)
 	}
 }

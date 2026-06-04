@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/martinhrvn/paleta/internal/commands"
 	"github.com/martinhrvn/paleta/internal/config"
@@ -37,6 +40,8 @@ func main() {
 		handleEditCommand()
 	case "list":
 		handleListCommand()
+	case "stats":
+		handleStatsCommand()
 	case "select":
 		handleSelectCommand()
 	case "record":
@@ -184,6 +189,44 @@ func handleListCommand() {
 	}
 }
 
+// handleStatsCommand prints recorded command history as a table. It reads only
+// the history store, so it works even without a loadable .pltrc.
+func handleStatsCommand() {
+	opts := commands.StatsOptions{By: commands.SortFrecency}
+	for _, arg := range os.Args[2:] {
+		switch {
+		case arg == "--by=count":
+			opts.By = commands.SortCount
+		case arg == "--by=recent":
+			opts.By = commands.SortRecent
+		case arg == "--by=frecency":
+			opts.By = commands.SortFrecency
+		case strings.HasPrefix(arg, "--limit="):
+			if n, err := strconv.Atoi(strings.TrimPrefix(arg, "--limit=")); err == nil && n > 0 {
+				opts.Limit = n
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown stats option: %s\n", arg)
+			fmt.Fprintln(os.Stderr, "Usage: plt stats [--by=frecency|count|recent] [--limit=N]")
+			os.Exit(1)
+		}
+	}
+
+	projectRoot, err := history.FindProjectRoot(".")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error finding project root: %v\n", err)
+		os.Exit(1)
+	}
+
+	hist, err := history.LoadOrCreateHistory(projectRoot)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading history: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println(commands.FormatStats(hist, opts, time.Now()))
+}
+
 func handleSelectCommand() {
 	// Load config from discovery
 	cfg, err := config.LoadConfigFromDiscovery()
@@ -304,6 +347,8 @@ func showUsage() {
 	fmt.Println("    edit                     Open nearest .pltrc in $EDITOR")
 	fmt.Println("    list                     List all available location:command pairs")
 	fmt.Println("    list --format=fzf        List commands in fzf format")
+	fmt.Println("    stats                    Show command usage history (runs, recency, frecency)")
+	fmt.Println("    stats --by=count         Sort stats by run count (or --by=recent)")
 	fmt.Println("    select                   Interactive TUI command selection (multi-select with Tab)")
 	fmt.Println("    version                  Show the paleta version")
 	fmt.Println("    help                     Show this help message")

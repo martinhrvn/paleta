@@ -300,6 +300,21 @@ func TestLoadNonExistentFile(t *testing.T) {
 	}
 }
 
+// TestLoadOrCreateHistorySetsProjectRoot guards a regression where a not-yet-saved
+// history had an empty ProjectRoot, so SaveToDefaultLocation hashed "" and wrote to
+// the wrong file — meaning recorded runs never accumulated across invocations.
+func TestLoadOrCreateHistorySetsProjectRoot(t *testing.T) {
+	root := t.TempDir() // unique path; no history file exists for its hash yet
+
+	h, err := LoadOrCreateHistory(root)
+	if err != nil {
+		t.Fatalf("LoadOrCreateHistory failed: %v", err)
+	}
+	if h.ProjectRoot != root {
+		t.Errorf("ProjectRoot = %q, want %q (SaveToDefaultLocation must target the right file)", h.ProjectRoot, root)
+	}
+}
+
 // TestProjectIdentification tests finding project root
 func TestProjectIdentification(t *testing.T) {
 	tempDir := t.TempDir()
