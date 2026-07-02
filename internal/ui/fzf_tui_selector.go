@@ -49,6 +49,13 @@ var (
 	selBaseStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(ccText)).Background(lipgloss.Color(ccSurface0)).Bold(true)
 	selHlStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Background(lipgloss.Color(ccSurface0)).Bold(true)
 	selBadgeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccGreen)).Background(lipgloss.Color(ccSurface0)).Bold(true)
+	// Checked (queued) rows that are not under the cursor: a subtle surface fill
+	// with lavender accent text and a green position badge, so checked commands
+	// stand out from the list without competing with the cursor row's accent bar.
+	// Matches highlight in bright text so they still pop against the lavender base.
+	queuedBaseStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Background(lipgloss.Color(ccSurface0))
+	queuedHlStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(ccText)).Background(lipgloss.Color(ccSurface0)).Bold(true)
+	queuedBadgeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccGreen)).Background(lipgloss.Color(ccSurface0)).Bold(true)
 	previewBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color(ccOverlay0))
@@ -447,9 +454,13 @@ func (m Model) renderCommandList(width, height int) string {
 		matched := matchedSet(m.filteredCommands[i].Display, query)
 
 		var line string
-		if i == m.currentIndex {
+		switch {
+		case i == m.currentIndex:
 			line = m.renderCursorRow(i, pos, matched, width)
-		} else {
+		case pos > 0:
+			// Checked (queued) but not under the cursor: subtle background + accent.
+			line = m.renderQueuedRow(i, pos, matched, width)
+		default:
 			// Leading space aligns non-selected rows with the selected row's
 			// accent bar column.
 			line = " " + m.formatListItem(i, pos, matched)
@@ -604,6 +615,23 @@ func (m Model) renderCursorRow(index, queuePos int, matched map[int]bool, width 
 	return selBarStyle.Render("▌") + content
 }
 
+// renderQueuedRow renders a checked (queued) row that is not under the cursor:
+// a subtle surface-filled line with a green position badge and lavender accent
+// text, so checked commands read as selected without stealing the cursor row's
+// accent bar. A leading space keeps it aligned with that bar's column.
+func (m Model) renderQueuedRow(index, queuePos int, matched map[int]bool, width int) string {
+	if index < 0 || index >= len(m.filteredCommands) {
+		return ""
+	}
+	display := m.filteredCommands[index].Display
+	badgePlain := queueBadgePlain(queuePos)
+	content := queuedBadgeStyle.Render(badgePlain) + rowContent(display, matched, queuedBaseStyle, queuedBaseStyle, queuedHlStyle)
+	if pad := (width - 1) - lipgloss.Width(badgePlain+rowPlain(display)); pad > 0 {
+		content += queuedBaseStyle.Render(strings.Repeat(" ", pad))
+	}
+	return " " + content
+}
+
 // rowContent styles a list row's text (location + command), highlighting the
 // fuzzy-matched characters. baseLoc/baseCmd style the location and command
 // segments; hl styles matches. matched is keyed on byte offsets into display.
@@ -614,20 +642,19 @@ func rowContent(display string, matched map[int]bool, baseLoc, baseCmd, hl lipgl
 		b.WriteString(baseLoc.Render(locIcon()))
 		b.WriteString(highlightMatches(loc, shiftMatched(matched, 0, len(loc)), baseLoc, hl))
 		b.WriteString(baseLoc.Render(": "))
-		b.WriteString(baseCmd.Render(cmdIcon()))
 		b.WriteString(highlightMatches(rest, shiftMatched(matched, sep, len(display)), baseCmd, hl))
 		return b.String()
 	}
-	return baseCmd.Render(cmdIcon()) + highlightMatches(display, matched, baseCmd, hl)
+	return highlightMatches(display, matched, baseCmd, hl)
 }
 
 // rowPlain returns the visible (unstyled) text of a row, matching rowContent's
 // layout, for column-width measurement.
 func rowPlain(display string) string {
 	if loc, rest, ok := strings.Cut(display, ": "); ok {
-		return locIcon() + loc + ": " + cmdIcon() + rest
+		return locIcon() + loc + ": " + rest
 	}
-	return cmdIcon() + display
+	return display
 }
 
 // Nerd Font glyphs. Set PLT_NO_ICONS to fall back to plain ASCII for terminals
@@ -637,13 +664,6 @@ func iconsEnabled() bool { return os.Getenv("PLT_NO_ICONS") == "" }
 func locIcon() string {
 	if iconsEnabled() {
 		return " " // nf-fa-folder
-	}
-	return ""
-}
-
-func cmdIcon() string {
-	if iconsEnabled() {
-		return " " // nf-fa-terminal
 	}
 	return ""
 }

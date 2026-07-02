@@ -322,6 +322,43 @@ func TestModel_FormatListItemStyled(t *testing.T) {
 	}
 }
 
+// rowPlain (with icons enabled) should keep the location/folder glyph but no
+// longer prefix the command with a terminal glyph.
+func TestRowPlain_DropsCommandIcon(t *testing.T) {
+	t.Setenv("PLT_NO_ICONS", "") // icons enabled
+	got := rowPlain("frontend: npm start")
+	want := locIcon() + "frontend: " + "npm start"
+	if got != want {
+		t.Errorf("rowPlain = %q, want %q (command icon should be removed)", got, want)
+	}
+}
+
+// Checked (queued, non-cursor) rows get a subtle surface background with
+// accent-colored text so they stand out from unchecked rows.
+func TestQueuedRowStyle_HasBackgroundAndAccent(t *testing.T) {
+	bg, ok := queuedBaseStyle.GetBackground().(lipgloss.Color)
+	if !ok || !strings.HasPrefix(string(bg), "#") {
+		t.Errorf("queued row should have a background fill, got %#v", queuedBaseStyle.GetBackground())
+	}
+	fg, _ := queuedBaseStyle.GetForeground().(lipgloss.Color)
+	if string(fg) != ccLavender {
+		t.Errorf("queued row text should be accent (lavender %s), got %q", ccLavender, fg)
+	}
+}
+
+func TestModel_RenderQueuedRow(t *testing.T) {
+	t.Setenv("PLT_NO_ICONS", "1")
+	m := createTestModel(createTestConfig())
+
+	visible := ansi.Strip(m.renderQueuedRow(0, 1, nil, 40))
+	if !contains(visible, "frontend:") || !contains(visible, "npm start") {
+		t.Errorf("queued row missing content, got %q", visible)
+	}
+	if !contains(visible, "1") {
+		t.Errorf("queued row should show position badge '1', got %q", visible)
+	}
+}
+
 func TestModel_LoadCommands(t *testing.T) {
 	cfg := createTestConfig()
 	m := NewModel(cfg, nil)
