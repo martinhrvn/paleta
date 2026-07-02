@@ -221,7 +221,19 @@ func (m WizardModel) helpLine() string {
 func (m *WizardModel) Run() ([]config.Location, bool, error) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 
-	p := tea.NewProgram(*m, tea.WithAltScreen(), tea.WithOutput(os.Stderr))
+	// Prefer a dedicated /dev/tty for both input and output. This keeps stdout
+	// clean (it may carry the selection JSON when the wizard is launched from
+	// within `plt select`) and gives a clean tty handoff after the selector
+	// program has quit. Fall back to stderr output when there is no tty.
+	opts := []tea.ProgramOption{tea.WithAltScreen()}
+	if tty, terr := os.OpenFile("/dev/tty", os.O_RDWR, 0); terr == nil {
+		defer tty.Close()
+		opts = append(opts, tea.WithInput(tty), tea.WithOutput(tty))
+	} else {
+		opts = append(opts, tea.WithOutput(os.Stderr))
+	}
+
+	p := tea.NewProgram(*m, opts...)
 	finalModel, err := p.Run()
 	if err != nil {
 		return nil, false, err

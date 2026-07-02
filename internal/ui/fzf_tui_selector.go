@@ -766,7 +766,11 @@ func (m *Model) Run() ([]SelectionResult, bool, error) {
 
 	lipgloss.SetColorProfile(termenv.TrueColor)
 
-	p := tea.NewProgram(*m, tea.WithAltScreen(), tea.WithOutput(tty))
+	// Drive both input and output through /dev/tty so os.Stdin/os.Stdout are
+	// left untouched. This keeps stdout clean for the JSON result and lets the
+	// selector hand off cleanly to a second program (the in-app init wizard)
+	// without leaving os.Stdin in a half-consumed state.
+	p := tea.NewProgram(*m, tea.WithAltScreen(), tea.WithInput(tty), tea.WithOutput(tty))
 	finalModel, err := p.Run()
 	if err != nil {
 		return nil, false, err
