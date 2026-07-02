@@ -587,7 +587,33 @@ func TestModel_KeyEsc_Quits(t *testing.T) {
 	um := updated.(Model)
 
 	if !um.quitting {
-		t.Error("expected quitting to be true after Esc")
+		t.Error("expected quitting to be true after Esc with empty search")
+	}
+}
+
+func TestModel_KeyEsc_ClearsSearchThenQuits(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.searchInput.SetValue("npm")
+	m.updateFilteredCommands()
+
+	// First Esc: text present, so clear the search instead of quitting.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	m = updated.(Model)
+	if m.quitting {
+		t.Error("expected Esc with text to clear search, not quit")
+	}
+	if m.searchInput.Value() != "" {
+		t.Errorf("expected search cleared, got %q", m.searchInput.Value())
+	}
+	if len(m.filteredCommands) != len(m.commands) {
+		t.Errorf("expected all %d commands restored, got %d", len(m.commands), len(m.filteredCommands))
+	}
+
+	// Second Esc: search empty, so quit.
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	m = updated.(Model)
+	if !m.quitting {
+		t.Error("expected second Esc with empty search to quit")
 	}
 }
 

@@ -212,7 +212,17 @@ func (m Model) updateNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 
-	case tea.KeyEscape, tea.KeyCtrlC:
+	case tea.KeyEscape:
+		// Esc clears a non-empty search first; on an empty search it quits.
+		if m.searchInput.Value() != "" {
+			m.searchInput.SetValue("")
+			m.updateFilteredCommands()
+			return m, nil
+		}
+		m.quitting = true
+		return m, tea.Quit
+
+	case tea.KeyCtrlC:
 		m.quitting = true
 		return m, tea.Quit
 	}

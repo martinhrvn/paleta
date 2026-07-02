@@ -173,7 +173,16 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.Type {
-		case tea.KeyEsc, tea.KeyCtrlC:
+		case tea.KeyCtrlC:
+			m.quitting = true
+			return m, tea.Quit
+		case tea.KeyEsc:
+			// Esc clears a non-empty search first; on an empty search it cancels.
+			if m.searchInput.Value() != "" {
+				m.searchInput.SetValue("")
+				m.applyFilter()
+				return m, nil
+			}
 			m.quitting = true
 			return m, tea.Quit
 		case tea.KeyEnter:

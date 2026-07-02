@@ -119,6 +119,7 @@ func TestWizard_EnterConfirms(t *testing.T) {
 }
 
 func TestWizard_EscCancels(t *testing.T) {
+	// With an empty search box, Esc cancels the wizard.
 	m := NewWizardModel(wizardItems())
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	wm := updated.(WizardModel)
@@ -126,7 +127,37 @@ func TestWizard_EscCancels(t *testing.T) {
 		t.Error("expected Esc not to confirm")
 	}
 	if !wm.quitting {
-		t.Error("expected Esc to quit")
+		t.Error("expected Esc with empty search to quit")
+	}
+}
+
+func TestWizard_EscClearsSearchThenQuits(t *testing.T) {
+	m := typeRunes(NewWizardModel(configuredFirstItems()), "api")
+	if len(m.filtered) != 1 {
+		t.Fatalf("precondition: expected filtered list, got %d", len(m.filtered))
+	}
+
+	// First Esc: text present, so clear the search instead of quitting.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(WizardModel)
+	if m.quitting {
+		t.Error("expected Esc with text to clear search, not quit")
+	}
+	if m.searchInput.Value() != "" {
+		t.Errorf("expected search cleared, got %q", m.searchInput.Value())
+	}
+	if len(m.filtered) != len(m.items) {
+		t.Errorf("expected all %d items restored, got %d", len(m.items), len(m.filtered))
+	}
+
+	// Second Esc: search empty, so cancel/quit.
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = updated.(WizardModel)
+	if !m.quitting {
+		t.Error("expected second Esc with empty search to quit")
+	}
+	if m.confirmed {
+		t.Error("expected Esc not to confirm")
 	}
 }
 
