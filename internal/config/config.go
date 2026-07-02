@@ -175,6 +175,11 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to process project types: %w", err)
 	}
 
+	// Expand @project[type]:command references into resolved command strings.
+	if err := expandCommandAliases(&config); err != nil {
+		return nil, fmt.Errorf("failed to expand command references: %w", err)
+	}
+
 	return &config, nil
 }
 

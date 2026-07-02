@@ -236,6 +236,51 @@ commands:
 - **Filtering**: Use `include` and `exclude` patterns to filter by name
 - **Clarity**: Easier to understand what each command does
 
+### Command References
+
+A command string can reference another command instead of repeating it, using
+`@project[type]:command`:
+
+- **`@project`** — the target location, by its `name` (or the folder's base name).
+- **`[type]`** — *optional*; only needed to disambiguate a location that declares
+  more than one type (e.g. `[npm]` vs `[docker]`).
+- **`:command`** — the referenced command's name.
+
+References expand when the config loads, so they compose naturally with `&&`:
+
+```yaml
+locations:
+  - name: web
+    location: packages/web
+    type: pnpm
+  - name: api
+    location: services/api
+    type: go
+    commands:
+      # Referencing another project runs it in that project's directory
+      # (wrapped in a subshell), then continues here:
+      - name: ci
+        command: "@web:build && go test ./..."
+        # expands to: (cd '…/packages/web' && pnpm run build) && go test ./...
+```
+
+A same-project reference stays bare (`@web:build` inside `web` → `pnpm run build`).
+An unresolvable reference — unknown project/command, an ambiguous multi-type
+command with no `[type]`, or a reference cycle — is a hard error at load time, so
+typos surface immediately.
+
+Glob locations (`location: "packages/*"`) expand to one location per folder, each
+named after its folder, so `@web:build` targets the specific `packages/web`.
+
+When two folders share a name (e.g. `packages/search` **and** `services/search`),
+the bare name `@search:build` is reported as ambiguous. Disambiguate with a path
+tail — the project slot also accepts a path:
+
+```
+@packages/search:build   # the pnpm build in packages/search
+@services/search:test    # the go test in services/search
+```
+
 ### Environment Variables
 
 Set environment variables at the **location** level (applied to every command in
