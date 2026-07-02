@@ -190,6 +190,75 @@ func TestModel_QueueSave_CallsStoreWithJoinedCommand(t *testing.T) {
 	}
 }
 
+// saveQueueAndCapture queues the given filtered indices, opens the editor, saves
+// under the name "chain", and returns the command string handed to the store.
+func saveQueueAndCapture(t *testing.T, cfg *config.Config, indices ...int) string {
+	t.Helper()
+	m := createTestModel(cfg)
+	for _, i := range indices {
+		m.toggleSelection(i)
+	}
+	var got string
+	m.saveCommand = &SaveStore{Save: func(_, _, _, command string) error {
+		got = command
+		return nil
+	}}
+	m.enterQueueEditor()
+
+	for _, msg := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("s")},
+		{Type: tea.KeyRunes, Runes: []rune("chain")},
+		{Type: tea.KeyEnter},
+	} {
+		updated, _ := m.Update(msg)
+		m = updated.(Model)
+	}
+	return got
+}
+
+func TestModel_QueueSave_EmitsAliasesForNamedCommands(t *testing.T) {
+	cfg := &config.Config{Locations: []config.Location{{
+		Name: "web", Location: "/path/web", Types: config.Types{"pnpm"},
+		Commands: []config.Command{
+			{Name: "build", Command: "pnpm run build", Type: "pnpm"},
+			{Name: "dev", Command: "pnpm run dev", Type: "pnpm"},
+		},
+	}}}
+
+	if got, want := saveQueueAndCapture(t, cfg, 0, 1), "@web:build && @web:dev"; got != want {
+		t.Errorf("saved %q, want %q", got, want)
+	}
+}
+
+func TestModel_QueueSave_IncludesTypeWhenAmbiguous(t *testing.T) {
+	cfg := &config.Config{Locations: []config.Location{{
+		Name: "svc", Location: "/path/svc", Types: config.Types{"npm", "docker"},
+		Commands: []config.Command{
+			{Name: "build", Command: "npm run build", Type: "npm"},
+			{Name: "build", Command: "docker build .", Type: "docker"},
+		},
+	}}}
+
+	// Queue the docker build (index 1); its name collides with the npm build, so
+	// the reference must carry the [docker] type.
+	if got, want := saveQueueAndCapture(t, cfg, 1), "@svc[docker]:build"; got != want {
+		t.Errorf("saved %q, want %q", got, want)
+	}
+}
+
+func TestModel_QueueSave_FallsBackToRawForUnnamedCommand(t *testing.T) {
+	cfg := &config.Config{Locations: []config.Location{{
+		Name: "web", Location: "/path/web",
+		Commands: []config.Command{
+			{Name: "", Command: "make thing"}, // no name -> can't be referenced
+		},
+	}}}
+
+	if got, want := saveQueueAndCapture(t, cfg, 0), "make thing"; got != want {
+		t.Errorf("saved %q, want %q", got, want)
+	}
+}
+
 func TestModel_QueueSave_CrossProjectShowsHint(t *testing.T) {
 	// frontend (0) + backend (3) span two projects.
 	m := queueTestModel(0, 3)

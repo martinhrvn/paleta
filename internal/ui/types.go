@@ -15,6 +15,7 @@ type CommandInfo struct {
 	Directory     string
 	Command       string
 	DisplayName   string
+	Name          string            // Command name (e.g. "build"); empty for unnamed commands
 	Type          string            // Project type (npm, go, etc.)
 	Env           map[string]string // Resolved environment variables for this command
 	FrecencyScore float64           // Score for sorting

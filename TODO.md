@@ -83,7 +83,7 @@ The project types we should support intitally are:
   - [x] `[type]` is optional; required only to disambiguate a multi-type project
   - [x] a cross-project reference wraps in `(cd '<dir>' && …)` so it runs in the right directory; same-project refs stay bare
   - [x] unresolvable references (unknown project/command, ambiguous multi-type, cycles) fail `plt` config load with a clear error
-  - [ ] (future) have "save queue to `.pltrc`" emit reference tokens instead of raw command strings
+  - [x] "save queue to `.pltrc`" emits reference tokens (`@web:build && @web:dev`) instead of raw command strings, so saved chains track the referenced commands; falls back to the raw string for unnamed commands/projects, and adds `[type]` only when the name is ambiguous
 - [x] automatically detect type of a location based on presence of package.json/go.mod/etc.
   - [x] interactive `plt init` wizard: scans the tree (git-aware, skips gitignored/`node_modules`/etc.), multi-select detected projects, generates `.pltrc`
   - [x] repeatable: existing `.pltrc` loaded as starting state (configured locations pre-selected & tagged, merged on save)

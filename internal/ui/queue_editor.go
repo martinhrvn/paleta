@@ -189,12 +189,7 @@ func (m *Model) confirmQueueSave() {
 		return
 	}
 	directory := m.queue[0].Directory
-
-	parts := make([]string, len(m.queue))
-	for i, c := range m.queue {
-		parts[i] = c.Command
-	}
-	joined := strings.Join(parts, " && ")
+	joined := m.buildQueueCommand()
 
 	if err := m.saveCommand.Save(displayName, directory, name, joined); err != nil {
 		m.queueHint = "save failed: " + err.Error()
@@ -207,6 +202,68 @@ func (m *Model) confirmQueueSave() {
 	m.loadCommands()
 	m.updateFilteredCommands()
 	m.exitQueueEditor()
+}
+
+// buildQueueCommand joins the queued commands for saving, preferring reference
+// tokens (@project[type]:name) over raw command strings so the saved command
+// tracks the referenced commands rather than freezing their current text. It
+// falls back to the raw string when a command can't be referenced safely (no
+// name, or a project whose name is missing/ambiguous).
+func (m Model) buildQueueCommand() string {
+	parts := make([]string, len(m.queue))
+	for i, c := range m.queue {
+		if tok, ok := m.aliasToken(c); ok {
+			parts[i] = tok
+		} else {
+			parts[i] = c.Command
+		}
+	}
+	return strings.Join(parts, " && ")
+}
+
+// aliasToken builds a @project[type]:name reference for a queued command, or
+// reports ok=false when it can't be referenced safely. The [type] is included
+// only when the command name is ambiguous within the project (multi-type).
+func (m Model) aliasToken(c CommandInfo) (string, bool) {
+	if c.Name == "" || !m.projectReferenceable(c.DisplayName) {
+		return "", false
+	}
+	tok := "@" + c.DisplayName
+	if c.Type != "" && m.commandNameAmbiguous(c.DisplayName, c.Name) {
+		tok += "[" + c.Type + "]"
+	}
+	tok += ":" + c.Name
+	return tok, true
+}
+
+// projectReferenceable reports whether exactly one location carries this display
+// name, so `@name:...` resolves unambiguously at load time.
+func (m Model) projectReferenceable(displayName string) bool {
+	count := 0
+	for i := range m.config.Locations {
+		if m.config.Locations[i].Name == displayName {
+			count++
+		}
+	}
+	return count == 1
+}
+
+// commandNameAmbiguous reports whether a project has more than one command with
+// the given name (i.e. a multi-type project), so a reference needs a [type].
+func (m Model) commandNameAmbiguous(displayName, name string) bool {
+	count := 0
+	for i := range m.config.Locations {
+		loc := &m.config.Locations[i]
+		if loc.Name != displayName {
+			continue
+		}
+		for _, cmd := range loc.Commands {
+			if cmd.Name == name {
+				count++
+			}
+		}
+	}
+	return count > 1
 }
 
 // queueProject returns the shared project display name when every queued command

@@ -482,6 +482,7 @@ func (m *Model) loadCommands() {
 				Directory:     location.Location,
 				Command:       command.Command,
 				DisplayName:   displayName,
+				Name:          command.Name,
 				Type:          command.Type,
 				Env:           config.EffectiveEnv(location, command),
 				FrecencyScore: score,
