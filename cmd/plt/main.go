@@ -12,8 +12,6 @@ import (
 	"github.com/martinhrvn/paleta/internal/commands"
 	"github.com/martinhrvn/paleta/internal/config"
 	"github.com/martinhrvn/paleta/internal/history"
-	"github.com/martinhrvn/paleta/internal/scan"
-	"github.com/martinhrvn/paleta/internal/ui"
 )
 
 // version is the paleta version. It is overridden at build time via
@@ -87,49 +85,27 @@ func handleInitCommand() {
 
 // runInitWizard scans for projects, lets the user pick which to include, and
 // writes the resulting .pltrc. An existing config is loaded as the starting
-// state so a repeat run shows and preserves what is already configured.
+// state so a repeat run shows and preserves what is already configured. The
+// wizard logic is shared with the in-app "add projects" flow (Ctrl+N).
 func runInitWizard(configPath string) {
-	cands, err := scan.Scan(".")
+	outcome, err := commands.RunInitWizard(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error scanning for projects: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	authored, err := commands.LoadAuthoredConfig(configPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading existing config: %v\n", err)
-		os.Exit(1)
-	}
-
-	items := commands.BuildWizardItems(cands, authored)
-	if len(items) == 0 {
+	switch outcome {
+	case commands.InitWritten:
+		printInitSuccess(configPath)
+	case commands.InitNoProjects:
 		fmt.Println("No projects detected in this directory tree.")
 		fmt.Println("Run 'plt init --template' to start from a sample configuration.")
-		return
-	}
-
-	wizard := ui.NewWizardModel(items)
-	locations, confirmed, err := wizard.Run()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error running wizard: %v\n", err)
-		os.Exit(1)
-	}
-	if !confirmed {
+	case commands.InitCanceled:
 		fmt.Println("Init canceled.")
 		os.Exit(1)
-	}
-	if len(locations) == 0 {
+	case commands.InitNothingSelected:
 		fmt.Println("No locations selected; .pltrc was not written.")
-		return
 	}
-
-	content := commands.GenerateConfig(locations, authored)
-	if err := commands.WriteConfig(configPath, content); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing config: %v\n", err)
-		os.Exit(1)
-	}
-
-	printInitSuccess(configPath)
 }
 
 func printInitSuccess(configPath string) {
@@ -248,8 +224,12 @@ func handleSelectCommand() {
 		exitConfigError(err)
 	}
 
+	// The local .pltrc path (if any) enables focus persistence and in-app
+	// project adding. An empty path (global-fallback config) disables both.
+	configPath, _ := config.FindConfigFile()
+
 	// Run TUI selection
-	results, err := commands.RunFzfTUI(cfg)
+	results, err := commands.RunFzfTUI(cfg, configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error with selection: %v\n", err)
 		os.Exit(1)

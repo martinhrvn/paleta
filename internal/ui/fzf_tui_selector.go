@@ -50,6 +50,19 @@ type Model struct {
 	history          *history.History
 	frecencyEnabled  bool
 
+	// Focus
+	focus       *FocusStore // nil when focus persistence is unavailable
+	focusActive bool        // session toggle: show only focused locations
+
+	// Focus picker mode (Ctrl+P)
+	focusPicking bool
+	focusItems   []FocusEntry
+	focusCursor  int
+
+	// reinit is set when the user requests adding projects (Ctrl+N). The
+	// selector quits and the caller runs the init wizard before re-entering.
+	reinit bool
+
 	// Edit mode
 	editing         bool
 	editCommand     string
@@ -72,8 +85,9 @@ type Model struct {
 	quitting bool
 }
 
-// NewModel creates a new bubbletea Model for the TUI selector
-func NewModel(cfg *config.Config) Model {
+// NewModel creates a new bubbletea Model for the TUI selector. focus may be nil
+// when there is no writable local config to persist focus changes to.
+func NewModel(cfg *config.Config, focus *FocusStore) Model {
 	si := textinput.New()
 	si.Prompt = "> "
 	si.Focus()
@@ -87,6 +101,8 @@ func NewModel(cfg *config.Config) Model {
 		config:          cfg,
 		selectedIndices: make(map[int]bool),
 		frecencyEnabled: cfg.Frecency.Enabled,
+		focus:           focus,
+		focusActive:     cfg.AnyFocused(),
 		searchInput:     si,
 		editInput:       ei,
 	}
@@ -117,6 +133,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.focusPicking {
+			return m.updateFocusPickMode(msg)
+		}
 		if m.editing {
 			return m.updateEditMode(msg)
 		}
@@ -125,6 +144,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Pass other messages to the active input
 	var cmd tea.Cmd
+	if m.focusPicking {
+		return m, nil
+	}
 	if m.editing {
 		m.editInput, cmd = m.editInput.Update(msg)
 	} else {
@@ -175,6 +197,21 @@ func (m Model) updateNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.updateFilteredCommands()
 		return m, nil
 
+	case tea.KeyCtrlT:
+		m.focusActive = !m.focusActive
+		m.loadCommands()
+		m.updateFilteredCommands()
+		return m, nil
+
+	case tea.KeyCtrlP:
+		m.enterFocusPicker()
+		return m, nil
+
+	case tea.KeyCtrlN:
+		m.reinit = true
+		m.quitting = true
+		return m, tea.Quit
+
 	case tea.KeyEscape, tea.KeyCtrlC:
 		m.quitting = true
 		return m, tea.Quit
@@ -215,6 +252,10 @@ func (m Model) View() string {
 		return ""
 	}
 
+	if m.focusPicking {
+		return m.renderFocusPicker()
+	}
+
 	var sections []string
 
 	// Search / edit input
@@ -241,8 +282,10 @@ func (m Model) View() string {
 			{"Tab", "select"},
 			{"Enter", "run"},
 			{"^E", "edit"},
-			{"^A", "all"},
 			{"^F", "frecency"},
+			{"^T", "focus"},
+			{"^P", "pick"},
+			{"^N", "add"},
 			{"Esc", "cancel"},
 		}))
 	}
@@ -270,6 +313,10 @@ func (m Model) renderStatus() string {
 
 	if m.frecencyEnabled {
 		parts = append(parts, statusBlueStyle.Render("frecency"))
+	}
+
+	if m.focusActive && m.config.AnyFocused() {
+		parts = append(parts, statusGreenStyle.Render("focused"))
 	}
 
 	return "  " + strings.Join(parts, statusStyle.Render(" · "))
@@ -366,7 +413,16 @@ func (m Model) renderPreview(width, height int) string {
 func (m *Model) loadCommands() {
 	m.commands = []CommandInfo{}
 
+	// When the focus filter is active and any location is focused, hide the
+	// non-focused ones. The AnyFocused guard means toggling focus on while
+	// nothing is focused never blanks the list.
+	filterFocus := m.focusActive && m.config.AnyFocused()
+
 	for _, location := range m.config.Locations {
+		if filterFocus && !location.Focused {
+			continue
+		}
+
 		displayName := location.Name
 		if displayName == "" {
 			displayName = location.Location
@@ -391,6 +447,15 @@ func (m *Model) loadCommands() {
 			}
 			m.commands = append(m.commands, info)
 		}
+	}
+}
+
+// reloadConfig re-reads the discovered config from disk so focus changes written
+// by the picker are reflected in the list. On failure the existing config is
+// kept.
+func (m *Model) reloadConfig() {
+	if cfg, err := config.LoadConfigFromDiscovery(); err == nil {
+		m.config = cfg
 	}
 }
 
@@ -683,8 +748,10 @@ func (m Model) generatePreview(cmd CommandInfo) string {
 	return strings.Join(lines, "\n")
 }
 
-// Run starts the TUI and returns selected commands
-func (m *Model) Run() ([]SelectionResult, error) {
+// Run starts the TUI and returns selected commands. The returned bool is true
+// when the user requested adding projects (Ctrl+N); the caller should run the
+// init wizard and re-enter the selector.
+func (m *Model) Run() ([]SelectionResult, bool, error) {
 	m.loadCommands()
 	m.updateFilteredCommands()
 
@@ -693,7 +760,7 @@ func (m *Model) Run() ([]SelectionResult, error) {
 	// The shell integration captures stdout, so bubbletea must not write there.
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open /dev/tty: %w", err)
+		return nil, false, fmt.Errorf("failed to open /dev/tty: %w", err)
 	}
 	defer tty.Close()
 
@@ -702,13 +769,16 @@ func (m *Model) Run() ([]SelectionResult, error) {
 	p := tea.NewProgram(*m, tea.WithAltScreen(), tea.WithOutput(tty))
 	finalModel, err := p.Run()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	fm := finalModel.(Model)
+	if fm.reinit {
+		return nil, true, nil
+	}
 	if len(fm.results) == 0 {
-		return nil, fmt.Errorf("selection canceled")
+		return nil, false, fmt.Errorf("selection canceled")
 	}
 
-	return fm.results, nil
+	return fm.results, false, nil
 }

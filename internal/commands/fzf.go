@@ -149,15 +149,41 @@ func PrepareCommandInfoWithHistory(cfg *config.Config, hist *history.History, en
 	return infos
 }
 
-// RunFzfTUI executes the fzf-style TUI with multi-select support
-func RunFzfTUI(cfg *config.Config) ([]SelectionResult, error) {
-	model := ui.NewModel(cfg)
-	results, err := model.Run()
-	if err != nil {
-		return nil, err
+// RunFzfTUI executes the fzf-style TUI with multi-select support. configPath is
+// the discovered .pltrc path (may be empty for a global-fallback config); it
+// enables focus persistence and in-app project adding. When the user requests
+// adding projects (Ctrl+N), the init wizard runs and the selector re-enters with
+// the reloaded config.
+func RunFzfTUI(cfg *config.Config, configPath string) ([]SelectionResult, error) {
+	for {
+		model := ui.NewModel(cfg, focusStore(configPath))
+		results, reinit, err := model.Run()
+		if reinit {
+			if _, ierr := RunInitWizard(configPath); ierr != nil {
+				return nil, ierr
+			}
+			if reloaded, rerr := config.LoadConfigFromDiscovery(); rerr == nil {
+				cfg = reloaded
+			}
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		// ui.SelectionResult and commands.SelectionResult are the same type, so
+		// the model's results can be returned directly with no conversion.
+		return results, nil
 	}
+}
 
-	// ui.SelectionResult and commands.SelectionResult are the same type, so
-	// the model's results can be returned directly with no conversion.
-	return results, nil
+// focusStore builds the focus persistence hooks for the selector, or nil when
+// there is no writable local config path to persist to.
+func focusStore(configPath string) *ui.FocusStore {
+	if configPath == "" {
+		return nil
+	}
+	return &ui.FocusStore{
+		List: func() ([]ui.FocusEntry, error) { return FocusEntries(configPath) },
+		Save: func(focused map[string]bool) error { return SetFocused(configPath, focused) },
+	}
 }

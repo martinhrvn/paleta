@@ -86,6 +86,7 @@ func expandSingleGlob(loc Location) ([]Location, error) {
 			Commands: append([]Command{}, loc.Commands...),
 			Include:  append([]string{}, loc.Include...),
 			Exclude:  append([]string{}, loc.Exclude...),
+			Focused:  loc.Focused,
 		}
 		result = append(result, newLoc)
 	}

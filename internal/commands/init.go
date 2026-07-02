@@ -11,6 +11,56 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// InitOutcome describes the result of running the interactive init wizard.
+type InitOutcome int
+
+const (
+	InitWritten         InitOutcome = iota // a new .pltrc was written
+	InitNoProjects                         // nothing detected in the tree
+	InitCanceled                           // user aborted the wizard
+	InitNothingSelected                    // wizard confirmed with no locations
+)
+
+// RunInitWizard scans the current directory, lets the user pick which projects
+// to include, and writes the resulting .pltrc, preserving any existing config as
+// the starting state. It performs no stdout output, so it is safe to call from
+// within `plt select` (whose stdout carries the selection JSON). Callers decide
+// how to report the returned outcome.
+func RunInitWizard(configPath string) (InitOutcome, error) {
+	cands, err := scan.Scan(".")
+	if err != nil {
+		return InitNoProjects, fmt.Errorf("scanning for projects: %w", err)
+	}
+
+	authored, err := LoadAuthoredConfig(configPath)
+	if err != nil {
+		return InitNoProjects, fmt.Errorf("reading existing config: %w", err)
+	}
+
+	items := BuildWizardItems(cands, authored)
+	if len(items) == 0 {
+		return InitNoProjects, nil
+	}
+
+	wizard := ui.NewWizardModel(items)
+	locations, confirmed, err := wizard.Run()
+	if err != nil {
+		return InitCanceled, fmt.Errorf("running wizard: %w", err)
+	}
+	if !confirmed {
+		return InitCanceled, nil
+	}
+	if len(locations) == 0 {
+		return InitNothingSelected, nil
+	}
+
+	content := GenerateConfig(locations, authored)
+	if err := WriteConfig(configPath, content); err != nil {
+		return InitWritten, fmt.Errorf("writing config: %w", err)
+	}
+	return InitWritten, nil
+}
+
 // LoadAuthoredConfig reads an existing .pltrc as authored, without the path
 // resolution, glob expansion, or project-type processing that config.LoadConfig
 // applies. This preserves relative paths, globs, and hand-written commands so a

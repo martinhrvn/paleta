@@ -69,9 +69,11 @@ The project types we should support intitally are:
 - [ ] Dry-run mode to preview what will be executed
 - [ ] Verbose mode for debugging
 - [ ] Do not show locations that do not exist
-- [ ] ability to focus specific locations
-  - either using .pltrc.local.yaml (something like `only: location/foo` or command line argument
-  - keyboard shortcut to focus/unfocus while searching
+- [x] ability to focus specific locations
+  - [x] per-location `focused: true` in `.pltrc`; selector defaults to focused-only when any location is focused
+  - [x] `Ctrl+T` toggles the focus filter (focused-only ↔ all) for the current session
+  - [x] `Ctrl+P` picker to set/unset which locations are focused (with `Ctrl+A` toggle-all), persisted to `.pltrc`
+  - [x] `Ctrl+N` adds projects on the fly via the `plt init` wizard, then re-enters the selector
 - [ ] aliases
 - [x] automatically detect type of a location based on presence of package.json/go.mod/etc.
   - [x] interactive `plt init` wizard: scans the tree (git-aware, skips gitignored/`node_modules`/etc.), multi-select detected projects, generates `.pltrc`

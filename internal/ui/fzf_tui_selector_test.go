@@ -39,7 +39,7 @@ func createTestConfig() *config.Config {
 
 // Helper to create a Model with test config (without starting program)
 func createTestModel(cfg *config.Config) Model {
-	m := NewModel(cfg)
+	m := NewModel(cfg, nil)
 	m.loadCommands()
 	m.filteredCommands = make([]CommandInfo, len(m.commands))
 	copy(m.filteredCommands, m.commands)
@@ -283,7 +283,7 @@ func TestModel_FormatListItemStyled(t *testing.T) {
 
 func TestModel_LoadCommands(t *testing.T) {
 	cfg := createTestConfig()
-	m := NewModel(cfg)
+	m := NewModel(cfg, nil)
 	m.loadCommands()
 
 	// Should have 5 commands total (3 from frontend, 2 from backend)

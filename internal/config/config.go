@@ -124,6 +124,19 @@ type Location struct {
 	Include  []string          `yaml:"include,omitempty"`
 	Exclude  []string          `yaml:"exclude,omitempty"`
 	Env      map[string]string `yaml:"env,omitempty"`
+	// Focused marks this location as part of the user's "focus" set. When any
+	// location is focused, the selector defaults to showing only focused ones.
+	Focused bool `yaml:"focused,omitempty"`
+}
+
+// AnyFocused reports whether any location is marked focused.
+func (c *Config) AnyFocused() bool {
+	for i := range c.Locations {
+		if c.Locations[i].Focused {
+			return true
+		}
+	}
+	return false
 }
 
 func LoadConfig(configPath string) (*Config, error) {
