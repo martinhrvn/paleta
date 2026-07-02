@@ -1,9 +1,12 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/martinhrvn/paleta/internal/config"
 	"github.com/martinhrvn/paleta/internal/history"
 )
@@ -279,43 +282,43 @@ func TestModel_GeneratePreview_EmptyType(t *testing.T) {
 }
 
 func TestModel_FormatListItemPlain(t *testing.T) {
+	t.Setenv("PLT_NO_ICONS", "1") // deterministic ASCII, no glyphs
 	m := createTestModel(createTestConfig())
+	display := m.filteredCommands[0].Display
 
-	// Test unqueued item (plain, no ANSI codes)
-	formatted := m.formatListItemPlain(0, 0)
-	if formatted != "  frontend: npm start" {
-		t.Errorf("expected '  frontend: npm start', got %q", formatted)
+	// Unqueued item: two-space badge + plain row text.
+	if got := queueBadgePlain(0) + rowPlain(display); got != "  frontend: npm start" {
+		t.Errorf("expected '  frontend: npm start', got %q", got)
 	}
 
-	// Test queued item (position 1 badge, plain, no ANSI codes)
-	formatted = m.formatListItemPlain(0, 1)
-	if formatted != "1 frontend: npm start" {
-		t.Errorf("expected '1 frontend: npm start', got %q", formatted)
+	// Queued item: position 1 badge.
+	if got := queueBadgePlain(1) + rowPlain(display); got != "1 frontend: npm start" {
+		t.Errorf("expected '1 frontend: npm start', got %q", got)
 	}
 
-	// Test out of bounds
-	formatted = m.formatListItemPlain(-1, 0)
-	if formatted != "" {
-		t.Errorf("expected empty string for out of bounds, got %q", formatted)
+	// Out of bounds yields empty.
+	if got := m.formatListItem(-1, 0, nil); got != "" {
+		t.Errorf("expected empty string for out of bounds, got %q", got)
 	}
 }
 
 func TestModel_FormatListItemStyled(t *testing.T) {
+	t.Setenv("PLT_NO_ICONS", "1")
 	m := createTestModel(createTestConfig())
 
-	// Styled output contains ANSI codes, so use contains checks
-	formatted := m.formatListItem(0, 0)
-	if !contains(formatted, "frontend:") {
-		t.Errorf("styled item should contain 'frontend:', got %q", formatted)
+	// Visible (ANSI-stripped) text should carry the location and command.
+	visible := ansi.Strip(m.formatListItem(0, 0, nil))
+	if !contains(visible, "frontend:") {
+		t.Errorf("styled item should contain 'frontend:', got %q", visible)
 	}
-	if !contains(formatted, "npm start") {
-		t.Errorf("styled item should contain 'npm start', got %q", formatted)
+	if !contains(visible, "npm start") {
+		t.Errorf("styled item should contain 'npm start', got %q", visible)
 	}
 
-	// Queued item should contain its position badge
-	formatted = m.formatListItem(0, 1)
-	if !contains(formatted, "1") {
-		t.Errorf("styled queued item should contain position '1', got %q", formatted)
+	// Queued item should carry its position badge.
+	visible = ansi.Strip(m.formatListItem(0, 1, nil))
+	if !contains(visible, "1") {
+		t.Errorf("styled queued item should contain position '1', got %q", visible)
 	}
 }
 
@@ -848,5 +851,63 @@ func TestModel_GeneratePreview_ShowsStats(t *testing.T) {
 	noHist := m.generatePreview(m.filteredCommands[1]) // "frontend: npm test", never run
 	if contains(noHist, "Runs") {
 		t.Errorf("expected no stats for an unrun command:\n%s", noHist)
+	}
+}
+
+func TestFuzzySubsequenceIndices(t *testing.T) {
+	cases := []struct {
+		text, query string
+		want        []int
+	}{
+		{"npm run dev", "nrd", []int{0, 4, 8}}, // n(0) r(4) d(8)
+		{"npm run dev", "npm", []int{0, 1, 2}},
+		{"npm run dev", "xyz", nil}, // no match
+		{"npm run dev", "", nil},    // empty query
+		{"abcabc", "cc", []int{2, 5}},
+	}
+	for _, c := range cases {
+		got := fuzzySubsequenceIndices(c.text, c.query)
+		if len(got) != len(c.want) {
+			t.Errorf("indices(%q,%q) = %v, want %v", c.text, c.query, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("indices(%q,%q) = %v, want %v", c.text, c.query, got, c.want)
+				break
+			}
+		}
+	}
+}
+
+func TestHighlightMatches_PreservesVisibleText(t *testing.T) {
+	base := listCommandStyle
+	hl := matchStyle
+	text := "npm run dev"
+
+	// Non-empty match set.
+	matched := map[int]bool{0: true, 4: true, 8: true}
+	got := ansi.Strip(highlightMatches(text, matched, base, hl))
+	if got != text {
+		t.Errorf("highlightMatches stripped = %q, want %q", got, text)
+	}
+
+	// Empty match set still yields the same visible text.
+	gotEmpty := ansi.Strip(highlightMatches(text, nil, base, hl))
+	if gotEmpty != text {
+		t.Errorf("highlightMatches(nil) stripped = %q, want %q", gotEmpty, text)
+	}
+}
+
+func TestTheme_TrueColorAndEffects(t *testing.T) {
+	if !previewTitleStyle.GetBold() {
+		t.Error("previewTitleStyle should be bold")
+	}
+	if !matchStyle.GetBold() {
+		t.Error("matchStyle should be bold")
+	}
+	fg, ok := matchStyle.GetForeground().(lipgloss.Color)
+	if !ok || !strings.HasPrefix(string(fg), "#") {
+		t.Errorf("matchStyle foreground should be a truecolor hex, got %#v", matchStyle.GetForeground())
 	}
 }

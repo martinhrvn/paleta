@@ -282,3 +282,15 @@ Added a new fzf-like TUI interface with improved UX:
   - `internal/ui/fzf_tui_selector_test.go`: Unit tests (TDD)
   - Updated `plt-core.sh` with `gpm_run` function
   - Updated `plt-integration.zsh` with `__gpm_tui_select_widget`
+
+### Palette Theme Refresh — Catppuccin Mocha (Completed)
+Modernized the `plt select` TUI look. Truecolor already worked (forced via
+`lipgloss.SetColorProfile(termenv.TrueColor)` + rendering to `/dev/tty`); the
+flat look came from muted 256-palette colors with no effects.
+- **Catppuccin Mocha** truecolor theme (single palette block in
+  `internal/ui/fzf_tui_selector.go`, shared by the wizard/queue/focus views)
+- Bold accents + faint secondary text
+- Lavender accent bar on the selected row (surface-filled, gap-free)
+- Live fuzzy-match highlighting via `fuzzySubsequenceIndices` + `highlightMatches`
+- Nerd Font glyphs (folder/terminal/`❯`) with `PLT_NO_ICONS=1` ASCII fallback
+- Tests: `fuzzySubsequenceIndices`, `highlightMatches`, theme sanity (TDD)

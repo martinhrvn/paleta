@@ -17,26 +17,55 @@ import (
 	"github.com/martinhrvn/paleta/internal/history"
 )
 
-// Muted "Slate" color palette
+// Catppuccin Mocha palette (truecolor). Forced on via
+// lipgloss.SetColorProfile(termenv.TrueColor) in Run(), so these hex colors
+// render even though the shell wrapper captures stdout as a pipe.
+const (
+	ccBase     = "#1e1e2e"
+	ccSurface0 = "#313244"
+	ccOverlay0 = "#6c7086"
+	ccText     = "#cdd6f4"
+	ccLavender = "#b4befe"
+	ccBlue     = "#89b4fa"
+	ccGreen    = "#a6e3a1"
+	ccYellow   = "#f9e2af"
+	ccPeach    = "#fab387"
+)
+
 var (
-	searchPromptStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("67"))
-	selectedMarkStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("109"))
-	cursorLineStyle    = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("252"))
+	searchPromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Bold(true)
+	selectedMarkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccGreen)).Bold(true)
+	// cursorLineStyle is the selected-row highlight shared by the focus picker,
+	// queue editor, and init wizard: a plain surface fill (no inner styling, so
+	// the background never gets punched out by ANSI resets).
+	cursorLineStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color(ccSurface0)).
+			Foreground(lipgloss.Color(ccText)).
+			Bold(true)
+	// Selected-row segments for the main palette list, which supports the
+	// lavender accent bar and per-character fuzzy-match highlighting. Every
+	// segment carries the surface background so no gaps appear between them.
+	selBarStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Background(lipgloss.Color(ccBase))
+	selBaseStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(ccText)).Background(lipgloss.Color(ccSurface0)).Bold(true)
+	selHlStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Background(lipgloss.Color(ccSurface0)).Bold(true)
+	selBadgeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccGreen)).Background(lipgloss.Color(ccSurface0)).Bold(true)
 	previewBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("238"))
-	previewLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("109"))
-	previewValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-	statusStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
-	statusGreenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("109"))
-	statusYellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("180"))
-	statusBlueStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("67"))
-	helpStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
-	helpKeyStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("67"))
-	editPromptStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("180"))
-	listLocationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("242"))
-	listCommandStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-	previewTitleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("67")).Bold(true)
+				BorderForeground(lipgloss.Color(ccOverlay0))
+	previewLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccBlue))
+	previewValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccText))
+	statusStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color(ccOverlay0)).Faint(true)
+	statusGreenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(ccGreen)).Bold(true)
+	statusYellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccYellow)).Bold(true)
+	statusBlueStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(ccBlue)).Bold(true)
+	helpStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color(ccOverlay0)).Faint(true)
+	helpKeyStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Bold(true)
+	editPromptStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(ccPeach)).Bold(true)
+	listLocationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccOverlay0)).Faint(true)
+	listCommandStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(ccText))
+	previewTitleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Bold(true)
+	// matchStyle highlights fuzzy-matched characters in list rows.
+	matchStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Bold(true)
 )
 
 // Model is the bubbletea model for the fzf-style TUI selector
@@ -98,7 +127,7 @@ type Model struct {
 // when there is no writable local config to persist focus changes to.
 func NewModel(cfg *config.Config, focus *FocusStore) Model {
 	si := textinput.New()
-	si.Prompt = "> "
+	si.Prompt = searchPromptGlyph()
 	si.Focus()
 	si.PromptStyle = searchPromptStyle
 
@@ -410,21 +439,20 @@ func (m Model) renderCommandList(width, height int) string {
 		end = len(m.filteredCommands)
 	}
 
+	query := strings.ToLower(m.searchInput.Value())
+
 	var lines []string
 	for i := start; i < end; i++ {
 		pos := m.queuePosAt(i)
-		isCursor := i == m.currentIndex
+		matched := matchedSet(m.filteredCommands[i].Display, query)
 
 		var line string
-		if isCursor {
-			// Use plain text for cursor line — cursorLineStyle overrides sub-colors
-			plain := m.formatListItemPlain(i, pos)
-			if len(plain) < width {
-				plain = plain + strings.Repeat(" ", width-len(plain))
-			}
-			line = cursorLineStyle.Render(plain)
+		if i == m.currentIndex {
+			line = m.renderCursorRow(i, pos, matched, width)
 		} else {
-			line = m.formatListItem(i, pos)
+			// Leading space aligns non-selected rows with the selected row's
+			// accent bar column.
+			line = " " + m.formatListItem(i, pos, matched)
 		}
 
 		lines = append(lines, line)
@@ -543,7 +571,7 @@ func queueBadgePlain(pos int) string {
 	return fmt.Sprintf("%-2d", pos)
 }
 
-func (m Model) formatListItem(index, queuePos int) string {
+func (m Model) formatListItem(index, queuePos int, matched map[int]bool) string {
 	if index < 0 || index >= len(m.filteredCommands) {
 		return ""
 	}
@@ -551,21 +579,81 @@ func (m Model) formatListItem(index, queuePos int) string {
 	if queuePos > 0 {
 		prefix = selectedMarkStyle.Render(queueBadgePlain(queuePos))
 	}
-	// Split Display on first ": " to style location and command differently
 	display := m.filteredCommands[index].Display
-	if loc, rest, ok := strings.Cut(display, ": "); ok {
-		return prefix + listLocationStyle.Render(loc+":") + " " + listCommandStyle.Render(rest)
-	}
-	return prefix + listCommandStyle.Render(display)
+	return prefix + rowContent(display, matched, listLocationStyle, listCommandStyle, matchStyle)
 }
 
-// formatListItemPlain returns an unstyled version for cursor line rendering,
-// where cursorLineStyle overrides sub-colors anyway.
-func (m Model) formatListItemPlain(index, queuePos int) string {
+// renderCursorRow renders the selected list row: a lavender accent bar followed
+// by a surface-filled line with fuzzy matches highlighted. Every inner segment
+// carries the surface background so the fill has no gaps.
+func (m Model) renderCursorRow(index, queuePos int, matched map[int]bool, width int) string {
 	if index < 0 || index >= len(m.filteredCommands) {
 		return ""
 	}
-	return queueBadgePlain(queuePos) + m.filteredCommands[index].Display
+	display := m.filteredCommands[index].Display
+	badgePlain := queueBadgePlain(queuePos)
+	badgeStyle := selBaseStyle
+	if queuePos > 0 {
+		badgeStyle = selBadgeStyle
+	}
+	content := badgeStyle.Render(badgePlain) + rowContent(display, matched, selBaseStyle, selBaseStyle, selHlStyle)
+	// Pad the surface fill to width-1; the accent bar occupies the first column.
+	if pad := (width - 1) - lipgloss.Width(badgePlain+rowPlain(display)); pad > 0 {
+		content += selBaseStyle.Render(strings.Repeat(" ", pad))
+	}
+	return selBarStyle.Render("▌") + content
+}
+
+// rowContent styles a list row's text (location + command), highlighting the
+// fuzzy-matched characters. baseLoc/baseCmd style the location and command
+// segments; hl styles matches. matched is keyed on byte offsets into display.
+func rowContent(display string, matched map[int]bool, baseLoc, baseCmd, hl lipgloss.Style) string {
+	if loc, rest, ok := strings.Cut(display, ": "); ok {
+		sep := len(loc) + len(": ")
+		var b strings.Builder
+		b.WriteString(baseLoc.Render(locIcon()))
+		b.WriteString(highlightMatches(loc, shiftMatched(matched, 0, len(loc)), baseLoc, hl))
+		b.WriteString(baseLoc.Render(": "))
+		b.WriteString(baseCmd.Render(cmdIcon()))
+		b.WriteString(highlightMatches(rest, shiftMatched(matched, sep, len(display)), baseCmd, hl))
+		return b.String()
+	}
+	return baseCmd.Render(cmdIcon()) + highlightMatches(display, matched, baseCmd, hl)
+}
+
+// rowPlain returns the visible (unstyled) text of a row, matching rowContent's
+// layout, for column-width measurement.
+func rowPlain(display string) string {
+	if loc, rest, ok := strings.Cut(display, ": "); ok {
+		return locIcon() + loc + ": " + cmdIcon() + rest
+	}
+	return cmdIcon() + display
+}
+
+// Nerd Font glyphs. Set PLT_NO_ICONS to fall back to plain ASCII for terminals
+// without a patched font.
+func iconsEnabled() bool { return os.Getenv("PLT_NO_ICONS") == "" }
+
+func locIcon() string {
+	if iconsEnabled() {
+		return " " // nf-fa-folder
+	}
+	return ""
+}
+
+func cmdIcon() string {
+	if iconsEnabled() {
+		return " " // nf-fa-terminal
+	}
+	return ""
+}
+
+// searchPromptGlyph is the textinput prompt for the fuzzy search line.
+func searchPromptGlyph() string {
+	if iconsEnabled() {
+		return "❯ "
+	}
+	return "> "
 }
 
 func (m Model) fuzzyFilter(commands []CommandInfo, query string) []CommandInfo {
@@ -608,6 +696,83 @@ func fuzzySubsequence(text, query string) bool {
 	}
 
 	return queryIdx == len(query)
+}
+
+// fuzzySubsequenceIndices returns the byte offsets in text of the characters
+// matched by a subsequence search for query. query is expected to already be
+// lowercased; text is matched case-insensitively against its lowercased form,
+// and the returned offsets index into the ORIGINAL text. This assumes ASCII
+// (all authored commands are), where lowercasing preserves byte positions.
+// Returns nil when query is empty or does not match.
+func fuzzySubsequenceIndices(text, query string) []int {
+	if query == "" {
+		return nil
+	}
+	lower := strings.ToLower(text)
+	indices := make([]int, 0, len(query))
+	queryIdx := 0
+	for textIdx := 0; textIdx < len(lower) && queryIdx < len(query); textIdx++ {
+		if lower[textIdx] == query[queryIdx] {
+			indices = append(indices, textIdx)
+			queryIdx++
+		}
+	}
+	if queryIdx != len(query) {
+		return nil
+	}
+	return indices
+}
+
+// matchedSet returns the set of byte offsets in display matched by query
+// (already lowercased), or nil when there is no active query or no match.
+func matchedSet(display, query string) map[int]bool {
+	if query == "" {
+		return nil
+	}
+	idx := fuzzySubsequenceIndices(display, query)
+	if len(idx) == 0 {
+		return nil
+	}
+	set := make(map[int]bool, len(idx))
+	for _, i := range idx {
+		set[i] = true
+	}
+	return set
+}
+
+// shiftMatched returns the subset of matched offsets within [start,end),
+// re-based to start at 0 — used to split a whole-display match set across the
+// location and command segments of a row.
+func shiftMatched(matched map[int]bool, start, end int) map[int]bool {
+	if len(matched) == 0 {
+		return nil
+	}
+	out := make(map[int]bool)
+	for i := range matched {
+		if i >= start && i < end {
+			out[i-start] = true
+		}
+	}
+	return out
+}
+
+// highlightMatches renders text with the characters at the given byte offsets
+// styled with hl and everything else with base. The visible (ANSI-stripped)
+// output is identical to text — only styling differs.
+func highlightMatches(text string, matched map[int]bool, base, hl lipgloss.Style) string {
+	if len(matched) == 0 {
+		return base.Render(text)
+	}
+	var b strings.Builder
+	for i := 0; i < len(text); i++ {
+		ch := text[i : i+1]
+		if matched[i] {
+			b.WriteString(hl.Render(ch))
+		} else {
+			b.WriteString(base.Render(ch))
+		}
+	}
+	return b.String()
 }
 
 // queueKey identifies a command by its execution target (directory + command),

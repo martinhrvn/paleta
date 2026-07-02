@@ -148,6 +148,20 @@ plt list
 plt select --enhanced
 ```
 
+### Appearance
+
+The interactive palette uses a Catppuccin Mocha theme with 24-bit truecolor,
+bold accents, a highlighted selection bar, and live fuzzy-match highlighting.
+Use a terminal with truecolor support for the intended look.
+
+Location and command rows are prefixed with [Nerd Font](https://www.nerdfonts.com/)
+glyphs. If your terminal font is not a patched Nerd Font (you'll see missing
+glyphs / tofu boxes), set `PLT_NO_ICONS=1` to fall back to plain ASCII:
+
+```bash
+export PLT_NO_ICONS=1
+```
+
 ## Configuration
 
 ### Configuration File Format
