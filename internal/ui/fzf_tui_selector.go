@@ -541,6 +541,13 @@ func (m Model) fuzzyFilter(commands []CommandInfo, query string) []CommandInfo {
 }
 
 func (m Model) fuzzyMatch(text, query string) bool {
+	return fuzzySubsequence(text, query)
+}
+
+// fuzzySubsequence reports whether every character of query appears in text in
+// order (a subsequence match). Both are expected to already be lowercased by the
+// caller. Shared by the command palette and the init wizard.
+func fuzzySubsequence(text, query string) bool {
 	if query == "" {
 		return true
 	}
