@@ -157,6 +157,7 @@ func PrepareCommandInfoWithHistory(cfg *config.Config, hist *history.History, en
 func RunFzfTUI(cfg *config.Config, configPath string) ([]SelectionResult, error) {
 	for {
 		model := ui.NewModel(cfg, focusStore(configPath))
+		model.SetSaveStore(saveStore(configPath))
 		results, reinit, err := model.Run()
 		if reinit {
 			if _, ierr := RunInitWizard(configPath); ierr != nil {
@@ -186,4 +187,67 @@ func focusStore(configPath string) *ui.FocusStore {
 		List: func() ([]ui.FocusEntry, error) { return FocusEntries(configPath) },
 		Save: func(focused map[string]bool) error { return SetFocused(configPath, focused) },
 	}
+}
+
+// saveStore builds the queue-save hook for the selector, or nil when there is no
+// writable local config path to persist to.
+func saveStore(configPath string) *ui.SaveStore {
+	if configPath == "" {
+		return nil
+	}
+	return &ui.SaveStore{
+		Save: func(displayName, directory, name, command string) error {
+			return AddCommandToLocation(configPath, displayName, directory, name, command)
+		},
+	}
+}
+
+// AddCommandToLocation appends a composite command (e.g. "a && b && c") to the
+// location identified by displayName in the authored .pltrc, then rewrites the
+// file. directory is the resolved location path, used to match an authored entry
+// or — when no entry matches (e.g. the display name came from a glob) — to create
+// a new location. Like `plt init`, this rewrites the file, normalizing its
+// formatting and dropping comments.
+func AddCommandToLocation(configPath, displayName, directory, name, command string) error {
+	authored, err := LoadAuthoredConfig(configPath)
+	if err != nil {
+		return err
+	}
+	if authored == nil {
+		return fmt.Errorf("no config file at %s", configPath)
+	}
+
+	newCmd := config.Command{Name: name, Command: command}
+
+	if idx := findAuthoredLocation(authored, displayName, directory); idx >= 0 {
+		authored.Locations[idx].Commands = append(authored.Locations[idx].Commands, newCmd)
+	} else {
+		authored.Locations = append(authored.Locations, config.Location{
+			Name:     displayName,
+			Location: directory,
+			Commands: []config.Command{newCmd},
+		})
+	}
+
+	content := GenerateConfig(authored.Locations, authored)
+	return WriteConfig(configPath, content)
+}
+
+// findAuthoredLocation returns the index of the authored location matching the
+// display name (by name, or by path when unnamed), falling back to a directory
+// match; -1 when none match.
+func findAuthoredLocation(cfg *config.Config, displayName, directory string) int {
+	for i, loc := range cfg.Locations {
+		switch {
+		case loc.Name == displayName:
+			return i
+		case loc.Name == "" && loc.Location == displayName:
+			return i
+		case loc.Name == "" && loc.Location == "." && displayName == "(root)":
+			return i
+		case directory != "" && loc.Location == directory:
+			return i
+		}
+	}
+	return -1
 }

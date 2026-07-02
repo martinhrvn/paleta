@@ -44,7 +44,7 @@ type Model struct {
 	config           *config.Config
 	commands         []CommandInfo
 	filteredCommands []CommandInfo
-	selectedIndices  map[int]bool
+	queue            []CommandInfo // ordered queue of commands to run, in enqueue order
 	currentIndex     int
 	results          []SelectionResult
 	history          *history.History
@@ -58,6 +58,15 @@ type Model struct {
 	focusPicking bool
 	focusItems   []FocusEntry
 	focusCursor  int
+
+	// Queue editor mode (Ctrl+Q): reorder/remove/save the queued commands.
+	queueEditing bool
+	queueCursor  int
+	// Save-to-.pltrc sub-mode within the queue editor.
+	queueSaving bool
+	saveInput   textinput.Model
+	queueHint   string     // transient message shown in the editor (e.g. save constraints)
+	saveCommand *SaveStore // nil when saving to .pltrc is unavailable
 
 	// reinit is set when the user requests adding projects (Ctrl+N). The
 	// selector quits and the caller runs the init wizard before re-entering.
@@ -97,14 +106,18 @@ func NewModel(cfg *config.Config, focus *FocusStore) Model {
 	ei.Prompt = "Edit> "
 	ei.PromptStyle = editPromptStyle
 
+	sv := textinput.New()
+	sv.Prompt = "Save as> "
+	sv.PromptStyle = editPromptStyle
+
 	m := Model{
 		config:          cfg,
-		selectedIndices: make(map[int]bool),
 		frecencyEnabled: cfg.Frecency.Enabled,
 		focus:           focus,
 		focusActive:     cfg.AnyFocused(),
 		searchInput:     si,
 		editInput:       ei,
+		saveInput:       sv,
 	}
 
 	// Load history regardless of frecency: frecencyEnabled only controls sorting,
@@ -133,6 +146,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.queueEditing {
+			return m.updateQueueEditMode(msg)
+		}
 		if m.focusPicking {
 			return m.updateFocusPickMode(msg)
 		}
@@ -146,6 +162,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	if m.focusPicking {
 		return m, nil
+	}
+	if m.queueEditing {
+		if m.queueSaving {
+			m.saveInput, cmd = m.saveInput.Update(msg)
+		}
+		return m, cmd
 	}
 	if m.editing {
 		m.editInput, cmd = m.editInput.Update(msg)
@@ -207,6 +229,10 @@ func (m Model) updateNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.enterFocusPicker()
 		return m, nil
 
+	case tea.KeyCtrlQ:
+		m.enterQueueEditor()
+		return m, nil
+
 	case tea.KeyCtrlN:
 		m.reinit = true
 		m.quitting = true
@@ -262,6 +288,10 @@ func (m Model) View() string {
 		return ""
 	}
 
+	if m.queueEditing {
+		return m.renderQueueEditor()
+	}
+
 	if m.focusPicking {
 		return m.renderFocusPicker()
 	}
@@ -289,7 +319,8 @@ func (m Model) View() string {
 		}))
 	} else {
 		sections = append(sections, m.renderHelp([][2]string{
-			{"Tab", "select"},
+			{"Tab", "queue"},
+			{"^Q", "edit queue"},
 			{"Enter", "run"},
 			{"^E", "edit"},
 			{"^F", "frecency"},
@@ -308,9 +339,9 @@ func (m Model) renderStatus() string {
 
 	parts = append(parts, statusStyle.Render(fmt.Sprintf("%d/%d", len(m.filteredCommands), len(m.commands))))
 
-	selectedCount := m.getSelectedCount()
-	if selectedCount > 0 {
-		parts = append(parts, statusGreenStyle.Render(fmt.Sprintf("%d selected", selectedCount)))
+	queuedCount := m.getSelectedCount()
+	if queuedCount > 0 {
+		parts = append(parts, statusGreenStyle.Render(fmt.Sprintf("%d queued", queuedCount)))
 	}
 
 	if m.searchInput.Value() != "" {
@@ -381,19 +412,19 @@ func (m Model) renderCommandList(width, height int) string {
 
 	var lines []string
 	for i := start; i < end; i++ {
-		isSelected := m.selectedIndices[i]
+		pos := m.queuePosAt(i)
 		isCursor := i == m.currentIndex
 
 		var line string
 		if isCursor {
 			// Use plain text for cursor line — cursorLineStyle overrides sub-colors
-			plain := m.formatListItemPlain(i, isSelected)
+			plain := m.formatListItemPlain(i, pos)
 			if len(plain) < width {
 				plain = plain + strings.Repeat(" ", width-len(plain))
 			}
 			line = cursorLineStyle.Render(plain)
 		} else {
-			line = m.formatListItem(i, isSelected)
+			line = m.formatListItem(i, pos)
 		}
 
 		lines = append(lines, line)
@@ -480,9 +511,6 @@ func (m *Model) updateFilteredCommands() {
 		}
 	}
 
-	// Clear selections when filter changes
-	m.clearSelections()
-
 	// Apply fuzzy filter
 	query := m.searchInput.Value()
 	if query == "" {
@@ -504,13 +532,23 @@ func (m *Model) updateFilteredCommands() {
 	m.viewportOffset = 0
 }
 
-func (m Model) formatListItem(index int, selected bool) string {
+// queueBadgePlain renders the 2-column list prefix for a given queue position:
+// two spaces when not queued, otherwise the 1-based position left-padded to two
+// columns (e.g. "1 ", "10").
+func queueBadgePlain(pos int) string {
+	if pos <= 0 {
+		return "  "
+	}
+	return fmt.Sprintf("%-2d", pos)
+}
+
+func (m Model) formatListItem(index, queuePos int) string {
 	if index < 0 || index >= len(m.filteredCommands) {
 		return ""
 	}
 	prefix := "  "
-	if selected {
-		prefix = selectedMarkStyle.Render("✓") + " "
+	if queuePos > 0 {
+		prefix = selectedMarkStyle.Render(queueBadgePlain(queuePos))
 	}
 	// Split Display on first ": " to style location and command differently
 	display := m.filteredCommands[index].Display
@@ -522,15 +560,11 @@ func (m Model) formatListItem(index int, selected bool) string {
 
 // formatListItemPlain returns an unstyled version for cursor line rendering,
 // where cursorLineStyle overrides sub-colors anyway.
-func (m Model) formatListItemPlain(index int, selected bool) string {
+func (m Model) formatListItemPlain(index, queuePos int) string {
 	if index < 0 || index >= len(m.filteredCommands) {
 		return ""
 	}
-	prefix := "  "
-	if selected {
-		prefix = "✓ "
-	}
-	return prefix + m.filteredCommands[index].Display
+	return queueBadgePlain(queuePos) + m.filteredCommands[index].Display
 }
 
 func (m Model) fuzzyFilter(commands []CommandInfo, query string) []CommandInfo {
@@ -575,56 +609,98 @@ func fuzzySubsequence(text, query string) bool {
 	return queryIdx == len(query)
 }
 
+// queueKey identifies a command by its execution target (directory + command),
+// so the queue survives re-filtering where filtered indices shift.
+func queueKey(c CommandInfo) string {
+	return c.Directory + "\x00" + c.Command
+}
+
+// queuePos returns the 1-based position of a command in the queue, and whether
+// it is queued at all.
+func (m Model) queuePos(c CommandInfo) (int, bool) {
+	key := queueKey(c)
+	for i, q := range m.queue {
+		if queueKey(q) == key {
+			return i + 1, true
+		}
+	}
+	return 0, false
+}
+
+// queuePosAt returns the 1-based queue position for the command at a filtered
+// index (0 when the index is invalid or the command is not queued).
+func (m Model) queuePosAt(index int) int {
+	if index < 0 || index >= len(m.filteredCommands) {
+		return 0
+	}
+	pos, _ := m.queuePos(m.filteredCommands[index])
+	return pos
+}
+
+// toggleSelection enqueues the command at a filtered index, or removes it from
+// the queue when already present. Enqueue order is preserved.
 func (m *Model) toggleSelection(index int) {
 	if index < 0 || index >= len(m.filteredCommands) {
 		return
 	}
-	m.selectedIndices[index] = !m.selectedIndices[index]
-	if !m.selectedIndices[index] {
-		delete(m.selectedIndices, index)
-	}
+	m.enqueueToggle(m.filteredCommands[index])
 }
 
+func (m *Model) enqueueToggle(c CommandInfo) {
+	key := queueKey(c)
+	for i, q := range m.queue {
+		if queueKey(q) == key {
+			m.queue = append(m.queue[:i], m.queue[i+1:]...)
+			return
+		}
+	}
+	m.queue = append(m.queue, c)
+}
+
+// toggleSelectAll appends every not-yet-queued filtered command in list order,
+// or clears the queue when everything visible is already queued.
 func (m *Model) toggleSelectAll() {
-	if m.getSelectedCount() == len(m.filteredCommands) {
+	allQueued := true
+	for i := range m.filteredCommands {
+		if _, ok := m.queuePos(m.filteredCommands[i]); !ok {
+			allQueued = false
+			break
+		}
+	}
+	if allQueued {
 		m.clearSelections()
-	} else {
-		for i := range m.filteredCommands {
-			m.selectedIndices[i] = true
+		return
+	}
+	for i := range m.filteredCommands {
+		if _, ok := m.queuePos(m.filteredCommands[i]); !ok {
+			m.queue = append(m.queue, m.filteredCommands[i])
 		}
 	}
 }
 
 func (m *Model) clearSelections() {
-	m.selectedIndices = make(map[int]bool)
+	m.queue = nil
 }
 
 func (m Model) getSelectedCount() int {
-	count := 0
-	for _, selected := range m.selectedIndices {
-		if selected {
-			count++
-		}
-	}
-	return count
+	return len(m.queue)
 }
 
 func (m Model) getSelectedCommands() []SelectionResult {
 	var results []SelectionResult
 
-	for i := 0; i < len(m.filteredCommands); i++ {
-		if m.selectedIndices[i] {
-			cmd := m.filteredCommands[i]
-			results = append(results, SelectionResult{
-				Directory:   cmd.Directory,
-				Command:     cmd.Command,
-				DisplayName: cmd.DisplayName,
-				Env:         cmd.Env,
-			})
-		}
+	// Emit in queue (enqueue) order, so execution order is deterministic and
+	// independent of the list's display order.
+	for _, cmd := range m.queue {
+		results = append(results, SelectionResult{
+			Directory:   cmd.Directory,
+			Command:     cmd.Command,
+			DisplayName: cmd.DisplayName,
+			Env:         cmd.Env,
+		})
 	}
 
-	// If nothing explicitly selected, return current item
+	// If nothing queued, return the current item under the cursor.
 	if len(results) == 0 && m.currentIndex >= 0 && m.currentIndex < len(m.filteredCommands) {
 		cmd := m.filteredCommands[m.currentIndex]
 		results = append(results, SelectionResult{

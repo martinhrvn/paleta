@@ -49,48 +49,48 @@ func createTestModel(cfg *config.Config) Model {
 func TestModel_ToggleSelection(t *testing.T) {
 	m := createTestModel(createTestConfig())
 
-	// Initially no selections
-	if len(m.selectedIndices) != 0 {
-		t.Errorf("expected 0 selections initially, got %d", len(m.selectedIndices))
+	// Initially empty queue
+	if len(m.queue) != 0 {
+		t.Errorf("expected empty queue initially, got %d", len(m.queue))
 	}
 
-	// Toggle selection on
+	// Toggle queues the item at position 1
 	m.toggleSelection(0)
-	if !m.selectedIndices[0] {
-		t.Error("expected index 0 to be selected after toggle")
+	if m.queuePosAt(0) != 1 {
+		t.Errorf("expected index 0 queued at position 1, got %d", m.queuePosAt(0))
 	}
 
-	// Toggle selection off
+	// Toggle again removes it from the queue
 	m.toggleSelection(0)
-	if m.selectedIndices[0] {
-		t.Error("expected index 0 to be unselected after second toggle")
+	if m.queuePosAt(0) != 0 {
+		t.Error("expected index 0 removed from queue after second toggle")
 	}
 }
 
 func TestModel_ToggleMultipleSelections(t *testing.T) {
 	m := createTestModel(createTestConfig())
 
-	// Select multiple items
+	// Queue multiple items
 	m.toggleSelection(0)
 	m.toggleSelection(2)
 	m.toggleSelection(4)
 
-	if !m.selectedIndices[0] {
-		t.Error("expected index 0 to be selected")
+	if m.queuePosAt(0) == 0 {
+		t.Error("expected index 0 to be queued")
 	}
-	if !m.selectedIndices[2] {
-		t.Error("expected index 2 to be selected")
+	if m.queuePosAt(2) == 0 {
+		t.Error("expected index 2 to be queued")
 	}
-	if !m.selectedIndices[4] {
-		t.Error("expected index 4 to be selected")
+	if m.queuePosAt(4) == 0 {
+		t.Error("expected index 4 to be queued")
 	}
 
-	// Index 1 and 3 should not be selected
-	if m.selectedIndices[1] {
-		t.Error("expected index 1 to NOT be selected")
+	// Index 1 and 3 should not be queued
+	if m.queuePosAt(1) != 0 {
+		t.Error("expected index 1 to NOT be queued")
 	}
-	if m.selectedIndices[3] {
-		t.Error("expected index 3 to NOT be selected")
+	if m.queuePosAt(3) != 0 {
+		t.Error("expected index 3 to NOT be queued")
 	}
 }
 
@@ -101,31 +101,69 @@ func TestModel_ToggleOutOfBounds(t *testing.T) {
 	m.toggleSelection(-1)
 	m.toggleSelection(100)
 
-	// Should have no selections
-	if len(m.selectedIndices) != 0 {
-		t.Errorf("expected 0 selections for out of bounds, got %d", len(m.selectedIndices))
+	// Should have nothing queued
+	if len(m.queue) != 0 {
+		t.Errorf("expected empty queue for out of bounds, got %d", len(m.queue))
 	}
 }
 
 func TestModel_GetSelectedCommands_WithSelections(t *testing.T) {
 	m := createTestModel(createTestConfig())
 
-	// Select items at indices 0 and 2
+	// Queue items at indices 0 and 2
 	m.toggleSelection(0)
 	m.toggleSelection(2)
 
 	results := m.getSelectedCommands()
 
 	if len(results) != 2 {
-		t.Errorf("expected 2 selected commands, got %d", len(results))
+		t.Errorf("expected 2 queued commands, got %d", len(results))
 	}
 
-	// Verify order (should be in appearance order in filtered list)
+	// Verify order (enqueue order)
 	if results[0].Command != "npm start" {
 		t.Errorf("expected first command to be 'npm start', got %q", results[0].Command)
 	}
 	if results[1].Command != "npm build" {
 		t.Errorf("expected second command to be 'npm build', got %q", results[1].Command)
+	}
+}
+
+func TestModel_GetSelectedCommands_UsesEnqueueOrderNotListOrder(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	// Queue index 2 (npm build) BEFORE index 0 (npm start): the result order must
+	// follow the enqueue order, not the list order.
+	m.toggleSelection(2)
+	m.toggleSelection(0)
+
+	results := m.getSelectedCommands()
+	if len(results) != 2 {
+		t.Fatalf("expected 2 queued commands, got %d", len(results))
+	}
+	if results[0].Command != "npm build" {
+		t.Errorf("expected first command 'npm build' (enqueued first), got %q", results[0].Command)
+	}
+	if results[1].Command != "npm start" {
+		t.Errorf("expected second command 'npm start', got %q", results[1].Command)
+	}
+}
+
+func TestModel_QueuePersistsAcrossFilter(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	// Queue "npm start" (index 0), then filter to the "go" commands.
+	m.toggleSelection(0)
+	m.searchInput.SetValue("go")
+	m.updateFilteredCommands()
+
+	// The queued command is filtered out of view but must remain queued.
+	if m.getSelectedCount() != 1 {
+		t.Fatalf("expected queue to survive filtering, got %d", m.getSelectedCount())
+	}
+	results := m.getSelectedCommands()
+	if len(results) != 1 || results[0].Command != "npm start" {
+		t.Errorf("expected queued 'npm start' to persist, got %+v", results)
 	}
 }
 
@@ -243,20 +281,20 @@ func TestModel_GeneratePreview_EmptyType(t *testing.T) {
 func TestModel_FormatListItemPlain(t *testing.T) {
 	m := createTestModel(createTestConfig())
 
-	// Test unselected item (plain, no ANSI codes)
-	formatted := m.formatListItemPlain(0, false)
+	// Test unqueued item (plain, no ANSI codes)
+	formatted := m.formatListItemPlain(0, 0)
 	if formatted != "  frontend: npm start" {
 		t.Errorf("expected '  frontend: npm start', got %q", formatted)
 	}
 
-	// Test selected item (plain, no ANSI codes)
-	formatted = m.formatListItemPlain(0, true)
-	if formatted != "✓ frontend: npm start" {
-		t.Errorf("expected '✓ frontend: npm start', got %q", formatted)
+	// Test queued item (position 1 badge, plain, no ANSI codes)
+	formatted = m.formatListItemPlain(0, 1)
+	if formatted != "1 frontend: npm start" {
+		t.Errorf("expected '1 frontend: npm start', got %q", formatted)
 	}
 
 	// Test out of bounds
-	formatted = m.formatListItemPlain(-1, false)
+	formatted = m.formatListItemPlain(-1, 0)
 	if formatted != "" {
 		t.Errorf("expected empty string for out of bounds, got %q", formatted)
 	}
@@ -266,7 +304,7 @@ func TestModel_FormatListItemStyled(t *testing.T) {
 	m := createTestModel(createTestConfig())
 
 	// Styled output contains ANSI codes, so use contains checks
-	formatted := m.formatListItem(0, false)
+	formatted := m.formatListItem(0, 0)
 	if !contains(formatted, "frontend:") {
 		t.Errorf("styled item should contain 'frontend:', got %q", formatted)
 	}
@@ -274,10 +312,10 @@ func TestModel_FormatListItemStyled(t *testing.T) {
 		t.Errorf("styled item should contain 'npm start', got %q", formatted)
 	}
 
-	// Selected item should contain ✓
-	formatted = m.formatListItem(0, true)
-	if !contains(formatted, "✓") {
-		t.Errorf("styled selected item should contain '✓', got %q", formatted)
+	// Queued item should contain its position badge
+	formatted = m.formatListItem(0, 1)
+	if !contains(formatted, "1") {
+		t.Errorf("styled queued item should contain position '1', got %q", formatted)
 	}
 }
 
@@ -353,20 +391,20 @@ func TestModel_FuzzyFilter(t *testing.T) {
 func TestModel_ClearSelections(t *testing.T) {
 	m := createTestModel(createTestConfig())
 
-	// Make some selections
+	// Queue some commands
 	m.toggleSelection(0)
 	m.toggleSelection(1)
 	m.toggleSelection(2)
 
-	if len(m.selectedIndices) == 0 {
-		t.Error("expected some selections before clear")
+	if len(m.queue) == 0 {
+		t.Error("expected a non-empty queue before clear")
 	}
 
-	// Clear selections
+	// Clear the queue
 	m.clearSelections()
 
-	if len(m.selectedIndices) != 0 {
-		t.Errorf("expected 0 selections after clear, got %d", len(m.selectedIndices))
+	if len(m.queue) != 0 {
+		t.Errorf("expected empty queue after clear, got %d", len(m.queue))
 	}
 }
 
@@ -571,9 +609,9 @@ func TestModel_KeyTab_TogglesSelection(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	um := updated.(Model)
 
-	// Tab should toggle selection on index 0 and move cursor down
-	if !um.selectedIndices[0] {
-		t.Error("expected index 0 to be selected after Tab")
+	// Tab should queue index 0 and move cursor down
+	if um.queuePosAt(0) != 1 {
+		t.Error("expected index 0 to be queued after Tab")
 	}
 	if um.currentIndex != 1 {
 		t.Errorf("expected cursor at 1 after Tab, got %d", um.currentIndex)
@@ -716,11 +754,6 @@ func TestModel_UpdateFilteredCommands(t *testing.T) {
 	// Cursor should be reset to 0
 	if m.currentIndex != 0 {
 		t.Errorf("expected cursor reset to 0, got %d", m.currentIndex)
-	}
-
-	// Selections should be cleared
-	if len(m.selectedIndices) != 0 {
-		t.Errorf("expected selections cleared, got %d", len(m.selectedIndices))
 	}
 }
 

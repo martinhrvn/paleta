@@ -74,6 +74,12 @@ The project types we should support intitally are:
   - [x] `Ctrl+T` toggles the focus filter (focused-only ↔ all) for the current session
   - [x] `Ctrl+P` picker to set/unset which locations are focused (with `Ctrl+A` toggle-all), persisted to `.pltrc`
   - [x] `Ctrl+N` adds projects on the fly via the `plt init` wizard, then re-enters the selector
+- [x] command queue for multi-select (deterministic run order)
+  - [x] `Tab` enqueues the command under the cursor; the queue records selection order and persists across searches (shown as position badges in the list + `N queued` in the status)
+  - [x] `Ctrl+Q` opens a queue editor: `Shift+↑/↓` reorder, `x`/`Del` remove, `Enter` run, `Esc` back
+  - [x] save a queue to `.pltrc` as a chained `a && b && c` command (`s` in the editor) — single-project only for now
+  - [ ] (future) cross-project save via embedded `cd` under a root location
+  - [ ] (future) `search[proj]#cmd` expansion (e.g. `search[pnpm]#build` → `pnpm run build`) so composite commands can reference other projects
 - [ ] aliases
 - [x] automatically detect type of a location based on presence of package.json/go.mod/etc.
   - [x] interactive `plt init` wizard: scans the tree (git-aware, skips gitignored/`node_modules`/etc.), multi-select detected projects, generates `.pltrc`
