@@ -53,9 +53,9 @@ var (
 	// with lavender accent text and a green position badge, so checked commands
 	// stand out from the list without competing with the cursor row's accent bar.
 	// Matches highlight in bright text so they still pop against the lavender base.
-	queuedBaseStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Background(lipgloss.Color(ccSurface0))
-	queuedHlStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(ccText)).Background(lipgloss.Color(ccSurface0)).Bold(true)
-	queuedBadgeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccGreen)).Background(lipgloss.Color(ccSurface0)).Bold(true)
+	queuedBaseStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Background(lipgloss.Color(ccSurface0))
+	queuedHlStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color(ccText)).Background(lipgloss.Color(ccSurface0)).Bold(true)
+	queuedBadgeStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(ccGreen)).Background(lipgloss.Color(ccSurface0)).Bold(true)
 	previewBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color(ccOverlay0))
