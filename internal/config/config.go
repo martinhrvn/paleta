@@ -41,6 +41,12 @@ type Command struct {
 	// "compose"). It is set internally by processProjectTypes and is never read
 	// from or written to YAML. Empty for manually authored commands.
 	Type string `yaml:"-"`
+	// Error is set by expandCommandAliases when this command's references can't
+	// be resolved (e.g. a referenced command was renamed or an ambiguous saved
+	// chain). The command keeps its authored text so one bad reference never
+	// blocks loading the rest; callers surface it rather than run it. Never
+	// serialized.
+	Error string `yaml:"-"`
 }
 
 // Types is a location's set of project types. In .pltrc the `type` key accepts
@@ -175,10 +181,11 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to process project types: %w", err)
 	}
 
-	// Expand @project[type]:command references into resolved command strings.
-	if err := expandCommandAliases(&config); err != nil {
-		return nil, fmt.Errorf("failed to expand command references: %w", err)
-	}
+	// Expand @project[type]:command references into resolved command strings. An
+	// unresolvable reference is recorded on the command (Command.Error) rather
+	// than failing the whole load, so one stale saved chain never blocks the rest
+	// of the config from loading and running.
+	expandCommandAliases(&config)
 
 	return &config, nil
 }

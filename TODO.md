@@ -77,13 +77,13 @@ The project types we should support intitally are:
 - [x] command queue for multi-select (deterministic run order)
   - [x] `Tab` enqueues the command under the cursor; the queue records selection order and persists across searches (shown as position badges in the list + `N queued` in the status)
   - [x] `Ctrl+Q` opens a queue editor: `Shift+↑/↓` reorder, `x`/`Del` remove, `Enter` run, `Esc` back
-  - [x] save a queue to `.pltrc` as a chained `a && b && c` command (`s` in the editor) — single-project only for now
-  - [ ] (future) cross-project save via embedded `cd` under a root location
+  - [x] save a queue to `.pltrc` as a chained `a && b && c` command (`s` in the editor)
+  - [x] cross-project save: a queue spanning folders saves under the root location; each part is an alias (which `cd`-wraps cross-project) or, when it can't be referenced, a `cd`-wrapped raw command
 - [x] command references / aliases: `@project[type]:command` tokens in a `.pltrc` command expand at load time to the referenced command's resolved string (e.g. `@web[npm]:build` → `pnpm run build`)
   - [x] `[type]` is optional; required only to disambiguate a multi-type project
   - [x] a cross-project reference wraps in `(cd '<dir>' && …)` so it runs in the right directory; same-project refs stay bare
-  - [x] unresolvable references (unknown project/command, ambiguous multi-type, cycles) fail `plt` config load with a clear error
-  - [x] "save queue to `.pltrc`" emits reference tokens (`@web:build && @web:dev`) instead of raw command strings, so saved chains track the referenced commands; falls back to the raw string for unnamed commands/projects, and adds `[type]` only when the name is ambiguous
+  - [x] unresolvable references (unknown project/command, ambiguous multi-type, cycles) are recorded per-command (`Command.Error`) and shown as an error entry in `plt list` rather than failing the whole config load — one bad saved chain never blocks the rest
+  - [x] "save queue to `.pltrc`" emits reference tokens (`@web:build && @web:dev`) verified against the resolver, so a token can never expand to a different command than intended; falls back to the raw string (or a `[type]`-qualified token) when a bare reference wouldn't round-trip — e.g. names with spaces, unnamed commands, or an untyped/typed name clash
 - [x] automatically detect type of a location based on presence of package.json/go.mod/etc.
   - [x] interactive `plt init` wizard: scans the tree (git-aware, skips gitignored/`node_modules`/etc.), multi-select detected projects, generates `.pltrc`
   - [x] repeatable: existing `.pltrc` loaded as starting state (configured locations pre-selected & tagged, merged on save)

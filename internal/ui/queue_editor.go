@@ -14,6 +14,10 @@ import (
 // directory, the new command's name, and the joined command string (a && b && c).
 type SaveStore struct {
 	Save func(displayName, directory, name, command string) error
+	// RootDir is the absolute directory of the config's root location (where the
+	// .pltrc lives). A queue that spans folders is saved there so its per-project
+	// parts can cd-wrap; empty falls back to the first queued command's project.
+	RootDir string
 }
 
 // SetSaveStore wires the .pltrc save hook. Called by the commands layer after
@@ -152,15 +156,12 @@ func (m Model) updateQueueSaveMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// startQueueSave enters the save prompt, provided saving is available and the
-// queue is savable (all commands in one project).
+// startQueueSave enters the save prompt, provided saving is available. A queue
+// spanning folders is allowed: each part is referenced by alias (which cd-wraps
+// cross-project commands) or, when it can't be, cd-wrapped raw.
 func (m *Model) startQueueSave() {
 	if m.saveCommand == nil || m.saveCommand.Save == nil {
 		m.queueHint = "saving to .pltrc is unavailable here"
-		return
-	}
-	if _, ok := m.queueProject(); !ok {
-		m.queueHint = "save needs all commands in one project"
 		return
 	}
 	m.queueSaving = true
@@ -174,22 +175,18 @@ func (m *Model) cancelQueueSave() {
 	m.saveInput.Blur()
 }
 
-// confirmQueueSave joins the queued commands and persists them under the shared
-// project, then reloads so the new command appears.
+// confirmQueueSave joins the queued commands and persists them under the save
+// target project, then reloads so the new command appears. If the saved chain
+// won't re-expand cleanly it still saves, but the editor stays open with a
+// warning rather than blocking.
 func (m *Model) confirmQueueSave() {
 	name := strings.TrimSpace(m.saveInput.Value())
 	if name == "" {
 		m.queueHint = "enter a name for the command"
 		return
 	}
-	displayName, ok := m.queueProject()
-	if !ok {
-		m.queueHint = "save needs all commands in one project"
-		m.queueSaving = false
-		return
-	}
-	directory := m.queue[0].Directory
-	joined := m.buildQueueCommand()
+	displayName, directory := m.saveTarget()
+	joined := m.buildQueueCommand(directory)
 
 	if err := m.saveCommand.Save(displayName, directory, name, joined); err != nil {
 		m.queueHint = "save failed: " + err.Error()
@@ -201,69 +198,72 @@ func (m *Model) confirmQueueSave() {
 	m.reloadConfig()
 	m.loadCommands()
 	m.updateFilteredCommands()
+
+	// Warn (without blocking) if the saved chain won't run cleanly, e.g. a raw
+	// fallback is ambiguous or a referenced command has since changed.
+	if err := m.config.ExpandCheck(joined, directory); err != nil {
+		m.queueSaving = false
+		m.queueHint = "saved, but may not run: " + err.Error()
+		return
+	}
 	m.exitQueueEditor()
+}
+
+// saveTarget picks where a saved queue is stored and the directory used as the
+// expansion "home". A queue confined to one project saves there; a cross-folder
+// queue saves under the root location so its per-project parts cd-wrap. It falls
+// back to the first queued command's project when no root is known.
+func (m Model) saveTarget() (displayName, directory string) {
+	if name, ok := m.queueProject(); ok {
+		return name, m.queue[0].Directory
+	}
+	if m.saveCommand != nil && m.saveCommand.RootDir != "" {
+		for i := range m.config.Locations {
+			loc := &m.config.Locations[i]
+			if loc.Location != m.saveCommand.RootDir {
+				continue
+			}
+			name := loc.Name
+			if name == "" {
+				name = loc.Location
+			}
+			return name, loc.Location
+		}
+	}
+	return m.queue[0].DisplayName, m.queue[0].Directory
 }
 
 // buildQueueCommand joins the queued commands for saving, preferring reference
 // tokens (@project[type]:name) over raw command strings so the saved command
-// tracks the referenced commands rather than freezing their current text. It
-// falls back to the raw string when a command can't be referenced safely (no
-// name, or a project whose name is missing/ambiguous).
-func (m Model) buildQueueCommand() string {
+// tracks the referenced commands rather than freezing their current text. A
+// command that can't be referenced falls back to its raw string, cd-wrapped in
+// its own directory when that differs from homeDir so it still runs in the right
+// place (aliased cross-project commands cd-wrap automatically on expansion).
+func (m Model) buildQueueCommand(homeDir string) string {
 	parts := make([]string, len(m.queue))
 	for i, c := range m.queue {
 		if tok, ok := m.aliasToken(c); ok {
 			parts[i] = tok
-		} else {
-			parts[i] = c.Command
+			continue
 		}
+		raw := c.Command
+		if c.Directory != homeDir {
+			raw = "(cd '" + c.Directory + "' && " + raw + ")"
+		}
+		parts[i] = raw
 	}
 	return strings.Join(parts, " && ")
 }
 
-// aliasToken builds a @project[type]:name reference for a queued command, or
-// reports ok=false when it can't be referenced safely. The [type] is included
-// only when the command name is ambiguous within the project (multi-type).
+// aliasToken builds a verified @project[type]:name reference for a queued
+// command, or reports ok=false when it can't be referenced safely. It delegates
+// to the config resolver so the token is guaranteed to expand back to this exact
+// command (or the caller falls back to the raw string).
 func (m Model) aliasToken(c CommandInfo) (string, bool) {
-	if c.Name == "" || !m.projectReferenceable(c.DisplayName) {
+	if m.config == nil {
 		return "", false
 	}
-	tok := "@" + c.DisplayName
-	if c.Type != "" && m.commandNameAmbiguous(c.DisplayName, c.Name) {
-		tok += "[" + c.Type + "]"
-	}
-	tok += ":" + c.Name
-	return tok, true
-}
-
-// projectReferenceable reports whether exactly one location carries this display
-// name, so `@name:...` resolves unambiguously at load time.
-func (m Model) projectReferenceable(displayName string) bool {
-	count := 0
-	for i := range m.config.Locations {
-		if m.config.Locations[i].Name == displayName {
-			count++
-		}
-	}
-	return count == 1
-}
-
-// commandNameAmbiguous reports whether a project has more than one command with
-// the given name (i.e. a multi-type project), so a reference needs a [type].
-func (m Model) commandNameAmbiguous(displayName, name string) bool {
-	count := 0
-	for i := range m.config.Locations {
-		loc := &m.config.Locations[i]
-		if loc.Name != displayName {
-			continue
-		}
-		for _, cmd := range loc.Commands {
-			if cmd.Name == name {
-				count++
-			}
-		}
-	}
-	return count > 1
+	return m.config.ReferenceToken(c.Directory, c.Name, c.Type)
 }
 
 // queueProject returns the shared project display name when every queued command

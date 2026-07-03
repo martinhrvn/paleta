@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -195,10 +196,17 @@ func saveStore(configPath string) *ui.SaveStore {
 	if configPath == "" {
 		return nil
 	}
+	// The root location is the one at the config's own directory; cross-folder
+	// queue saves land there. Match the absolute form the loaded config uses.
+	rootDir := ""
+	if abs, err := filepath.Abs(filepath.Dir(configPath)); err == nil {
+		rootDir = abs
+	}
 	return &ui.SaveStore{
 		Save: func(displayName, directory, name, command string) error {
 			return AddCommandToLocation(configPath, displayName, directory, name, command)
 		},
+		RootDir: rootDir,
 	}
 }
 

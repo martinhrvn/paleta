@@ -259,20 +259,89 @@ func TestModel_QueueSave_FallsBackToRawForUnnamedCommand(t *testing.T) {
 	}
 }
 
-func TestModel_QueueSave_CrossProjectShowsHint(t *testing.T) {
-	// frontend (0) + backend (3) span two projects.
-	m := queueTestModel(0, 3)
-	m.saveCommand = &SaveStore{Save: func(_, _, _, _ string) error { return nil }}
+func TestModel_QueueSave_CrossFolderSavesToRoot(t *testing.T) {
+	// A queue spanning the root project and a sub-project now saves (to the root
+	// location); each part is referenced by alias, which cd-wraps cross-project.
+	cfg := &config.Config{Locations: []config.Location{
+		{
+			Name: "root", Location: "/repo", Types: config.Types{"go"},
+			Commands: []config.Command{{Name: "build", Command: "go build ./...", Type: "go"}},
+		},
+		{
+			Name: "web", Location: "/repo/web", Types: config.Types{"pnpm"},
+			Commands: []config.Command{{Name: "dev", Command: "pnpm dev", Type: "pnpm"}},
+		},
+	}}
+	m := createTestModel(cfg)
+	m.toggleSelection(0) // root: build
+	m.toggleSelection(1) // web: dev
+
+	var gotDisplay, gotDir, gotCmd string
+	m.saveCommand = &SaveStore{
+		RootDir: "/repo",
+		Save: func(displayName, directory, _, command string) error {
+			gotDisplay, gotDir, gotCmd = displayName, directory, command
+			return nil
+		},
+	}
 	m.enterQueueEditor()
 
+	// 's' opens the save prompt even though the queue spans folders.
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 	m = updated.(Model)
-
-	if m.queueSaving {
-		t.Error("expected save to be blocked for a cross-project queue")
+	if !m.queueSaving {
+		t.Fatalf("expected save prompt to open for a cross-folder queue; hint=%q", m.queueHint)
 	}
-	if m.queueHint == "" {
-		t.Error("expected a hint explaining the one-project constraint")
+	for _, msg := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("all")},
+		{Type: tea.KeyEnter},
+	} {
+		updated, _ = m.Update(msg)
+		m = updated.(Model)
+	}
+
+	if gotDisplay != "root" || gotDir != "/repo" {
+		t.Errorf("save target = %q/%q, want root//repo", gotDisplay, gotDir)
+	}
+	if want := "@root:build && @web:dev"; gotCmd != want {
+		t.Errorf("joined = %q, want %q", gotCmd, want)
+	}
+}
+
+func TestModel_QueueSave_CdWrapsNonAliasableCrossFolder(t *testing.T) {
+	// A cross-folder command with a space in its name can't be aliased, so it is
+	// cd-wrapped raw to still run in its own directory.
+	cfg := &config.Config{Locations: []config.Location{
+		{
+			Name: "root", Location: "/repo",
+			Commands: []config.Command{{Name: "build", Command: "make"}},
+		},
+		{
+			Name: "web", Location: "/repo/web",
+			Commands: []config.Command{{Name: "dev server", Command: "pnpm dev"}},
+		},
+	}}
+	m := createTestModel(cfg)
+	m.toggleSelection(0) // root: build (unnamed-ref? has name "build")
+	m.toggleSelection(1) // web: "dev server" (space -> not aliasable)
+
+	var gotCmd string
+	m.saveCommand = &SaveStore{
+		RootDir: "/repo",
+		Save:    func(_, _, _, command string) error { gotCmd = command; return nil },
+	}
+	m.enterQueueEditor()
+	for _, msg := range []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune("s")},
+		{Type: tea.KeyRunes, Runes: []rune("all")},
+		{Type: tea.KeyEnter},
+	} {
+		updated, _ := m.Update(msg)
+		m = updated.(Model)
+	}
+
+	if want := "@root:build && (cd '/repo/web' && pnpm dev)"; gotCmd != want {
+		t.Errorf("joined = %q, want %q", gotCmd, want)
 	}
 }
 

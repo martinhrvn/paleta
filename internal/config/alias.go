@@ -17,6 +17,16 @@ import (
 // first `:` after the project/type starts the command).
 var aliasTokenRe = regexp.MustCompile(`(^|[\s&|;()])@([A-Za-z0-9._/-]+)(?:\[([A-Za-z0-9._-]+)\])?:([A-Za-z0-9][A-Za-z0-9._:-]*)`)
 
+// refCommandRe matches the full command-name charset a reference token allows
+// after ':'. A name outside it (e.g. one containing spaces like "test ui")
+// cannot be referenced and must fall back to its raw command string.
+var refCommandRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
+
+// refProjectRe matches the project-reference charset (before the optional
+// [type]); '/' is allowed so a clashing folder name can be disambiguated by a
+// path tail (`packages/search`).
+var refProjectRe = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+
 // indexedLoc holds a location together with a snapshot of its original commands,
 // so recursive expansion always reads authored source rather than partially
 // rewritten output.
@@ -212,24 +222,116 @@ func (idx *aliasIndex) expandString(s, home string, visiting map[string]bool) (s
 // expandCommandAliases rewrites every command string that contains reference
 // tokens into its resolved form. It runs after processProjectTypes, when every
 // command has a resolved string, Name, and Type, and every location path is
-// absolute. An unresolvable reference is a hard error.
+// absolute. An unresolvable reference is recorded on the command (Command.Error)
+// and skipped so one bad reference never blocks the rest; the first such error
+// is also returned for callers that want to fail hard (LoadConfig does not).
 func expandCommandAliases(cfg *Config) error {
 	idx := newAliasIndex(cfg)
+	var firstErr error
 	for i := range cfg.Locations {
 		home := cfg.Locations[i].Location
 		for j := range cfg.Locations[i].Commands {
+			cfg.Locations[i].Commands[j].Error = ""
 			orig := cfg.Locations[i].Commands[j].Command
 			if !strings.Contains(orig, "@") {
 				continue
 			}
 			expanded, err := idx.expandString(orig, home, map[string]bool{})
 			if err != nil {
-				return fmt.Errorf("%s: %w", commandErrLabel(&cfg.Locations[i], cfg.Locations[i].Commands[j]), err)
+				wrapped := fmt.Errorf("%s: %w", commandErrLabel(&cfg.Locations[i], cfg.Locations[i].Commands[j]), err)
+				cfg.Locations[i].Commands[j].Error = wrapped.Error()
+				if firstErr == nil {
+					firstErr = wrapped
+				}
+				continue
 			}
 			cfg.Locations[i].Commands[j].Command = expanded
 		}
 	}
-	return nil
+	return firstErr
+}
+
+// ReferenceToken returns a reference token (@project[type]:name) that resolves
+// unambiguously back to the command named `name` (project type `typ`) in the
+// location at absolute path `dir`, or ok=false when no such token exists: an
+// unnamed command, a name outside the token charset (e.g. with spaces), or a
+// name/type clash that no reference can disambiguate. The token is verified with
+// the same resolver the loader uses, so it can never expand to a different
+// command than intended — callers fall back to the raw command when ok=false.
+func (cfg *Config) ReferenceToken(dir, name, typ string) (string, bool) {
+	if !refCommandRe.MatchString(name) {
+		return "", false
+	}
+	idx := newAliasIndex(cfg)
+
+	var target *indexedLoc
+	for _, il := range idx.all {
+		if il.loc.Location == dir {
+			target = il
+			break
+		}
+	}
+	if target == nil {
+		return "", false
+	}
+
+	// Prefer a bare reference; only reach for [type] when the bare one is
+	// ambiguous. typ=="" (a manually authored command) only ever tries bare.
+	types := []string{""}
+	if typ != "" {
+		types = append(types, typ)
+	}
+
+	for _, project := range projectRefCandidates(target.loc) {
+		if !refProjectRe.MatchString(project) {
+			continue
+		}
+		if il, err := idx.lookupProject(project); err != nil || il != target {
+			continue
+		}
+		for _, t := range types {
+			_, cmd, err := idx.resolve(project, t, name)
+			if err != nil || cmd.Type != typ {
+				continue
+			}
+			tok := "@" + project
+			if t != "" {
+				tok += "[" + t + "]"
+			}
+			return tok + ":" + name, true
+		}
+	}
+	return "", false
+}
+
+// projectRefCandidates lists ways to refer to a location, cleanest first:
+// authored name, folder base name, then growing path tails. The caller keeps the
+// first candidate that resolves back to the same location.
+func projectRefCandidates(loc *Location) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(s string) {
+		if s != "" && !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	add(loc.Name)
+	parts := splitPath(loc.Location)
+	for n := 1; n <= len(parts); n++ {
+		add(strings.Join(parts[len(parts)-n:], "/"))
+	}
+	return out
+}
+
+// ExpandCheck reports whether the command string s expands cleanly when stored
+// as a command in the location at absolute path home. It runs the same
+// resolution the loader uses without mutating anything, so callers can warn
+// before persisting a chain that would fail to load.
+func (cfg *Config) ExpandCheck(s, home string) error {
+	idx := newAliasIndex(cfg)
+	_, err := idx.expandString(s, home, map[string]bool{})
+	return err
 }
 
 // commandErrLabel builds a human-friendly "project/command" prefix for errors.

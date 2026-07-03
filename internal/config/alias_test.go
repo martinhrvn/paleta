@@ -317,7 +317,7 @@ func TestLoadConfig_ExpandsReferences_EndToEnd(t *testing.T) {
 	}
 }
 
-func TestLoadConfig_BadReferenceFailsLoad(t *testing.T) {
+func TestLoadConfig_BadReferenceIsNonFatal(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".pltrc")
 	content := `locations:
@@ -325,12 +325,148 @@ func TestLoadConfig_BadReferenceFailsLoad(t *testing.T) {
     commands:
       - name: ci
         command: "@tools:buld"
+      - name: ok
+        command: "echo ok"
 `
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := LoadConfig(path); err == nil {
-		t.Fatal("expected LoadConfig to fail on an unresolvable reference")
+	// A single unresolvable reference must not fail the whole load: the config
+	// loads, the bad command carries an Error (and keeps its authored text), and
+	// the other commands are unaffected.
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	var ci, ok Command
+	for _, c := range cfg.Locations[0].Commands {
+		switch c.Name {
+		case "ci":
+			ci = c
+		case "ok":
+			ok = c
+		}
+	}
+	if ci.Error == "" {
+		t.Error("expected the bad reference to record Command.Error")
+	}
+	if ci.Command != "@tools:buld" {
+		t.Errorf("bad command mutated: %q", ci.Command)
+	}
+	if ok.Error != "" || ok.Command != "echo ok" {
+		t.Errorf("unrelated command affected: cmd=%q err=%q", ok.Command, ok.Error)
+	}
+}
+
+func TestReferenceToken_BareWhenUnique(t *testing.T) {
+	cfg := &Config{Locations: []Location{{
+		Name: "web", Location: "/abs/web", Types: Types{"pnpm"},
+		Commands: []Command{{Name: "build", Command: "pnpm run build", Type: "pnpm"}},
+	}}}
+	if tok, ok := cfg.ReferenceToken("/abs/web", "build", "pnpm"); !ok || tok != "@web:build" {
+		t.Errorf("ReferenceToken = %q ok=%v, want @web:build", tok, ok)
+	}
+}
+
+func TestReferenceToken_TypeWhenAmbiguous(t *testing.T) {
+	cfg := &Config{Locations: []Location{{
+		Name: "svc", Location: "/abs/svc", Types: Types{"npm", "docker"},
+		Commands: []Command{
+			{Name: "build", Command: "npm run build", Type: "npm"},
+			{Name: "build", Command: "docker build .", Type: "docker"},
+		},
+	}}}
+	if tok, ok := cfg.ReferenceToken("/abs/svc", "build", "docker"); !ok || tok != "@svc[docker]:build" {
+		t.Errorf("ReferenceToken = %q ok=%v, want @svc[docker]:build", tok, ok)
+	}
+}
+
+func TestReferenceToken_UntypedClashUnreferenceable(t *testing.T) {
+	// Mirrors the local .pltrc: a manual (untyped) fmt alongside a go-typed fmt.
+	cfg := &Config{Locations: []Location{{
+		Name: "root", Location: "/repo", Types: Types{"go"},
+		Commands: []Command{
+			{Name: "fmt", Command: "go fmt ./...", Type: ""}, // manual
+			{Name: "fmt", Command: "gofmt -w .", Type: "go"}, // auto
+		},
+	}}}
+	// The typed one is referenceable with [go]...
+	if tok, ok := cfg.ReferenceToken("/repo", "fmt", "go"); !ok || tok != "@root[go]:fmt" {
+		t.Errorf("typed fmt token = %q ok=%v, want @root[go]:fmt", tok, ok)
+	}
+	// ...but the untyped manual one cannot be named uniquely -> raw fallback.
+	if tok, ok := cfg.ReferenceToken("/repo", "fmt", ""); ok {
+		t.Errorf("expected untyped fmt to be unreferenceable, got %q", tok)
+	}
+}
+
+func TestReferenceToken_NameWithSpaceUnreferenceable(t *testing.T) {
+	cfg := &Config{Locations: []Location{{
+		Name: "root", Location: "/repo",
+		Commands: []Command{{Name: "test ui", Command: "go test ./internal/ui/..."}},
+	}}}
+	if tok, ok := cfg.ReferenceToken("/repo", "test ui", ""); ok {
+		t.Errorf("expected a spaced name to be unreferenceable, got %q", tok)
+	}
+}
+
+func TestReferenceToken_UnnamedUnreferenceable(t *testing.T) {
+	cfg := &Config{Locations: []Location{{
+		Name: "root", Location: "/repo",
+		Commands: []Command{{Name: "", Command: "make thing"}},
+	}}}
+	if tok, ok := cfg.ReferenceToken("/repo", "", ""); ok {
+		t.Errorf("expected an unnamed command to be unreferenceable, got %q", tok)
+	}
+}
+
+func TestReferenceToken_ByFolderBaseWhenNoAuthoredName(t *testing.T) {
+	cfg := &Config{Locations: []Location{{
+		Location: "/abs/tools", Types: Types{"npm"}, // no Name
+		Commands: []Command{{Name: "build", Command: "npm run build", Type: "npm"}},
+	}}}
+	if tok, ok := cfg.ReferenceToken("/abs/tools", "build", "npm"); !ok || tok != "@tools:build" {
+		t.Errorf("ReferenceToken = %q ok=%v, want @tools:build", tok, ok)
+	}
+}
+
+func TestReferenceToken_PathTailWhenBaseClashes(t *testing.T) {
+	cfg := &Config{Locations: []Location{
+		{Location: "/abs/packages/search", Types: Types{"npm"},
+			Commands: []Command{{Name: "build", Command: "npm run build", Type: "npm"}}},
+		{Location: "/abs/services/search", Types: Types{"npm"},
+			Commands: []Command{{Name: "build", Command: "npm run build", Type: "npm"}}},
+	}}
+	// Base "search" is ambiguous, so the token must use a path tail.
+	if tok, ok := cfg.ReferenceToken("/abs/packages/search", "build", "npm"); !ok || tok != "@packages/search:build" {
+		t.Errorf("ReferenceToken = %q ok=%v, want @packages/search:build", tok, ok)
+	}
+}
+
+func TestExpandAliases_NonFatalRecordsError(t *testing.T) {
+	cfg := &Config{Locations: []Location{{
+		Name: "web", Location: "/abs/web", Types: Types{"pnpm"},
+		Commands: []Command{
+			{Name: "build", Command: "pnpm run build", Type: "pnpm"},
+			{Name: "ci", Command: "@web:build"},
+			{Name: "broken", Command: "@web:nope"},
+		},
+	}}}
+
+	// A returned error is fine for strict callers, but the good command must
+	// still expand and the bad one must carry an error without blocking it.
+	_ = expandCommandAliases(cfg)
+	if got := cfg.Locations[0].Commands[1].Command; got != "pnpm run build" {
+		t.Errorf("ci = %q, want expanded", got)
+	}
+	if cfg.Locations[0].Commands[1].Error != "" {
+		t.Errorf("ci unexpectedly errored: %q", cfg.Locations[0].Commands[1].Error)
+	}
+	if got := cfg.Locations[0].Commands[2].Command; got != "@web:nope" {
+		t.Errorf("broken command mutated: %q", got)
+	}
+	if cfg.Locations[0].Commands[2].Error == "" {
+		t.Error("expected broken command to record an error")
 	}
 }

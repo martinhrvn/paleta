@@ -20,7 +20,13 @@ func ListCommands(cfg *config.Config) []string {
 		// Add each command for this location
 		for _, command := range location.Commands {
 			cmdDisplay := config.CommandLabel(location, command)
-			commands = append(commands, fmt.Sprintf("%s:%s", displayName, cmdDisplay))
+			entry := fmt.Sprintf("%s:%s", displayName, cmdDisplay)
+			// Surface an unresolved reference as an error entry rather than
+			// silently listing (or expanding) a command that won't run.
+			if command.Error != "" {
+				entry += "  ⚠ error: " + command.Error
+			}
+			commands = append(commands, entry)
 		}
 	}
 
