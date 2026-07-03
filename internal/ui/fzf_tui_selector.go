@@ -64,7 +64,6 @@ var (
 	statusStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color(ccOverlay0)).Faint(true)
 	statusGreenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(ccGreen)).Bold(true)
 	statusYellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccYellow)).Bold(true)
-	statusBlueStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(ccBlue)).Bold(true)
 	helpStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color(ccOverlay0)).Faint(true)
 	helpKeyStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Bold(true)
 	editPromptStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(ccPeach)).Bold(true)
@@ -354,17 +353,22 @@ func (m Model) View() string {
 			{"Esc", "cancel"},
 		}))
 	} else {
-		sections = append(sections, m.renderHelp([][2]string{
-			{"Tab", "queue"},
-			{"^Q", "edit queue"},
-			{"Enter", "run"},
-			{"^E", "edit"},
-			{"^F", "frecency"},
-			{"^T", "focus"},
-			{"^P", "pick"},
-			{"^N", "add"},
-			{"Esc", "cancel"},
-		}))
+		parts := []string{
+			helpItem("Tab", "queue"),
+			helpItem("^Q", "edit queue"),
+			helpItem("Enter", "run"),
+			helpItem("^E", "edit"),
+			renderToggleHelp("^F", "frecency", m.frecencyEnabled),
+		}
+		if m.config.AnyFocused() {
+			parts = append(parts, renderToggleHelp("^T", "focus", m.focusActive))
+		}
+		parts = append(parts,
+			helpItem("^P", "pick"),
+			helpItem("^N", "add"),
+			helpItem("Esc", "cancel"),
+		)
+		sections = append(sections, "  "+strings.Join(parts, helpStyle.Render(" · ")))
 	}
 
 	return strings.Join(sections, "\n")
@@ -388,21 +392,28 @@ func (m Model) renderStatus() string {
 		parts = append(parts, statusYellowStyle.Render(fmt.Sprintf("'%s'", queryText)))
 	}
 
-	if m.frecencyEnabled {
-		parts = append(parts, statusBlueStyle.Render("frecency"))
-	}
-
-	if m.focusActive && m.config.AnyFocused() {
-		parts = append(parts, statusGreenStyle.Render("focused"))
-	}
-
 	return "  " + strings.Join(parts, statusStyle.Render(" · "))
+}
+
+// renderToggleHelp renders a keyboard-shortcut toggle for the help line, e.g.
+// "^F frecency ON" with the state highlighted when on and muted when off.
+func renderToggleHelp(key, label string, on bool) string {
+	state := helpStyle.Render("OFF")
+	if on {
+		state = statusGreenStyle.Render("ON")
+	}
+	return helpKeyStyle.Render(key) + helpStyle.Render(" "+label+" ") + state
+}
+
+// helpItem renders a single "key label" hint for the help line.
+func helpItem(key, label string) string {
+	return helpKeyStyle.Render(key) + helpStyle.Render(" "+label)
 }
 
 func (m Model) renderHelp(items [][2]string) string {
 	var parts []string
 	for _, item := range items {
-		parts = append(parts, helpKeyStyle.Render(item[0])+helpStyle.Render(" "+item[1]))
+		parts = append(parts, helpItem(item[0], item[1]))
 	}
 	return "  " + strings.Join(parts, helpStyle.Render(" · "))
 }

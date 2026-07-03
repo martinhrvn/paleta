@@ -717,6 +717,50 @@ func TestModel_KeyCtrlA_SelectsAll(t *testing.T) {
 	}
 }
 
+func TestModel_HelpLine_FrecencyTogglesShowKeyAndState(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	// Frecency ON should show the shortcut, label and ON state in the help line.
+	m.frecencyEnabled = true
+	got := ansi.Strip(m.View())
+	for _, want := range []string{"^F", "frecency", "ON"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("frecency-on help = %q, want to contain %q", got, want)
+		}
+	}
+
+	// Frecency OFF should still show the shortcut and label, but OFF state.
+	m.frecencyEnabled = false
+	got = ansi.Strip(m.View())
+	for _, want := range []string{"^F", "frecency", "OFF"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("frecency-off help = %q, want to contain %q", got, want)
+		}
+	}
+}
+
+func TestModel_HelpLine_FocusTogglesShowKeyAndState(t *testing.T) {
+	cfg := createTestConfig()
+	cfg.Locations[0].Focused = true // ensure focus is available
+	m := createTestModel(cfg)
+
+	m.focusActive = true
+	got := ansi.Strip(m.View())
+	for _, want := range []string{"^T", "focus", "ON"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("focus-on help = %q, want to contain %q", got, want)
+		}
+	}
+
+	m.focusActive = false
+	got = ansi.Strip(m.View())
+	for _, want := range []string{"^T", "focus", "OFF"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("focus-off help = %q, want to contain %q", got, want)
+		}
+	}
+}
+
 func TestModel_KeyCtrlF_TogglesFrecency(t *testing.T) {
 	m := createTestModel(createTestConfig())
 	initial := m.frecencyEnabled
