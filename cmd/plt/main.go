@@ -42,6 +42,8 @@ func main() {
 		handleStatsCommand()
 	case "select":
 		handleSelectCommand()
+	case "lint":
+		handleLintCommand()
 	case "record":
 		handleRecordCommand()
 	case "help":
@@ -239,6 +241,78 @@ func handleSelectCommand() {
 	outputSelectionJSON(results)
 }
 
+// handleLintCommand checks the discovered .pltrc for location/command names that
+// fall outside the alias-safe charset. Without --fix it reports issues and exits
+// non-zero when any exist (CI-friendly). With --fix it rewrites offending
+// characters to '_' in the local .pltrc, then re-validates and reports any
+// residual issues it could not fully repair.
+func handleLintCommand() {
+	fix := false
+	for _, arg := range os.Args[2:] {
+		switch arg {
+		case "--fix":
+			fix = true
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown lint option: %s\n", arg)
+			fmt.Fprintln(os.Stderr, "Usage: plt lint [--fix]")
+			os.Exit(1)
+		}
+	}
+
+	if fix {
+		lintFix()
+		return
+	}
+
+	cfg, err := config.LoadConfigFromDiscovery()
+	if err != nil {
+		exitConfigError(err)
+	}
+	fmt.Println(commands.FormatLintReport(cfg.Warnings))
+	if len(cfg.Warnings) > 0 {
+		os.Exit(1)
+	}
+}
+
+// lintFix rewrites out-of-charset names in the local .pltrc. It requires a local
+// file (a global-fallback config has no single file to rewrite).
+func lintFix() {
+	configPath, err := config.FindConfigFile()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "No local .pltrc found to fix (plt lint --fix rewrites the nearest .pltrc).")
+		os.Exit(1)
+	}
+
+	fixes, err := commands.FixConfigFile(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error fixing config: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(fixes) == 0 {
+		fmt.Println("No name issues found; nothing to fix.")
+	} else {
+		fmt.Printf("Fixed %d name(s) in %s:\n", len(fixes), configPath)
+		for _, f := range fixes {
+			fmt.Printf("  %-9s %q -> %q\n", f.Scope, f.Before, f.After)
+		}
+	}
+
+	// Re-validate: some names (e.g. one whose leading character was disallowed)
+	// can't be fully repaired by character replacement. Reload via discovery so
+	// glob/relative paths resolve from the config directory.
+	cfg, err := config.LoadConfigFromDiscovery()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reloading config after fix: %v\n", err)
+		os.Exit(1)
+	}
+	if len(cfg.Warnings) > 0 {
+		fmt.Println()
+		fmt.Println(commands.FormatLintReport(cfg.Warnings))
+		os.Exit(1)
+	}
+}
+
 // selectionJSON is the wire format emitted for a selection. The action field
 // is only present when it carries meaning (currently just "edit").
 type selectionJSON struct {
@@ -344,6 +418,8 @@ func showUsage() {
 	fmt.Println("    stats                    Show command usage history (runs, recency, frecency)")
 	fmt.Println("    stats --by=count         Sort stats by run count (or --by=recent)")
 	fmt.Println("    select                   Interactive TUI command selection (multi-select with Tab)")
+	fmt.Println("    lint                     Check .pltrc for names that can't be used as aliases")
+	fmt.Println("    lint --fix               Rewrite offending characters in names to '_'")
 	fmt.Println("    version                  Show the paleta version")
 	fmt.Println("    help                     Show this help message")
 	fmt.Println()

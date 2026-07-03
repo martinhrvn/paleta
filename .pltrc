@@ -11,27 +11,27 @@ locations:
       commands:
         - name: build
           command: go build ./...
-        - name: build binary
+        - name: build_binary
           command: go build -o plt-bin ./cmd/plt/...
-        - name: test all
+        - name: test_all
           command: go test ./...
-        - name: test verbose
+        - name: test_verbose
           command: go test -v ./...
-        - name: test ui
+        - name: test_ui
           command: go test -v ./internal/ui/...
-        - name: test commands
+        - name: test_commands
           command: go test -v ./internal/commands/...
-        - name: test config
+        - name: test_config
           command: go test -v ./internal/config/...
-        - name: test history
+        - name: test_history
           command: go test -v ./internal/history/...
-        - name: run help
+        - name: run_help
           command: go run ./cmd/plt/... help
-        - name: run list
+        - name: run_list
           command: go run ./cmd/plt/... list
-        - name: run select tui
+        - name: run_select_tui
           command: go run ./cmd/plt/... select --tui
-        - name: run select
+        - name: run_select
           command: go run ./cmd/plt/... select
         - name: fmt
           command: go fmt ./...
@@ -39,10 +39,4 @@ locations:
           command: go vet ./...
         - name: tidy
           command: go mod tidy
-        - name: something
-          command:
-            - '@root:test ui'
-            - '@root:tidy'
-            - '@root:fmt'
-            - '@root[go]:fmt'
       focused: true

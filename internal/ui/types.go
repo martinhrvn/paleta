@@ -19,4 +19,10 @@ type CommandInfo struct {
 	Type          string            // Project type (npm, go, etc.)
 	Env           map[string]string // Resolved environment variables for this command
 	FrecencyScore float64           // Score for sorting
+	// Invalid is true when this command's name (or its location's name) falls
+	// outside the alias-safe charset, so it can't be referenced as an alias.
+	Invalid bool
+	// InvalidReason is a short human explanation shown when Invalid (e.g.
+	// "contains a space").
+	InvalidReason string
 }

@@ -15,6 +15,11 @@ type Config struct {
 	Root      string         `yaml:"root,omitempty"`
 	Locations []Location     `yaml:"locations"`
 	Frecency  FrecencyConfig `yaml:"frecency,omitempty"`
+	// Warnings collects non-fatal config issues found during load: names outside
+	// the alias-safe charset and unresolved @project:command references. Callers
+	// surface them (the selector banner, `plt lint`) rather than failing the load.
+	// Never serialized.
+	Warnings []Warning `yaml:"-"`
 }
 
 // FrecencyConfig configures frecency sorting behavior
@@ -47,6 +52,11 @@ type Command struct {
 	// blocks loading the rest; callers surface it rather than run it. Never
 	// serialized.
 	Error string `yaml:"-"`
+	// NameError is set by validateNames when this command's Name falls outside the
+	// alias-safe charset (e.g. contains a space or '*'), so it can never be used in
+	// an @project:command reference. Non-fatal; surfaced by the selector and
+	// `plt lint`. Never serialized.
+	NameError string `yaml:"-"`
 	// parts holds the authored list form when `command` was a YAML sequence, so
 	// the command re-marshals as a list. Empty when authored as a scalar. Never
 	// serialized directly; consulted by MarshalYAML.
@@ -217,6 +227,10 @@ type Location struct {
 	// Focused marks this location as part of the user's "focus" set. When any
 	// location is focused, the selector defaults to showing only focused ones.
 	Focused bool `yaml:"focused,omitempty"`
+	// NameError is set by validateNames when this location's Name falls outside the
+	// alias-safe charset, so it can never be used as a project reference. Non-fatal;
+	// surfaced by the selector and `plt lint`. Never serialized.
+	NameError string `yaml:"-"`
 }
 
 // AnyFocused reports whether any location is marked focused.
@@ -270,6 +284,11 @@ func LoadConfig(configPath string) (*Config, error) {
 	// than failing the whole load, so one stale saved chain never blocks the rest
 	// of the config from loading and running.
 	expandCommandAliases(&config)
+
+	// Gather non-fatal config issues (out-of-charset names + unresolved alias
+	// references) for callers to surface rather than failing the load. Runs after
+	// expandCommandAliases so Command.Error is populated.
+	collectConfigWarnings(&config)
 
 	return &config, nil
 }

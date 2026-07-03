@@ -21,6 +21,8 @@
 - [x] Config file discovery (search current dir and parents)
 - [x] Validate config file structure
 - [x] Handle malformed config gracefully
+- [x] Validate location/command names against the alias-safe charset; the selector shows a warning banner and underlines/recolors offending rows, and `plt lint` reports them (see `plt lint` under CLI commands)
+- [x] Surface unresolved `@project:command` alias references (recorded on `Command.Error`) alongside name issues — flagged in the selector and reported by `plt lint` (not auto-fixable; must be edited manually)
 
 ### Command Selection
 - [x] Integration with fzf for fuzzy selection
@@ -32,6 +34,7 @@
   - [x] plt list --format=fzf - format for fzf selection
   - [ ] plt get --location=X --command=Y - get execution details as JSON
   - [x] plt help - show usage and available commands
+  - [x] plt lint [--fix] - check `.pltrc` for location/command names outside the alias-safe charset; `--fix` rewrites offending characters to `_` (comments/formatting preserved via yaml.Node round-trip)
   - [x] Handle command-line argument parsing
 
 ### Command Execution

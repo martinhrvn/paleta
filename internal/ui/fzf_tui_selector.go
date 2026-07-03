@@ -343,6 +343,11 @@ func (m Model) View() string {
 	// Status line
 	sections = append(sections, m.renderStatus())
 
+	// Warning banner for names that can't be used as aliases
+	if banner := m.renderWarningBanner(); banner != "" {
+		sections = append(sections, banner)
+	}
+
 	// Main content: command list + preview panel
 	sections = append(sections, m.renderMainContent())
 
@@ -395,6 +400,21 @@ func (m Model) renderStatus() string {
 	return "  " + strings.Join(parts, statusStyle.Render(" · "))
 }
 
+// renderWarningBanner renders a one-line warning when the config has issues
+// (names that can't be used as aliases, or unresolved @project:command
+// references). Returns "" when there are no warnings.
+func (m Model) renderWarningBanner() string {
+	n := len(m.config.Warnings)
+	if n == 0 {
+		return ""
+	}
+	noun := "issue"
+	if n > 1 {
+		noun = "issues"
+	}
+	return "  " + statusYellowStyle.Render(fmt.Sprintf("⚠ %d config %s — run 'plt lint' for details", n, noun))
+}
+
 // renderToggleHelp renders a keyboard-shortcut toggle for the help line, e.g.
 // "^F frecency ON" with the state highlighted when on and muted when off.
 func renderToggleHelp(key, label string, on bool) string {
@@ -419,8 +439,13 @@ func (m Model) renderHelp(items [][2]string) string {
 }
 
 func (m Model) renderMainContent() string {
-	// Calculate available height for the list (total height minus chrome: search + status + help = 3 lines)
-	listHeight := m.height - 3
+	// Calculate available height for the list (total height minus chrome: search +
+	// status + help = 3 lines, plus the warning banner line when shown).
+	chrome := 3
+	if len(m.config.Warnings) > 0 {
+		chrome++
+	}
+	listHeight := m.height - chrome
 	if listHeight < 1 {
 		listHeight = 10 // sensible default
 	}
@@ -527,6 +552,17 @@ func (m *Model) loadCommands() {
 				score = m.history.GetScore(displayName, command.Command)
 			}
 
+			// Flag the row when its name is un-aliasable (space, '*', …) or its
+			// @project:command reference couldn't be resolved. Prefer the command's
+			// name reason, then its unresolved-alias error, then the location's.
+			invalidReason := command.NameError
+			if invalidReason == "" {
+				invalidReason = command.Error
+			}
+			if invalidReason == "" {
+				invalidReason = location.NameError
+			}
+
 			info := CommandInfo{
 				Display:       fmt.Sprintf("%s: %s", displayName, cmdDisplay),
 				Directory:     location.Location,
@@ -536,6 +572,8 @@ func (m *Model) loadCommands() {
 				Type:          command.Type,
 				Env:           config.EffectiveEnv(location, command),
 				FrecencyScore: score,
+				Invalid:       invalidReason != "",
+				InvalidReason: invalidReason,
 			}
 			m.commands = append(m.commands, info)
 		}
@@ -602,7 +640,7 @@ func (m Model) formatListItem(index, queuePos int, matched map[int]bool) string 
 		prefix = selectedMarkStyle.Render(queueBadgePlain(queuePos))
 	}
 	display := m.filteredCommands[index].Display
-	return prefix + rowContent(display, matched, listLocationStyle, listCommandStyle, matchStyle)
+	return prefix + rowContent(display, matched, listLocationStyle, listCommandStyle, matchStyle, m.filteredCommands[index].Invalid)
 }
 
 // renderCursorRow renders the selected list row: a lavender accent bar followed
@@ -618,7 +656,7 @@ func (m Model) renderCursorRow(index, queuePos int, matched map[int]bool, width 
 	if queuePos > 0 {
 		badgeStyle = selBadgeStyle
 	}
-	content := badgeStyle.Render(badgePlain) + rowContent(display, matched, selBaseStyle, selBaseStyle, selHlStyle)
+	content := badgeStyle.Render(badgePlain) + rowContent(display, matched, selBaseStyle, selBaseStyle, selHlStyle, m.filteredCommands[index].Invalid)
 	// Pad the surface fill to width-1; the accent bar occupies the first column.
 	if pad := (width - 1) - lipgloss.Width(badgePlain+rowPlain(display)); pad > 0 {
 		content += selBaseStyle.Render(strings.Repeat(" ", pad))
@@ -636,7 +674,7 @@ func (m Model) renderQueuedRow(index, queuePos int, matched map[int]bool, width 
 	}
 	display := m.filteredCommands[index].Display
 	badgePlain := queueBadgePlain(queuePos)
-	content := queuedBadgeStyle.Render(badgePlain) + rowContent(display, matched, queuedBaseStyle, queuedBaseStyle, queuedHlStyle)
+	content := queuedBadgeStyle.Render(badgePlain) + rowContent(display, matched, queuedBaseStyle, queuedBaseStyle, queuedHlStyle, m.filteredCommands[index].Invalid)
 	if pad := (width - 1) - lipgloss.Width(badgePlain+rowPlain(display)); pad > 0 {
 		content += queuedBaseStyle.Render(strings.Repeat(" ", pad))
 	}
@@ -646,7 +684,15 @@ func (m Model) renderQueuedRow(index, queuePos int, matched map[int]bool, width 
 // rowContent styles a list row's text (location + command), highlighting the
 // fuzzy-matched characters. baseLoc/baseCmd style the location and command
 // segments; hl styles matches. matched is keyed on byte offsets into display.
-func rowContent(display string, matched map[int]bool, baseLoc, baseCmd, hl lipgloss.Style) string {
+// When invalid, the row is drawn in peach with an underline so an un-aliasable
+// name (space, '*', …) stands out; the style copies keep each state's
+// background, so cursor/queued fills are preserved.
+func rowContent(display string, matched map[int]bool, baseLoc, baseCmd, hl lipgloss.Style, invalid bool) string {
+	if invalid {
+		baseLoc = baseLoc.Foreground(lipgloss.Color(ccPeach)).Underline(true)
+		baseCmd = baseCmd.Foreground(lipgloss.Color(ccPeach)).Underline(true)
+		hl = hl.Underline(true)
+	}
 	if loc, rest, ok := strings.Cut(display, ": "); ok {
 		sep := len(loc) + len(": ")
 		var b strings.Builder

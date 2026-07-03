@@ -18,6 +18,7 @@ _plt() {
                 'edit[Open nearest .pltrc in $EDITOR]' \
                 'list[List all available commands]' \
                 'stats[Show command usage history (runs, recency, frecency)]' \
+                'lint[Check .pltrc names; --fix rewrites bad chars to _]' \
                 'version[Show the plt version]' \
                 'help[Show help message]'
             ;;

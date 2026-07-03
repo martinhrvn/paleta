@@ -29,6 +29,7 @@ show_usage() {
     echo "    edit       Open nearest .pltrc in \$EDITOR"
     echo "    list       List all available commands"
     echo "    stats      Show command usage history (runs, recency, frecency)"
+    echo "    lint       Check .pltrc names (add --fix to auto-repair)"
     echo "    version    Show the plt version"
     echo "    help       Show this help message"
     echo
@@ -246,6 +247,10 @@ plt_main() {
             "$PLT_BINARY" version
             ;;
         select|record)
+            "$PLT_BINARY" "$@"
+            ;;
+        lint)
+            # Check .pltrc names (optionally --fix). Plain passthrough; pass flags.
             "$PLT_BINARY" "$@"
             ;;
         *)

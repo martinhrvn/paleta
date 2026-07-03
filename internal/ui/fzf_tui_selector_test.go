@@ -378,6 +378,76 @@ func TestModel_LoadCommands(t *testing.T) {
 	}
 }
 
+// A command (or location) name flagged by validateNames should surface as an
+// invalid CommandInfo, while a valid sibling stays clean.
+func TestModel_LoadCommands_MarksInvalidNames(t *testing.T) {
+	cfg := &config.Config{
+		Locations: []config.Location{{
+			Name:     "root",
+			Location: "/root",
+			Commands: []config.Command{
+				{Name: "test ui", Command: "go test ./ui/...", NameError: "contains a space"},
+				{Name: "build", Command: "go build ./..."},
+			},
+		}},
+	}
+	m := NewModel(cfg, nil)
+	m.loadCommands()
+
+	if !m.commands[0].Invalid {
+		t.Errorf("command with flagged name should be Invalid")
+	}
+	if m.commands[0].InvalidReason != "contains a space" {
+		t.Errorf("InvalidReason = %q, want %q", m.commands[0].InvalidReason, "contains a space")
+	}
+	if m.commands[1].Invalid {
+		t.Errorf("valid command 'build' should not be Invalid")
+	}
+}
+
+// The warning banner appears only when the config carries name warnings.
+func TestModel_WarningBanner(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	if got := m.renderWarningBanner(); got != "" {
+		t.Errorf("expected no banner for clean config, got %q", got)
+	}
+
+	m.config.Warnings = []config.Warning{
+		{Kind: "name", Scope: "command", Context: "root: test ui", Name: "test ui", Reason: "contains a space"},
+	}
+	banner := ansi.Strip(m.renderWarningBanner())
+	if !contains(banner, "config issue") || !contains(banner, "plt lint") {
+		t.Errorf("expected config-issue warning in banner, got %q", banner)
+	}
+}
+
+// A command whose @project:command reference couldn't be resolved (Command.Error)
+// is marked Invalid in the list, just like an un-aliasable name.
+func TestModel_LoadCommands_MarksUnresolvedAlias(t *testing.T) {
+	cfg := &config.Config{
+		Locations: []config.Location{{
+			Name:     "root",
+			Location: "/root",
+			Commands: []config.Command{
+				{Name: "ci", Command: "@root:missing", Error: `command "ci" in project "root": unknown command "missing"`},
+				{Name: "build", Command: "go build ./..."},
+			},
+		}},
+	}
+	m := NewModel(cfg, nil)
+	m.loadCommands()
+
+	if !m.commands[0].Invalid {
+		t.Errorf("command with unresolved alias should be Invalid")
+	}
+	if !contains(m.commands[0].InvalidReason, "unknown command") {
+		t.Errorf("InvalidReason should carry the alias error, got %q", m.commands[0].InvalidReason)
+	}
+	if m.commands[1].Invalid {
+		t.Errorf("valid command 'build' should not be Invalid")
+	}
+}
+
 func TestModel_FuzzyFilter(t *testing.T) {
 	m := createTestModel(createTestConfig())
 
