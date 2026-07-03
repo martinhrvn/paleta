@@ -39,4 +39,8 @@ locations:
           command: go vet ./...
         - name: tidy
           command: go mod tidy
+        - name: format
+          command:
+            - go fmt ./...
+            - '@root[go]:fmt'
       focused: true

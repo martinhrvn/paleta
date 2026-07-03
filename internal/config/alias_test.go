@@ -382,7 +382,7 @@ func TestReferenceToken_TypeWhenAmbiguous(t *testing.T) {
 	}
 }
 
-func TestReferenceToken_UntypedClashUnreferenceable(t *testing.T) {
+func TestReferenceToken_AuthoredWinsBareName(t *testing.T) {
 	// Mirrors the local .pltrc: a manual (untyped) fmt alongside a go-typed fmt.
 	cfg := &Config{Locations: []Location{{
 		Name: "root", Location: "/repo", Types: Types{"go"},
@@ -395,9 +395,38 @@ func TestReferenceToken_UntypedClashUnreferenceable(t *testing.T) {
 	if tok, ok := cfg.ReferenceToken("/repo", "fmt", "go"); !ok || tok != "@root[go]:fmt" {
 		t.Errorf("typed fmt token = %q ok=%v, want @root[go]:fmt", tok, ok)
 	}
-	// ...but the untyped manual one cannot be named uniquely -> raw fallback.
-	if tok, ok := cfg.ReferenceToken("/repo", "fmt", ""); ok {
-		t.Errorf("expected untyped fmt to be unreferenceable, got %q", tok)
+	// ...and the authored (untyped) one wins the bare name -> @root:fmt.
+	if tok, ok := cfg.ReferenceToken("/repo", "fmt", ""); !ok || tok != "@root:fmt" {
+		t.Errorf("authored fmt token = %q ok=%v, want @root:fmt", tok, ok)
+	}
+}
+
+// A bare @root:fmt reference expands to the authored command, while @root[go]:fmt
+// reaches the auto-generated one; neither records an error.
+func TestExpandAliases_AuthoredWinsBareName(t *testing.T) {
+	cfg := &Config{Locations: []Location{{
+		Name: "root", Location: "/repo", Types: Types{"go"},
+		Commands: []Command{
+			{Name: "fmt", Command: "go fmt ./...", Type: ""},
+			{Name: "fmt", Command: "gofmt -w .", Type: "go"},
+			{Name: "bare", Command: "@root:fmt"},
+			{Name: "typed", Command: "@root[go]:fmt"},
+		},
+	}}}
+
+	if err := expandCommandAliases(cfg); err != nil {
+		t.Fatalf("expandCommandAliases: %v", err)
+	}
+	if got, want := expandedCmd(t, cfg, 0, 2), "go fmt ./..."; got != want {
+		t.Errorf("@root:fmt expanded to %q, want %q", got, want)
+	}
+	if got, want := expandedCmd(t, cfg, 0, 3), "gofmt -w ."; got != want {
+		t.Errorf("@root[go]:fmt expanded to %q, want %q", got, want)
+	}
+	for _, idx := range []int{2, 3} {
+		if e := cfg.Locations[0].Commands[idx].Error; e != "" {
+			t.Errorf("command %d recorded an error: %q", idx, e)
+		}
 	}
 }
 

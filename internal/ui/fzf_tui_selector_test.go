@@ -287,12 +287,12 @@ func TestModel_FormatListItemPlain(t *testing.T) {
 	display := m.filteredCommands[0].Display
 
 	// Unqueued item: two-space badge + plain row text.
-	if got := queueBadgePlain(0) + rowPlain(display); got != "  frontend: npm start" {
+	if got := queueBadgePlain(0) + rowPlain(display, ""); got != "  frontend: npm start" {
 		t.Errorf("expected '  frontend: npm start', got %q", got)
 	}
 
 	// Queued item: position 1 badge.
-	if got := queueBadgePlain(1) + rowPlain(display); got != "1 frontend: npm start" {
+	if got := queueBadgePlain(1) + rowPlain(display, ""); got != "1 frontend: npm start" {
 		t.Errorf("expected '1 frontend: npm start', got %q", got)
 	}
 
@@ -326,10 +326,34 @@ func TestModel_FormatListItemStyled(t *testing.T) {
 // longer prefix the command with a terminal glyph.
 func TestRowPlain_DropsCommandIcon(t *testing.T) {
 	t.Setenv("PLT_NO_ICONS", "") // icons enabled
-	got := rowPlain("frontend: npm start")
+	got := rowPlain("frontend: npm start", "")
 	want := locIcon() + "frontend: " + "npm start"
 	if got != want {
 		t.Errorf("rowPlain = %q, want %q (command icon should be removed)", got, want)
+	}
+}
+
+// The project type appears in the list row as a trailing "[type]" badge, so it's
+// visible without opening the preview.
+func TestModel_ListRowShowsType(t *testing.T) {
+	t.Setenv("PLT_NO_ICONS", "1")
+	cfg := &config.Config{
+		Locations: []config.Location{{
+			Name:     "api",
+			Location: "/api",
+			Commands: []config.Command{{Name: "build", Command: "go build ./...", Type: "go"}},
+		}},
+	}
+	m := createTestModel(cfg)
+
+	// Plain (measurement) text includes the badge.
+	if got := rowPlain(m.filteredCommands[0].Display, m.filteredCommands[0].Type); got != "api: build [go]" {
+		t.Errorf("rowPlain = %q, want %q", got, "api: build [go]")
+	}
+	// Styled row renders the badge too.
+	visible := ansi.Strip(m.formatListItem(0, 0, nil))
+	if !contains(visible, "[go]") {
+		t.Errorf("styled row should show type badge '[go]', got %q", visible)
 	}
 }
 
@@ -944,6 +968,7 @@ func containsSubstring(s, substr string) bool {
 }
 
 func TestModel_LoadCommands_MultiType(t *testing.T) {
+	t.Setenv("PLT_NO_ICONS", "1") // deterministic ASCII for row-text assertions
 	cfg := &config.Config{
 		Locations: []config.Location{
 			{
@@ -970,15 +995,24 @@ func TestModel_LoadCommands_MultiType(t *testing.T) {
 	if build == nil || up == nil {
 		t.Fatalf("expected both commands loaded, got %+v", m.commands)
 	}
-	if build.Display != "dotfiles: [npm] build" {
-		t.Errorf("build display = %q, want 'dotfiles: [npm] build'", build.Display)
+	// The type is no longer folded into Display; it renders as a trailing badge
+	// (see rowContent / rowPlain), so Display carries just the bare name.
+	if build.Display != "dotfiles: build" {
+		t.Errorf("build display = %q, want 'dotfiles: build'", build.Display)
 	}
-	if up.Display != "dotfiles: [compose] up" {
-		t.Errorf("up display = %q, want 'dotfiles: [compose] up'", up.Display)
+	if up.Display != "dotfiles: up" {
+		t.Errorf("up display = %q, want 'dotfiles: up'", up.Display)
 	}
-	// CommandInfo.Type is per-command, driving the preview window.
+	// CommandInfo.Type is per-command, driving both the type badge and the preview.
 	if build.Type != "npm" || up.Type != "compose" {
 		t.Errorf("per-command types = %q/%q, want npm/compose", build.Type, up.Type)
+	}
+	// The disambiguating type shows in the row via the badge.
+	if got := rowPlain(build.Display, build.Type); got != "dotfiles: build [npm]" {
+		t.Errorf("build row = %q, want 'dotfiles: build [npm]'", got)
+	}
+	if got := rowPlain(up.Display, up.Type); got != "dotfiles: up [compose]" {
+		t.Errorf("up row = %q, want 'dotfiles: up [compose]'", got)
 	}
 }
 

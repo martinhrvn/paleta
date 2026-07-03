@@ -545,7 +545,14 @@ func (m *Model) loadCommands() {
 		}
 
 		for _, command := range location.Commands {
-			cmdDisplay := config.CommandLabel(location, command)
+			// The row shows the bare name; the project type is rendered separately
+			// as a trailing badge (see rowContent), so we don't fold it into the
+			// label here — that also disambiguates same-named commands across types
+			// the way CommandLabel's "[type]" prefix used to.
+			cmdDisplay := command.Name
+			if cmdDisplay == "" {
+				cmdDisplay = command.Command
+			}
 
 			var score float64
 			if m.history != nil && m.frecencyEnabled {
@@ -640,7 +647,7 @@ func (m Model) formatListItem(index, queuePos int, matched map[int]bool) string 
 		prefix = selectedMarkStyle.Render(queueBadgePlain(queuePos))
 	}
 	display := m.filteredCommands[index].Display
-	return prefix + rowContent(display, matched, listLocationStyle, listCommandStyle, matchStyle, m.filteredCommands[index].Invalid)
+	return prefix + rowContent(display, matched, listLocationStyle, listCommandStyle, matchStyle, m.filteredCommands[index].Invalid, m.filteredCommands[index].Type)
 }
 
 // renderCursorRow renders the selected list row: a lavender accent bar followed
@@ -651,14 +658,15 @@ func (m Model) renderCursorRow(index, queuePos int, matched map[int]bool, width 
 		return ""
 	}
 	display := m.filteredCommands[index].Display
+	typ := m.filteredCommands[index].Type
 	badgePlain := queueBadgePlain(queuePos)
 	badgeStyle := selBaseStyle
 	if queuePos > 0 {
 		badgeStyle = selBadgeStyle
 	}
-	content := badgeStyle.Render(badgePlain) + rowContent(display, matched, selBaseStyle, selBaseStyle, selHlStyle, m.filteredCommands[index].Invalid)
+	content := badgeStyle.Render(badgePlain) + rowContent(display, matched, selBaseStyle, selBaseStyle, selHlStyle, m.filteredCommands[index].Invalid, typ)
 	// Pad the surface fill to width-1; the accent bar occupies the first column.
-	if pad := (width - 1) - lipgloss.Width(badgePlain+rowPlain(display)); pad > 0 {
+	if pad := (width - 1) - lipgloss.Width(badgePlain+rowPlain(display, typ)); pad > 0 {
 		content += selBaseStyle.Render(strings.Repeat(" ", pad))
 	}
 	return selBarStyle.Render("▌") + content
@@ -673,9 +681,10 @@ func (m Model) renderQueuedRow(index, queuePos int, matched map[int]bool, width 
 		return ""
 	}
 	display := m.filteredCommands[index].Display
+	typ := m.filteredCommands[index].Type
 	badgePlain := queueBadgePlain(queuePos)
-	content := queuedBadgeStyle.Render(badgePlain) + rowContent(display, matched, queuedBaseStyle, queuedBaseStyle, queuedHlStyle, m.filteredCommands[index].Invalid)
-	if pad := (width - 1) - lipgloss.Width(badgePlain+rowPlain(display)); pad > 0 {
+	content := queuedBadgeStyle.Render(badgePlain) + rowContent(display, matched, queuedBaseStyle, queuedBaseStyle, queuedHlStyle, m.filteredCommands[index].Invalid, typ)
+	if pad := (width - 1) - lipgloss.Width(badgePlain+rowPlain(display, typ)); pad > 0 {
 		content += queuedBaseStyle.Render(strings.Repeat(" ", pad))
 	}
 	return " " + content
@@ -684,14 +693,22 @@ func (m Model) renderQueuedRow(index, queuePos int, matched map[int]bool, width 
 // rowContent styles a list row's text (location + command), highlighting the
 // fuzzy-matched characters. baseLoc/baseCmd style the location and command
 // segments; hl styles matches. matched is keyed on byte offsets into display.
-// When invalid, the row is drawn in peach with an underline so an un-aliasable
-// name (space, '*', …) stands out; the style copies keep each state's
-// background, so cursor/queued fills are preserved.
-func rowContent(display string, matched map[int]bool, baseLoc, baseCmd, hl lipgloss.Style, invalid bool) string {
+// typ, when non-empty, is appended as a dim "[type]" badge so the project type
+// shows in the list (not just the preview); it is not part of display, so
+// fuzzy-match offsets are unaffected. When invalid, the row is drawn in peach
+// with an underline so an un-aliasable name (space, '*', …) stands out; the
+// style copies keep each state's background, so cursor/queued fills are preserved.
+func rowContent(display string, matched map[int]bool, baseLoc, baseCmd, hl lipgloss.Style, invalid bool, typ string) string {
 	if invalid {
 		baseLoc = baseLoc.Foreground(lipgloss.Color(ccPeach)).Underline(true)
 		baseCmd = baseCmd.Foreground(lipgloss.Color(ccPeach)).Underline(true)
 		hl = hl.Underline(true)
+	}
+	badge := ""
+	if typ != "" {
+		// Dim overlay foreground, keeping baseCmd's background so the badge blends
+		// into cursor/queued row fills.
+		badge = baseCmd.Foreground(lipgloss.Color(ccOverlay0)).Underline(false).Render(typeBadgePlain(typ))
 	}
 	if loc, rest, ok := strings.Cut(display, ": "); ok {
 		sep := len(loc) + len(": ")
@@ -700,18 +717,28 @@ func rowContent(display string, matched map[int]bool, baseLoc, baseCmd, hl lipgl
 		b.WriteString(highlightMatches(loc, shiftMatched(matched, 0, len(loc)), baseLoc, hl))
 		b.WriteString(baseLoc.Render(": "))
 		b.WriteString(highlightMatches(rest, shiftMatched(matched, sep, len(display)), baseCmd, hl))
+		b.WriteString(badge)
 		return b.String()
 	}
-	return highlightMatches(display, matched, baseCmd, hl)
+	return highlightMatches(display, matched, baseCmd, hl) + badge
+}
+
+// typeBadgePlain renders the trailing project-type tag (e.g. " [npm]"), or "" for
+// an empty type. Kept in sync with rowContent so rowPlain measures the same text.
+func typeBadgePlain(typ string) string {
+	if typ == "" {
+		return ""
+	}
+	return " [" + typ + "]"
 }
 
 // rowPlain returns the visible (unstyled) text of a row, matching rowContent's
 // layout, for column-width measurement.
-func rowPlain(display string) string {
+func rowPlain(display, typ string) string {
 	if loc, rest, ok := strings.Cut(display, ": "); ok {
-		return locIcon() + loc + ": " + rest
+		return locIcon() + loc + ": " + rest + typeBadgePlain(typ)
 	}
-	return display
+	return display + typeBadgePlain(typ)
 }
 
 // Nerd Font glyphs. Set PLT_NO_ICONS to fall back to plain ASCII for terminals

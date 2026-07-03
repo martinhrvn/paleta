@@ -133,6 +133,10 @@ func hasPathSuffix(path, suffix []string) bool {
 
 // resolve finds the single command matching a reference, or returns a clear
 // error (unknown/ambiguous project, unknown command, or ambiguous multi-type).
+// When a bare (typeless) reference matches several commands but exactly one is
+// authored (Type==""), that authored command wins — an explicitly authored
+// command owns its bare name, and auto-generated duplicates are reached with
+// @project[type]:command.
 func (idx *aliasIndex) resolve(project, typ, command string) (*indexedLoc, *Command, error) {
 	il, err := idx.lookupProject(project)
 	if err != nil {
@@ -159,6 +163,20 @@ func (idx *aliasIndex) resolve(project, typ, command string) (*indexedLoc, *Comm
 	case 1:
 		return il, matches[0], nil
 	default:
+		// A bare reference prefers a single authored (Type=="") command over
+		// auto-generated typed duplicates — an explicitly authored command owns its
+		// bare name; typed duplicates are reached with @project[type]:command.
+		if typ == "" {
+			var authored []*Command
+			for _, m := range matches {
+				if m.Type == "" {
+					authored = append(authored, m)
+				}
+			}
+			if len(authored) == 1 {
+				return il, authored[0], nil
+			}
+		}
 		return nil, nil, fmt.Errorf("command %q in project %q is ambiguous; disambiguate with @%s[<type>]:%s", command, project, project, command)
 	}
 }
@@ -254,10 +272,12 @@ func expandCommandAliases(cfg *Config) error {
 // ReferenceToken returns a reference token (@project[type]:name) that resolves
 // unambiguously back to the command named `name` (project type `typ`) in the
 // location at absolute path `dir`, or ok=false when no such token exists: an
-// unnamed command, a name outside the token charset (e.g. with spaces), or a
-// name/type clash that no reference can disambiguate. The token is verified with
-// the same resolver the loader uses, so it can never expand to a different
-// command than intended — callers fall back to the raw command when ok=false.
+// unnamed command or a name outside the token charset (e.g. with spaces). When a
+// name is shared by an authored (untyped) command and auto-generated typed ones,
+// the authored command is referenced bare (@project:name) and each typed one via
+// @project[type]:name. The token is verified with the same resolver the loader
+// uses, so it can never expand to a different command than intended — callers
+// fall back to the raw command when ok=false.
 func (cfg *Config) ReferenceToken(dir, name, typ string) (string, bool) {
 	if !refCommandRe.MatchString(name) {
 		return "", false
