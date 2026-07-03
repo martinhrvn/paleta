@@ -3,6 +3,7 @@ package commands
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -17,9 +18,10 @@ func TestSetFocusedPersistsAndUnsets(t *testing.T) {
       - "npm run dev"
   - name: "backend"
     location: "packages/backend"
-    focused: true
     commands:
       - "npm start"
+focused:
+  - "backend"
 `
 	if err := os.WriteFile(configPath, []byte(initial), 0644); err != nil {
 		t.Fatal(err)
@@ -30,18 +32,27 @@ func TestSetFocusedPersistsAndUnsets(t *testing.T) {
 		t.Fatalf("SetFocused failed: %v", err)
 	}
 
+	// The written file uses the top-level list, not inline flags.
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "focused: true") {
+		t.Errorf("expected no inline focused flag in output, got:\n%s", raw)
+	}
+
 	authored, err := LoadAuthoredConfig(configPath)
 	if err != nil {
 		t.Fatalf("reload failed: %v", err)
 	}
-	byName := map[string]bool{}
-	for _, loc := range authored.Locations {
-		byName[loc.Name] = loc.Focused
+	focused := map[string]bool{}
+	for _, key := range authored.Focused {
+		focused[key] = true
 	}
-	if !byName["frontend"] {
+	if !focused["frontend"] {
 		t.Error("expected frontend to be focused after SetFocused")
 	}
-	if byName["backend"] {
+	if focused["backend"] {
 		t.Error("expected backend to be unfocused after SetFocused")
 	}
 
@@ -58,9 +69,10 @@ func TestFocusEntriesReflectsConfig(t *testing.T) {
 	content := `locations:
   - name: "a"
     location: "a"
-    focused: true
   - name: "b"
     location: "b"
+focused:
+  - "a"
 `
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
 		t.Fatal(err)

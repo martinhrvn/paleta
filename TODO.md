@@ -73,7 +73,7 @@ The project types we should support intitally are:
 - [ ] Verbose mode for debugging
 - [ ] Do not show locations that do not exist
 - [x] ability to focus specific locations
-  - [x] per-location `focused: true` in `.pltrc`; selector defaults to focused-only when any location is focused
+  - [x] top-level `focused:` list of location keys in `.pltrc`; selector defaults to focused-only when the list is non-empty
   - [x] `Ctrl+T` toggles the focus filter (focused-only ↔ all) for the current session
   - [x] `Ctrl+P` picker to set/unset which locations are focused (with `Ctrl+A` toggle-all), persisted to `.pltrc`
   - [x] `Ctrl+N` adds projects on the fly via the `plt init` wizard, then re-enters the selector

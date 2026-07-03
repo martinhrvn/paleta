@@ -43,4 +43,5 @@ locations:
           command:
             - go fmt ./...
             - '@root[go]:fmt'
-      focused: true
+focused:
+    - root

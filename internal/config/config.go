@@ -15,6 +15,11 @@ type Config struct {
 	Root      string         `yaml:"root,omitempty"`
 	Locations []Location     `yaml:"locations"`
 	Frecency  FrecencyConfig `yaml:"frecency,omitempty"`
+	// Focused is the authored "focus" set: a list of location focus keys (see
+	// Location.FocusKey). When non-empty, the selector defaults to showing only
+	// the matching locations. resolveFocus turns this into per-location runtime
+	// flags at load; entries matching no location are ignored.
+	Focused []string `yaml:"focused,omitempty"`
 	// Warnings collects non-fatal config issues found during load: names outside
 	// the alias-safe charset and unresolved @project:command references. Callers
 	// surface them (the selector banner, `plt lint`) rather than failing the load.
@@ -224,13 +229,47 @@ type Location struct {
 	Include  []string          `yaml:"include,omitempty"`
 	Exclude  []string          `yaml:"exclude,omitempty"`
 	Env      map[string]string `yaml:"env,omitempty"`
-	// Focused marks this location as part of the user's "focus" set. When any
-	// location is focused, the selector defaults to showing only focused ones.
-	Focused bool `yaml:"focused,omitempty"`
+	// Focused is a runtime-only flag set by resolveFocus from the top-level
+	// Config.Focused list; it drives the selector's focus filter. It is never
+	// read from or written to YAML (focus lives in the top-level list).
+	Focused bool `yaml:"-"`
 	// NameError is set by validateNames when this location's Name falls outside the
 	// alias-safe charset, so it can never be used as a project reference. Non-fatal;
 	// surfaced by the selector and `plt lint`. Never serialized.
 	NameError string `yaml:"-"`
+}
+
+// FocusKey derives the stable identity used to reference a location in the
+// top-level focus list. It matches on the authored name when present, otherwise
+// the authored path (root normalizes to "."), so the same key is produced when
+// the picker lists entries, when SetFocused writes them back, and when
+// resolveFocus reads them.
+func (l Location) FocusKey() string {
+	if l.Name != "" {
+		return l.Name
+	}
+	if l.Location == "" || l.Location == "." {
+		return "."
+	}
+	return l.Location
+}
+
+// resolveFocus turns the authored Config.Focused list into per-location runtime
+// Focused flags by matching each location's FocusKey. It runs before glob
+// expansion so a focused pattern (e.g. "packages/*") propagates to its children.
+func resolveFocus(config *Config) {
+	if len(config.Focused) == 0 {
+		return
+	}
+	set := make(map[string]bool, len(config.Focused))
+	for _, key := range config.Focused {
+		set[key] = true
+	}
+	for i := range config.Locations {
+		if set[config.Locations[i].FocusKey()] {
+			config.Locations[i].Focused = true
+		}
+	}
 }
 
 // AnyFocused reports whether any location is marked focused.
@@ -260,6 +299,10 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// Normalize empty paths to current directory
 	normalizeEmptyPaths(&config)
+
+	// Resolve the top-level focus list into per-location runtime flags before
+	// glob expansion, so a focused pattern propagates to its expanded children.
+	resolveFocus(&config)
 
 	// Expand glob patterns in locations
 	expandedLocations, err := ExpandGlobPatterns(config.Locations)

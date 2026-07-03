@@ -141,6 +141,7 @@ const generatedHeader = `# paleta configuration file
 type generatedConfig struct {
 	Frecency  *config.FrecencyConfig `yaml:"frecency,omitempty"`
 	Locations []config.Location      `yaml:"locations"`
+	Focused   []string               `yaml:"focused,omitempty"`
 }
 
 // GenerateConfig renders the selected locations as .pltrc YAML. When preserved
@@ -151,6 +152,9 @@ func GenerateConfig(locations []config.Location, preserved *config.Config) strin
 	if preserved != nil && hasFrecency(preserved.Frecency) {
 		fr := preserved.Frecency
 		out.Frecency = &fr
+	}
+	if preserved != nil {
+		out.Focused = preserved.Focused
 	}
 
 	data, err := yaml.Marshal(out)

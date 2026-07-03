@@ -3,23 +3,29 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
 
-func TestLocationFocusedUnmarshal(t *testing.T) {
+// A top-level `focused` list resolves to runtime Focused flags on the matching
+// locations; an entry matching no location is harmless.
+func TestFocusListResolvesToLocationFlags(t *testing.T) {
 	yamlStr := `locations:
   - name: "a"
     location: "a"
-    focused: true
   - name: "b"
-    location: "b"`
+    location: "b"
+focused:
+  - "a"
+  - "ghost"`
 
 	var cfg Config
 	if err := yaml.Unmarshal([]byte(yamlStr), &cfg); err != nil {
 		t.Fatalf("unmarshal failed: %v", err)
 	}
+	resolveFocus(&cfg)
 
 	if len(cfg.Locations) != 2 {
 		t.Fatalf("expected 2 locations, got %d", len(cfg.Locations))
@@ -29,6 +35,19 @@ func TestLocationFocusedUnmarshal(t *testing.T) {
 	}
 	if cfg.Locations[1].Focused {
 		t.Errorf("expected location b to be unfocused")
+	}
+}
+
+// The per-location `focused` flag is no longer part of the serialized format:
+// it must never be written out.
+func TestLocationFocusedNotSerialized(t *testing.T) {
+	cfg := Config{Locations: []Location{{Name: "a", Focused: true}}}
+	out, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	if strings.Contains(string(out), "focused") {
+		t.Errorf("expected no inline focused flag in output, got:\n%s", out)
 	}
 }
 
