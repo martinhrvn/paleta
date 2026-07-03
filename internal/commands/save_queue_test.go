@@ -3,6 +3,7 @@ package commands
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -22,7 +23,7 @@ func TestAddCommandToLocation_AppendsToNamedLocation(t *testing.T) {
     type: npm
 `)
 
-	if err := AddCommandToLocation(path, "web", "packages/web", "ci-and-dev", "pnpm i && pnpm dev"); err != nil {
+	if err := AddCommandToLocation(path, "web", "packages/web", "ci-and-dev", []string{"pnpm i", "pnpm dev"}); err != nil {
 		t.Fatalf("AddCommandToLocation failed: %v", err)
 	}
 
@@ -40,6 +41,39 @@ func TestAddCommandToLocation_AppendsToNamedLocation(t *testing.T) {
 	if cmds[0].Name != "ci-and-dev" || cmds[0].Command != "pnpm i && pnpm dev" {
 		t.Errorf("unexpected saved command: %+v", cmds[0])
 	}
+
+	// A multi-part chain is stored as a YAML list for readability.
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "command:\n") || !strings.Contains(string(raw), "- pnpm i") {
+		t.Errorf("expected the chain to be written as a YAML list, got:\n%s", raw)
+	}
+}
+
+func TestAddCommandToLocation_SinglePartStaysScalar(t *testing.T) {
+	path := writePltrc(t, `locations:
+  - name: web
+    location: packages/web
+`)
+
+	if err := AddCommandToLocation(path, "web", "packages/web", "dev", []string{"pnpm dev"}); err != nil {
+		t.Fatalf("AddCommandToLocation failed: %v", err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "- pnpm dev") {
+		t.Errorf("expected a single command to stay scalar, got:\n%s", raw)
+	}
+
+	cfg, _ := LoadAuthoredConfig(path)
+	if cmds := cfg.Locations[0].Commands; len(cmds) != 1 || cmds[0].Command != "pnpm dev" {
+		t.Errorf("unexpected saved command: %+v", cfg.Locations[0].Commands)
+	}
 }
 
 func TestAddCommandToLocation_MatchesUnnamedByPath(t *testing.T) {
@@ -48,7 +82,7 @@ func TestAddCommandToLocation_MatchesUnnamedByPath(t *testing.T) {
     type: go
 `)
 
-	if err := AddCommandToLocation(path, ".", ".", "build-test", "go build ./... && go test ./..."); err != nil {
+	if err := AddCommandToLocation(path, ".", ".", "build-test", []string{"go build ./...", "go test ./..."}); err != nil {
 		t.Fatalf("AddCommandToLocation failed: %v", err)
 	}
 
@@ -69,7 +103,7 @@ func TestAddCommandToLocation_PreservesExistingCommands(t *testing.T) {
       - go run .
 `)
 
-	if err := AddCommandToLocation(path, "api", "packages/api", "chain", "a && b"); err != nil {
+	if err := AddCommandToLocation(path, "api", "packages/api", "chain", []string{"a", "b"}); err != nil {
 		t.Fatalf("AddCommandToLocation failed: %v", err)
 	}
 
@@ -94,7 +128,7 @@ func TestAddCommandToLocation_GlobFallbackCreatesLocation(t *testing.T) {
     type: npm
 `)
 
-	if err := AddCommandToLocation(path, "web", "packages/web", "chain", "a && b"); err != nil {
+	if err := AddCommandToLocation(path, "web", "packages/web", "chain", []string{"a", "b"}); err != nil {
 		t.Fatalf("AddCommandToLocation failed: %v", err)
 	}
 
@@ -110,7 +144,7 @@ func TestAddCommandToLocation_GlobFallbackCreatesLocation(t *testing.T) {
 
 func TestAddCommandToLocation_MissingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".pltrc")
-	if err := AddCommandToLocation(path, "web", "packages/web", "x", "a && b"); err == nil {
+	if err := AddCommandToLocation(path, "web", "packages/web", "x", []string{"a", "b"}); err == nil {
 		t.Error("expected an error when the config file does not exist")
 	}
 }

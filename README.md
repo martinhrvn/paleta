@@ -250,6 +250,24 @@ commands:
 - **Filtering**: Use `include` and `exclude` patterns to filter by name
 - **Clarity**: Easier to understand what each command does
 
+**List Format (chained commands):**
+
+A command's `command` field can be a list instead of an inline `a && b` string.
+The items are joined with `&&`, which is easier to read for longer chains:
+
+```yaml
+commands:
+  - name: "ci-and-dev"
+    command:
+      - pnpm install
+      - pnpm dev
+    # runs as: pnpm install && pnpm dev
+```
+
+A single-item list is equivalent to a scalar. Saving a multi-command queue from
+the selector (`s` in the queue editor) writes this list form; the list is
+preserved when the config is rewritten (e.g. re-running `plt init`).
+
 ### Command References
 
 A command string can reference another command instead of repeating it, using

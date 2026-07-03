@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -152,9 +153,9 @@ func TestModel_QueueSave_CallsStoreWithJoinedCommand(t *testing.T) {
 
 	var gotDisplay, gotDir, gotName, gotCmd string
 	called := false
-	m.saveCommand = &SaveStore{Save: func(displayName, directory, name, command string) error {
+	m.saveCommand = &SaveStore{Save: func(displayName, directory, name string, parts []string) error {
 		called = true
-		gotDisplay, gotDir, gotName, gotCmd = displayName, directory, name, command
+		gotDisplay, gotDir, gotName, gotCmd = displayName, directory, name, strings.Join(parts, " && ")
 		return nil
 	}}
 
@@ -199,8 +200,8 @@ func saveQueueAndCapture(t *testing.T, cfg *config.Config, indices ...int) strin
 		m.toggleSelection(i)
 	}
 	var got string
-	m.saveCommand = &SaveStore{Save: func(_, _, _, command string) error {
-		got = command
+	m.saveCommand = &SaveStore{Save: func(_, _, _ string, parts []string) error {
+		got = strings.Join(parts, " && ")
 		return nil
 	}}
 	m.enterQueueEditor()
@@ -279,8 +280,8 @@ func TestModel_QueueSave_CrossFolderSavesToRoot(t *testing.T) {
 	var gotDisplay, gotDir, gotCmd string
 	m.saveCommand = &SaveStore{
 		RootDir: "/repo",
-		Save: func(displayName, directory, _, command string) error {
-			gotDisplay, gotDir, gotCmd = displayName, directory, command
+		Save: func(displayName, directory, _ string, parts []string) error {
+			gotDisplay, gotDir, gotCmd = displayName, directory, strings.Join(parts, " && ")
 			return nil
 		},
 	}
@@ -328,7 +329,7 @@ func TestModel_QueueSave_CdWrapsNonAliasableCrossFolder(t *testing.T) {
 	var gotCmd string
 	m.saveCommand = &SaveStore{
 		RootDir: "/repo",
-		Save:    func(_, _, _, command string) error { gotCmd = command; return nil },
+		Save:    func(_, _, _ string, parts []string) error { gotCmd = strings.Join(parts, " && "); return nil },
 	}
 	m.enterQueueEditor()
 	for _, msg := range []tea.KeyMsg{

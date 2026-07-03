@@ -77,7 +77,8 @@ The project types we should support intitally are:
 - [x] command queue for multi-select (deterministic run order)
   - [x] `Tab` enqueues the command under the cursor; the queue records selection order and persists across searches (shown as position badges in the list + `N queued` in the status)
   - [x] `Ctrl+Q` opens a queue editor: `Shift+↑/↓` reorder, `x`/`Del` remove, `Enter` run, `Esc` back
-  - [x] save a queue to `.pltrc` as a chained `a && b && c` command (`s` in the editor)
+  - [x] save a queue to `.pltrc` as a command (`s` in the editor): a multi-command queue is written as a YAML list, a single command as a scalar
+  - [x] a `.pltrc` `command` may be authored as a YAML list; the items are joined with `&&` (more readable than an inline `a && b` string) and the list form is preserved across rewrites
   - [x] cross-project save: a queue spanning folders saves under the root location; each part is an alias (which `cd`-wraps cross-project) or, when it can't be referenced, a `cd`-wrapped raw command
 - [x] command references / aliases: `@project[type]:command` tokens in a `.pltrc` command expand at load time to the referenced command's resolved string (e.g. `@web[npm]:build` → `pnpm run build`)
   - [x] `[type]` is optional; required only to disambiguate a multi-type project

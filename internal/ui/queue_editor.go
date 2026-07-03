@@ -11,9 +11,11 @@ import (
 // without the ui package depending on the commands package. It is nil when there
 // is no writable local .pltrc (e.g. a global-fallback config), in which case
 // saving is disabled. Save receives the target project's display name and
-// directory, the new command's name, and the joined command string (a && b && c).
+// directory, the new command's name, and the command's parts (one segment per
+// queued command; a single-item slice saves as a scalar, several as a && chain /
+// YAML list).
 type SaveStore struct {
-	Save func(displayName, directory, name, command string) error
+	Save func(displayName, directory, name string, parts []string) error
 	// RootDir is the absolute directory of the config's root location (where the
 	// .pltrc lives). A queue that spans folders is saved there so its per-project
 	// parts can cd-wrap; empty falls back to the first queued command's project.
@@ -186,9 +188,10 @@ func (m *Model) confirmQueueSave() {
 		return
 	}
 	displayName, directory := m.saveTarget()
-	joined := m.buildQueueCommand(directory)
+	parts := m.buildQueueParts(directory)
+	joined := strings.Join(parts, " && ")
 
-	if err := m.saveCommand.Save(displayName, directory, name, joined); err != nil {
+	if err := m.saveCommand.Save(displayName, directory, name, parts); err != nil {
 		m.queueHint = "save failed: " + err.Error()
 		m.queueSaving = false
 		return
@@ -233,13 +236,15 @@ func (m Model) saveTarget() (displayName, directory string) {
 	return m.queue[0].DisplayName, m.queue[0].Directory
 }
 
-// buildQueueCommand joins the queued commands for saving, preferring reference
-// tokens (@project[type]:name) over raw command strings so the saved command
-// tracks the referenced commands rather than freezing their current text. A
-// command that can't be referenced falls back to its raw string, cd-wrapped in
-// its own directory when that differs from homeDir so it still runs in the right
-// place (aliased cross-project commands cd-wrap automatically on expansion).
-func (m Model) buildQueueCommand(homeDir string) string {
+// buildQueueParts returns the queued commands as saveable segments, preferring
+// reference tokens (@project[type]:name) over raw command strings so the saved
+// command tracks the referenced commands rather than freezing their current
+// text. A command that can't be referenced falls back to its raw string,
+// cd-wrapped in its own directory when that differs from homeDir so it still runs
+// in the right place (aliased cross-project commands cd-wrap automatically on
+// expansion). The caller joins the parts with " && " for execution or stores
+// them as a list.
+func (m Model) buildQueueParts(homeDir string) []string {
 	parts := make([]string, len(m.queue))
 	for i, c := range m.queue {
 		if tok, ok := m.aliasToken(c); ok {
@@ -252,7 +257,7 @@ func (m Model) buildQueueCommand(homeDir string) string {
 		}
 		parts[i] = raw
 	}
-	return strings.Join(parts, " && ")
+	return parts
 }
 
 // aliasToken builds a verified @project[type]:name reference for a queued

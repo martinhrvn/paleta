@@ -40,5 +40,9 @@ locations:
         - name: tidy
           command: go mod tidy
         - name: something
-          command: '@root:test ui && @root:tidy && @root:fmt && @root[go]:fmt'
+          command:
+            - '@root:test ui'
+            - '@root:tidy'
+            - '@root:fmt'
+            - '@root[go]:fmt'
       focused: true

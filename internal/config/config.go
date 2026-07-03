@@ -47,6 +47,35 @@ type Command struct {
 	// blocks loading the rest; callers surface it rather than run it. Never
 	// serialized.
 	Error string `yaml:"-"`
+	// parts holds the authored list form when `command` was a YAML sequence, so
+	// the command re-marshals as a list. Empty when authored as a scalar. Never
+	// serialized directly; consulted by MarshalYAML.
+	parts []string `yaml:"-"`
+}
+
+// NewCommand builds a Command from one or more shell segments. Multiple non-empty
+// segments are joined with " && " for execution and retained so the command
+// re-marshals as a YAML list.
+func NewCommand(name string, parts []string) Command {
+	cleaned := cleanCommandParts(parts)
+	return Command{
+		Name:    name,
+		Command: strings.Join(cleaned, " && "),
+		parts:   cleaned,
+	}
+}
+
+// cleanCommandParts drops empty and whitespace-only segments while preserving
+// order and content (commands are arbitrary shell, so no trimming or dedup).
+func cleanCommandParts(parts []string) []string {
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if strings.TrimSpace(p) == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // Types is a location's set of project types. In .pltrc the `type` key accepts
@@ -101,8 +130,35 @@ func normalizeTypes(in []string) Types {
 	return out
 }
 
-// UnmarshalYAML implements custom YAML unmarshaling for Command
-// Supports both string format (old) and object format (new)
+// commandField decodes a command's body from either a scalar string or a
+// sequence of strings. A sequence is joined with " && " for execution while its
+// original parts are retained so the command can be re-marshaled as a list.
+type commandField struct {
+	joined string
+	parts  []string
+}
+
+// UnmarshalYAML accepts either a scalar string or a sequence of strings.
+func (f *commandField) UnmarshalYAML(value *yaml.Node) error {
+	var single string
+	if err := value.Decode(&single); err == nil {
+		f.joined = single
+		return nil
+	}
+
+	var list []string
+	if err := value.Decode(&list); err != nil {
+		return err
+	}
+	f.parts = cleanCommandParts(list)
+	f.joined = strings.Join(f.parts, " && ")
+	return nil
+}
+
+// UnmarshalYAML implements custom YAML unmarshaling for Command. It supports the
+// bare-string format (old), the object format, and — within the object — a
+// `command` field that is either a scalar or a list of segments joined with
+// " && ".
 func (c *Command) UnmarshalYAML(value *yaml.Node) error {
 	// Try to unmarshal as a string (old format)
 	var cmdString string
@@ -112,14 +168,42 @@ func (c *Command) UnmarshalYAML(value *yaml.Node) error {
 		return nil
 	}
 
-	// Try to unmarshal as an object (new format)
-	type commandAlias Command
-	var cmd commandAlias
-	if err := value.Decode(&cmd); err != nil {
+	// Object format. Decode the command field loosely so it accepts either a
+	// scalar or a sequence.
+	var obj struct {
+		Name    string            `yaml:"name,omitempty"`
+		Command commandField      `yaml:"command"`
+		Env     map[string]string `yaml:"env,omitempty"`
+	}
+	if err := value.Decode(&obj); err != nil {
 		return err
 	}
-	*c = Command(cmd)
+	c.Name = obj.Name
+	c.Env = obj.Env
+	c.Command = obj.Command.joined
+	c.parts = obj.Command.parts
 	return nil
+}
+
+// MarshalYAML renders a Command as an object, emitting `command` as a YAML
+// sequence when it was authored as a multi-item list so it round-trips; single
+// item and scalar-authored commands stay scalar. Type and Error are never
+// serialized.
+func (c Command) MarshalYAML() (any, error) {
+	out := struct {
+		Name    string            `yaml:"name,omitempty"`
+		Command any               `yaml:"command"`
+		Env     map[string]string `yaml:"env,omitempty"`
+	}{
+		Name: c.Name,
+		Env:  c.Env,
+	}
+	if len(c.parts) > 1 {
+		out.Command = c.parts
+	} else {
+		out.Command = c.Command
+	}
+	return out, nil
 }
 
 type Location struct {

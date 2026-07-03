@@ -203,20 +203,21 @@ func saveStore(configPath string) *ui.SaveStore {
 		rootDir = abs
 	}
 	return &ui.SaveStore{
-		Save: func(displayName, directory, name, command string) error {
-			return AddCommandToLocation(configPath, displayName, directory, name, command)
+		Save: func(displayName, directory, name string, parts []string) error {
+			return AddCommandToLocation(configPath, displayName, directory, name, parts)
 		},
 		RootDir: rootDir,
 	}
 }
 
-// AddCommandToLocation appends a composite command (e.g. "a && b && c") to the
-// location identified by displayName in the authored .pltrc, then rewrites the
-// file. directory is the resolved location path, used to match an authored entry
-// or — when no entry matches (e.g. the display name came from a glob) — to create
-// a new location. Like `plt init`, this rewrites the file, normalizing its
-// formatting and dropping comments.
-func AddCommandToLocation(configPath, displayName, directory, name, command string) error {
+// AddCommandToLocation appends a command built from the given parts (one segment
+// per queued command) to the location identified by displayName in the authored
+// .pltrc, then rewrites the file. A single part saves as a scalar; several save
+// as a YAML list (joined with " && " for execution). directory is the resolved
+// location path, used to match an authored entry or — when no entry matches (e.g.
+// the display name came from a glob) — to create a new location. Like `plt init`,
+// this rewrites the file, normalizing its formatting and dropping comments.
+func AddCommandToLocation(configPath, displayName, directory, name string, parts []string) error {
 	authored, err := LoadAuthoredConfig(configPath)
 	if err != nil {
 		return err
@@ -225,7 +226,7 @@ func AddCommandToLocation(configPath, displayName, directory, name, command stri
 		return fmt.Errorf("no config file at %s", configPath)
 	}
 
-	newCmd := config.Command{Name: name, Command: command}
+	newCmd := config.NewCommand(name, parts)
 
 	if idx := findAuthoredLocation(authored, displayName, directory); idx >= 0 {
 		authored.Locations[idx].Commands = append(authored.Locations[idx].Commands, newCmd)
