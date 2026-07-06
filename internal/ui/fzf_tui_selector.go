@@ -597,7 +597,10 @@ func (m *Model) reloadConfig() {
 }
 
 func (m *Model) updateFilteredCommands() {
-	// Recalculate frecency scores if enabled
+	// Recalculate frecency scores if enabled, then pre-sort the base list by
+	// frecency. fuzzyFilter's sort is stable, so among equally good textual
+	// matches the more frequently used command stays first — giving "match
+	// quality first, frecency as tiebreak" without threading scores through.
 	if m.frecencyEnabled && m.history != nil {
 		for i := range m.commands {
 			m.commands[i].FrecencyScore = m.history.GetScore(
@@ -605,22 +608,19 @@ func (m *Model) updateFilteredCommands() {
 				m.commands[i].Command,
 			)
 		}
+		sort.SliceStable(m.commands, func(i, j int) bool {
+			return m.commands[i].FrecencyScore > m.commands[j].FrecencyScore
+		})
 	}
 
-	// Apply fuzzy filter
+	// Apply fuzzy filter. With no query the pre-sorted base order is kept as-is;
+	// with a query, results are ordered best-match-first by fuzzyFilter.
 	query := m.searchInput.Value()
 	if query == "" {
 		m.filteredCommands = make([]CommandInfo, len(m.commands))
 		copy(m.filteredCommands, m.commands)
 	} else {
 		m.filteredCommands = m.fuzzyFilter(m.commands, query)
-	}
-
-	// Sort by frecency if enabled
-	if m.frecencyEnabled && m.history != nil {
-		sort.Slice(m.filteredCommands, func(i, j int) bool {
-			return m.filteredCommands[i].FrecencyScore > m.filteredCommands[j].FrecencyScore
-		})
 	}
 
 	// Reset cursor and viewport
@@ -760,71 +760,183 @@ func searchPromptGlyph() string {
 	return "> "
 }
 
+// fuzzyFilter keeps the commands whose Display is a subsequence match for query
+// and orders them best-match-first. query need not be lowercased. Ties in match
+// quality keep the input order, so a frecency-presorted input surfaces the more
+// frequently used command among equally good textual matches (see
+// updateFilteredCommands).
 func (m Model) fuzzyFilter(commands []CommandInfo, query string) []CommandInfo {
 	if query == "" {
 		return commands
 	}
 
 	query = strings.ToLower(query)
-	var filtered []CommandInfo
 
+	type scoredCommand struct {
+		cmd   CommandInfo
+		score int
+	}
+	var matches []scoredCommand
 	for _, cmd := range commands {
-		if m.fuzzyMatch(strings.ToLower(cmd.Display), query) {
-			filtered = append(filtered, cmd)
+		if score, _, ok := fuzzyScore(strings.ToLower(cmd.Display), query); ok {
+			matches = append(matches, scoredCommand{cmd: cmd, score: score})
 		}
 	}
 
+	sort.SliceStable(matches, func(i, j int) bool {
+		return matches[i].score > matches[j].score
+	})
+
+	filtered := make([]CommandInfo, len(matches))
+	for i, mt := range matches {
+		filtered[i] = mt.cmd
+	}
 	return filtered
 }
 
-func (m Model) fuzzyMatch(text, query string) bool {
-	return fuzzySubsequence(text, query)
+// Scoring weights for fuzzyScore. Bonuses reward matches that read as whole
+// words (a match at a word boundary) and as contiguous runs, so typing a word
+// prefix floats the intended command to the top. The gap and leading penalties
+// are deliberately small relative to the bonuses, acting as tiebreakers that
+// prefer tighter, earlier matches without overriding a genuine word match.
+const (
+	boundaryBonus    = 16 // matched char starts a word (index 0 or preceded by a separator)
+	consecutiveBonus = 16 // matched char immediately follows the previous match
+	gapPenalty       = 3  // per skipped char between two consecutive matches
+	leadingPenalty   = 1  // per skipped char before the first match
+)
+
+// isWordBoundary reports whether the char at index i in text begins a word: the
+// start of the string, or immediately after a separator. text is expected to be
+// lowercased already.
+func isWordBoundary(text string, i int) bool {
+	if i == 0 {
+		return true
+	}
+	switch text[i-1] {
+	case ' ', ':', '-', '_', '/', '.':
+		return true
+	}
+	return false
+}
+
+// fuzzyScore matches query as a subsequence of text (both expected to be
+// lowercased by the caller) and returns a quality score together with the byte
+// offsets of the matched characters. ok is false when query is not a subsequence
+// of text. Higher scores are better matches.
+//
+// Unlike a greedy left-most match, this considers every valid alignment via a
+// small dynamic program and keeps the highest-scoring one, so it prefers
+// word-boundary and contiguous matches over scattered ones. text and query are
+// short (one display line, a few keystrokes), so the O(len(query)*len(text)^2)
+// cost is negligible.
+func fuzzyScore(text, query string) (int, []int, bool) {
+	if query == "" {
+		return 0, nil, true
+	}
+	n := len(text)
+	m := len(query)
+
+	// best[j][t]: best score matching query[:j+1] with query[j] placed at text
+	// position t; prev[j][t]: the position chosen for query[j-1] on that path
+	// (-1 for j==0), or -2 when the cell is unreachable.
+	const unreachable = -1 << 30
+	best := make([][]int, m)
+	prev := make([][]int, m)
+	for j := range best {
+		best[j] = make([]int, n)
+		prev[j] = make([]int, n)
+		for t := range best[j] {
+			best[j][t] = unreachable
+			prev[j][t] = -2
+		}
+	}
+
+	for t := 0; t < n; t++ {
+		if text[t] != query[0] {
+			continue
+		}
+		score := 0
+		if isWordBoundary(text, t) {
+			score += boundaryBonus
+		}
+		score -= leadingPenalty * t
+		best[0][t] = score
+		prev[0][t] = -1
+	}
+
+	for j := 1; j < m; j++ {
+		for t := j; t < n; t++ {
+			if text[t] != query[j] {
+				continue
+			}
+			for p := j - 1; p < t; p++ {
+				if best[j-1][p] == unreachable {
+					continue
+				}
+				score := best[j-1][p]
+				if t == p+1 {
+					score += consecutiveBonus
+				} else {
+					score -= gapPenalty * (t - p - 1)
+				}
+				if isWordBoundary(text, t) {
+					score += boundaryBonus
+				}
+				if score > best[j][t] {
+					best[j][t] = score
+					prev[j][t] = p
+				}
+			}
+		}
+	}
+
+	// Pick the best endpoint for the final query char.
+	bestEnd := -1
+	bestScore := unreachable
+	for t := m - 1; t < n; t++ {
+		if best[m-1][t] > bestScore {
+			bestScore = best[m-1][t]
+			bestEnd = t
+		}
+	}
+	if bestEnd == -1 {
+		return 0, nil, false
+	}
+
+	positions := make([]int, m)
+	t := bestEnd
+	for j := m - 1; j >= 0; j-- {
+		positions[j] = t
+		t = prev[j][t]
+	}
+	return bestScore, positions, true
 }
 
 // fuzzySubsequence reports whether every character of query appears in text in
 // order (a subsequence match). Both are expected to already be lowercased by the
-// caller. Shared by the command palette and the init wizard.
+// caller. Used by the init wizard's boolean filter, where no ranking is needed.
 func fuzzySubsequence(text, query string) bool {
-	if query == "" {
-		return true
-	}
-
-	textIdx := 0
-	queryIdx := 0
-
-	for textIdx < len(text) && queryIdx < len(query) {
-		if text[textIdx] == query[queryIdx] {
-			queryIdx++
-		}
-		textIdx++
-	}
-
-	return queryIdx == len(query)
+	_, _, ok := fuzzyScore(text, query)
+	return ok
 }
 
 // fuzzySubsequenceIndices returns the byte offsets in text of the characters
-// matched by a subsequence search for query. query is expected to already be
-// lowercased; text is matched case-insensitively against its lowercased form,
-// and the returned offsets index into the ORIGINAL text. This assumes ASCII
-// (all authored commands are), where lowercasing preserves byte positions.
-// Returns nil when query is empty or does not match.
+// matched for query, choosing the same best alignment fuzzyScore ranks by so the
+// highlighted characters reflect the ranked match. query is expected to already
+// be lowercased; text is matched case-insensitively against its lowercased form,
+// and the returned offsets index into the ORIGINAL text. This assumes ASCII (all
+// authored commands are), where lowercasing preserves byte positions. Returns nil
+// when query is empty or does not match.
 func fuzzySubsequenceIndices(text, query string) []int {
 	if query == "" {
 		return nil
 	}
-	lower := strings.ToLower(text)
-	indices := make([]int, 0, len(query))
-	queryIdx := 0
-	for textIdx := 0; textIdx < len(lower) && queryIdx < len(query); textIdx++ {
-		if lower[textIdx] == query[queryIdx] {
-			indices = append(indices, textIdx)
-			queryIdx++
-		}
-	}
-	if queryIdx != len(query) {
+	_, positions, ok := fuzzyScore(strings.ToLower(text), query)
+	if !ok {
 		return nil
 	}
-	return indices
+	return positions
 }
 
 // matchedSet returns the set of byte offsets in display matched by query

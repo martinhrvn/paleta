@@ -1065,6 +1065,86 @@ func TestFuzzySubsequenceIndices(t *testing.T) {
 	}
 }
 
+func TestFuzzyScore_PrefersWordMatches(t *testing.T) {
+	// Each case: the "better" text should score strictly higher than "worse"
+	// for the same query. Inputs are already lowercased (as callers pass them).
+	cases := []struct {
+		name          string
+		query         string
+		better, worse string
+	}{
+		{"contiguous word beats scattered", "run", "npm run dev", "return value"},
+		{"prefix beats later word", "npm", "npm test", "run npm"},
+		{"word boundary beats mid-word", "test", "go test ./...", "latest build"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			bs, _, bok := fuzzyScore(c.better, c.query)
+			ws, _, wok := fuzzyScore(c.worse, c.query)
+			if !bok || !wok {
+				t.Fatalf("expected both to match: better=%v worse=%v", bok, wok)
+			}
+			if bs <= ws {
+				t.Errorf("score(%q) = %d, score(%q) = %d; want better to rank higher",
+					c.better, bs, c.worse, ws)
+			}
+		})
+	}
+}
+
+func TestFuzzyFilter_Ordering(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	filtered := m.fuzzyFilter(m.commands, "test")
+	if len(filtered) < 2 {
+		t.Fatalf("expected at least 2 matches, got %d", len(filtered))
+	}
+
+	// The whole-word "test" commands must rank above any scattered match.
+	top2 := filtered[0].Display + "|" + filtered[1].Display
+	if !strings.Contains(top2, "npm test") || !strings.Contains(top2, "go test") {
+		t.Errorf("expected 'npm test' and 'go test' ranked first, got: %v", displays(filtered))
+	}
+	// "npm start" only matches t-e-s-t as a scattered subsequence, so it ranks last.
+	if last := filtered[len(filtered)-1].Display; !strings.Contains(last, "npm start") {
+		t.Errorf("expected scattered 'npm start' ranked last, got: %v", displays(filtered))
+	}
+}
+
+func TestFuzzyFilter_FrecencyTiebreak(t *testing.T) {
+	m := createTestModel(createTestConfig())
+
+	// All three "frontend: npm X" commands match "npm" at the same offset, so
+	// they tie on match quality and frecency decides their order.
+	h, _ := history.NewHistory("/tmp")
+	for i := 0; i < 5; i++ {
+		_ = h.RecordExecution("frontend", "npm build")
+	}
+	_ = h.RecordExecution("frontend", "npm test")
+	m.history = h
+	m.frecencyEnabled = true
+	m.searchInput.SetValue("npm")
+
+	m.updateFilteredCommands()
+
+	if len(m.filteredCommands) == 0 {
+		t.Fatal("expected npm matches")
+	}
+	if got := m.filteredCommands[0].Display; !strings.Contains(got, "npm build") {
+		t.Errorf("expected most-used 'npm build' first among equal matches, got %q (order: %v)",
+			got, displays(m.filteredCommands))
+	}
+}
+
+// displays extracts the Display strings for readable test failure output.
+func displays(cmds []CommandInfo) []string {
+	out := make([]string, len(cmds))
+	for i, c := range cmds {
+		out[i] = c.Display
+	}
+	return out
+}
+
 func TestHighlightMatches_PreservesVisibleText(t *testing.T) {
 	base := listCommandStyle
 	hl := matchStyle

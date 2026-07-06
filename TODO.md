@@ -105,6 +105,7 @@ The project types we should support intitally are:
    - [x] surface usage stats: `plt stats` table (runs / last used / frecency, with `--by` and `--limit`, wired into the shell wrapper + completions) and run/recency/score in the `plt select` preview pane
    - [x] wire configurable `recency_weight`/`frequency_weight` (global + local, normalized) into actual scoring — previously hard-coded 50/50
    - [x] fix: history was saved under an empty project-root hash when no prior file existed, so counts never accumulated across runs
+- [x] rank fuzzy matches by quality: word-boundary/contiguous/prefix matches sort to the top (best-alignment scorer), with frecency as the tiebreak, so less typing lands the intended command
 ### Advanced Features
 - [ ] Support for pre/post command hooks
 - [ ] Support for command templates/variables
