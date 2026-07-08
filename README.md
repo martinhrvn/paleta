@@ -10,6 +10,7 @@ A fast, lightweight CLI tool for managing and executing commands across multiple
 
 - **Interactive Command Selection**: Use fuzzy search (via fzf or built-in TUI) to quickly find and run commands
 - **Zsh Keyboard Shortcut**: Press Ctrl+P from anywhere to launch plt (auto-configured during installation)
+- **tmux / zellij Integration**: When running inside tmux or zellij, press **Ctrl+O** in the selector to run the command(s) in a new window/tab instead of the current shell
 - **Global Project Configuration**: Centralized config management in `~/.config/paleta/projects/` with automatic project detection
 - **Monorepo Support**: Manage commands across multiple projects in a single configuration
 - **Project Type Detection**: Automatically discovers commands from package.json, go.mod, and other project files
@@ -499,6 +500,40 @@ plt help
 
 The interactive selector's preview pane also shows per-command stats — run count,
 last/first use, and frecency score — for any command you've run before.
+
+### Selector Keyboard Shortcuts
+
+Inside the interactive selector (`plt` / `plt select`):
+
+| Key | Action |
+| --- | --- |
+| `Type` | Fuzzy-filter commands |
+| `↑` / `↓` (or `Ctrl+K` / `Ctrl+J`) | Move the cursor |
+| `Enter` | Run the selection (or queue) in the current shell |
+| `Tab` | Add/remove the command under the cursor to the run queue |
+| `Ctrl+O` | Run the selection in a new tmux window / zellij tab — **shown only when running inside tmux or zellij** |
+| `Ctrl+E` | Edit the command before running |
+| `Ctrl+Q` | Open the queue editor |
+| `Ctrl+F` | Toggle frecency sorting |
+| `Ctrl+P` | Pick which locations are focused |
+| `Ctrl+N` | Add projects (init wizard) |
+| `Esc` / `Ctrl+C` | Clear the search, then cancel |
+
+#### Run in a tmux window / zellij tab (Ctrl+O)
+
+paleta auto-detects whether it is running inside tmux (`$TMUX`) or zellij
+(`$ZELLIJ`). When it is, the selector's help line gains a `^O` hint and pressing
+**Ctrl+O** launches the selected command — or the whole multi-select queue — in a
+new tmux window (or new zellij pane, since zellij's CLI launches commands into
+panes) rather than the current shell. The new window/tab starts in your current
+directory and drops into an interactive shell once the command finishes, so its
+output stays on screen. Set `PLT_PANE_SHELL` to change the shell it lands in.
+
+When plt is not inside a multiplexer the shortcut is hidden and does nothing, so
+the binding is only ever offered where it can work.
+
+> **Note:** `Ctrl+O` is used instead of tmux's default prefix (`Ctrl+B`), which
+> tmux intercepts before the selector can see it.
 
 ### Enhanced Mode
 

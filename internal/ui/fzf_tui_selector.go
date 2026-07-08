@@ -15,6 +15,7 @@ import (
 
 	"github.com/martinhrvn/paleta/internal/config"
 	"github.com/martinhrvn/paleta/internal/history"
+	"github.com/martinhrvn/paleta/internal/mux"
 )
 
 // Catppuccin Mocha palette (truecolor). Forced on via
@@ -85,6 +86,11 @@ type Model struct {
 	history          *history.History
 	frecencyEnabled  bool
 
+	// mux is the terminal multiplexer plt is running inside (tmux/zellij), or
+	// mux.None. When active, the selector offers Ctrl+O to run the selection in a
+	// new multiplexer tab/window.
+	mux mux.Multiplexer
+
 	// Focus
 	focus       *FocusStore // nil when focus persistence is unavailable
 	focusActive bool        // session toggle: show only focused locations
@@ -153,6 +159,7 @@ func NewModel(cfg *config.Config, focus *FocusStore) Model {
 		searchInput:     si,
 		editInput:       ei,
 		saveInput:       sv,
+		mux:             mux.DetectEnv(),
 	}
 
 	// Load history regardless of frecency: frecencyEnabled only controls sorting,
@@ -273,6 +280,16 @@ func (m Model) updateNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 
+	case tea.KeyCtrlO:
+		// Run the selection in a new multiplexer tab/window. Only meaningful when
+		// running inside tmux/zellij; otherwise swallow the key silently.
+		if m.mux.Active() {
+			m.confirmPaneSelection()
+			m.quitting = true
+			return m, tea.Quit
+		}
+		return m, nil
+
 	case tea.KeyEscape:
 		// Esc clears a non-empty search first; on an empty search it quits.
 		if m.searchInput.Value() != "" {
@@ -362,9 +379,14 @@ func (m Model) View() string {
 			helpItem("Tab", "queue"),
 			helpItem("^Q", "edit queue"),
 			helpItem("Enter", "run"),
+		}
+		if m.mux.Active() {
+			parts = append(parts, helpItem("^O", m.mux.Label()))
+		}
+		parts = append(parts,
 			helpItem("^E", "edit"),
 			renderToggleHelp("^F", "frecency", m.frecencyEnabled),
-		}
+		)
 		if m.config.AnyFocused() {
 			parts = append(parts, renderToggleHelp("^T", "focus", m.focusActive))
 		}
@@ -1098,6 +1120,16 @@ func (m Model) getSelectedCommands() []SelectionResult {
 
 func (m *Model) confirmSelection() {
 	m.results = m.getSelectedCommands()
+}
+
+// confirmPaneSelection resolves the current selection (queue or cursor) and tags
+// every result with the "pane" action, so the shell wrapper opens the command(s)
+// in a new tmux window / zellij tab rather than running them in the current shell.
+func (m *Model) confirmPaneSelection() {
+	m.results = m.getSelectedCommands()
+	for i := range m.results {
+		m.results[i].Action = "pane"
+	}
 }
 
 func (m *Model) enterEditMode() {

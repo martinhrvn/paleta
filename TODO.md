@@ -115,6 +115,10 @@ The project types we should support intitally are:
 - [ ] Watch mode for repeated command execution
 - [x] Shell completion (bash/zsh)
 - [x] Zsh keyboard shortcut integration (Ctrl+P to launch plt)
+- [x] Run selection in a tmux/zellij pane
+  - [x] auto-detect tmux (`$TMUX`) / zellij (`$ZELLIJ`); `Ctrl+O` in the selector only appears when inside one (`internal/mux`)
+  - [x] `Ctrl+O` tags the selection (single or the whole multi-select queue) with a `pane` action; the shell wrapper opens it in a new tmux window / zellij pane starting in the current dir, keeping output on screen (`PLT_PANE_SHELL` overrides the landing shell)
+  - [x] wired into both the `plt` wrapper (`plt-core.sh`) and the zsh Ctrl+P widget (`plt-integration.zsh`)
 
 ## Implementation Details
 
