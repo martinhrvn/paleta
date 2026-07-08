@@ -330,9 +330,10 @@ func toSelectionJSON(r commands.SelectionResult) selectionJSON {
 		DisplayName: r.DisplayName,
 		Env:         r.Env,
 	}
-	// Preserve historical behavior: only "edit" surfaces an action field.
-	if r.Action == "edit" {
-		j.Action = "edit"
+	// Only surface an action field when it carries meaning (edit / pane); the
+	// default execute action stays absent for backward compatibility.
+	if r.Action == "edit" || r.Action == "pane" {
+		j.Action = r.Action
 	}
 	return j
 }

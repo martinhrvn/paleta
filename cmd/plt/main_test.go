@@ -75,6 +75,48 @@ func TestMarshalSelectionEditAction(t *testing.T) {
 	}
 }
 
+func TestMarshalSelectionPaneAction(t *testing.T) {
+	results := []commands.SelectionResult{
+		{Directory: "web", Command: "npm run dev", DisplayName: "web", Action: "pane"},
+	}
+
+	data, err := marshalSelection(results)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var obj map[string]interface{}
+	decode(t, data, &obj)
+
+	if obj["action"] != "pane" {
+		t.Errorf("action = %v, want pane", obj["action"])
+	}
+}
+
+func TestMarshalSelectionMultiplePaneAction(t *testing.T) {
+	results := []commands.SelectionResult{
+		{Directory: "/a", Command: "make build", DisplayName: "a", Action: "pane"},
+		{Directory: "/b", Command: "make test", DisplayName: "b", Action: "pane"},
+	}
+
+	data, err := marshalSelection(results)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var arr []map[string]interface{}
+	decode(t, data, &arr)
+
+	if len(arr) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(arr))
+	}
+	for i, obj := range arr {
+		if obj["action"] != "pane" {
+			t.Errorf("result %d action = %v, want pane", i, obj["action"])
+		}
+	}
+}
+
 func TestMarshalSelectionMultiple(t *testing.T) {
 	results := []commands.SelectionResult{
 		{Directory: "/a", Command: "make build", DisplayName: "a"},

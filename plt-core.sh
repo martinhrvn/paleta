@@ -62,6 +62,89 @@ check_dependencies() {
     fi
 }
 
+# Open a prepared command line in a new tmux window / zellij tab, starting in
+# start_dir. After the command finishes the new tab/window drops into an
+# interactive shell so its output stays visible (override with PLT_PANE_SHELL).
+plt_open_in_mux() {
+    local start_dir="$1" runline="$2"
+    local keep="${PLT_PANE_SHELL:-${SHELL:-bash}}"
+    local full="$runline"$'\n'"exec $keep"
+
+    if [ -n "$ZELLIJ" ]; then
+        print_info "Opening in a new zellij pane..."
+        # zellij's CLI launches commands into a new pane (there is no
+        # new-tab-with-command primitive); tmux below gets a real new window.
+        zellij run --cwd "$start_dir" --name "plt" -- bash -c "$full"
+    elif [ -n "$TMUX" ]; then
+        print_info "Opening in a new tmux window..."
+        tmux new-window -c "$start_dir" "$full"
+    else
+        print_error "No tmux or zellij session detected; cannot open a new pane."
+        return 1
+    fi
+}
+
+# Build the command line for a selection (single object or multi-select array)
+# and open it in a new tmux window / zellij tab. Records history just like a
+# normal run so pane launches still count toward frecency.
+plt_run_selection_in_pane() {
+    local selection_json="$1" first_char="$2"
+    local jq_cmd="${JQ_CMD:-jq}"
+    local runline=""
+
+    if [ "$first_char" = "[" ]; then
+        local count i=0
+        count=$(echo "$selection_json" | "$jq_cmd" 'length')
+        while [ "$i" -lt "$count" ]; do
+            local dir cmd name envprefix segment
+            dir=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].directory")
+            cmd=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].command")
+            name=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].display_name")
+
+            if [ -n "$name" ] && [ "$name" != "null" ]; then
+                "$PLT_BINARY" record "$name" "$cmd" 2>/dev/null || true
+            fi
+
+            envprefix=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].env // {} | to_entries | map(\"\(.key)=\" + (.value|@sh)) | join(\" \")")
+            if [ -n "$envprefix" ]; then
+                segment="cd '$dir' && ( export $envprefix; $cmd )"
+            else
+                segment="cd '$dir' && $cmd"
+            fi
+
+            if [ -z "$runline" ]; then
+                runline="$segment"
+            else
+                runline="$runline && $segment"
+            fi
+            i=$((i + 1))
+        done
+    else
+        local dir cmd name envprefix
+        dir=$(echo "$selection_json" | "$jq_cmd" -r '.directory')
+        cmd=$(echo "$selection_json" | "$jq_cmd" -r '.command')
+        name=$(echo "$selection_json" | "$jq_cmd" -r '.display_name')
+
+        if [ "$dir" = "null" ] || [ "$cmd" = "null" ]; then
+            print_error "Failed to parse selection from plt output."
+            return 1
+        fi
+
+        if [ -n "$name" ] && [ "$name" != "null" ]; then
+            "$PLT_BINARY" record "$name" "$cmd" 2>/dev/null || true
+        fi
+
+        envprefix=$(echo "$selection_json" | "$jq_cmd" -r '.env // {} | to_entries | map("\(.key)=" + (.value|@sh)) | join(" ")')
+        if [ -n "$envprefix" ]; then
+            runline="cd '$dir' && ( export $envprefix; $cmd )"
+        else
+            runline="cd '$dir' && $cmd"
+        fi
+    fi
+
+    plt_open_in_mux "$PWD" "$runline"
+}
+
 # Function to run command interactively (supports multi-select)
 run_command() {
     check_dependencies
@@ -104,6 +187,21 @@ run_command() {
 
     # Check if result is array (multi-select) or single object
     local first_char="${selection_json:0:1}"
+
+    # Determine the action (from the object, or the first array element). The
+    # "pane" action runs the selection in a new tmux window / zellij tab instead
+    # of the current shell.
+    local action
+    if [ "$first_char" = "[" ]; then
+        action=$(echo "$selection_json" | "$jq_cmd" -r '.[0].action // "execute"')
+    else
+        action=$(echo "$selection_json" | "$jq_cmd" -r '.action // "execute"')
+    fi
+
+    if [ "$action" = "pane" ]; then
+        plt_run_selection_in_pane "$selection_json" "$first_char"
+        return $?
+    fi
 
     if [ "$first_char" = "[" ]; then
         # Multi-select: JSON array

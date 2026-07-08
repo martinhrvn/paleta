@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/martinhrvn/paleta/internal/config"
 	"github.com/martinhrvn/paleta/internal/history"
+	"github.com/martinhrvn/paleta/internal/mux"
 )
 
 // Helper to convert strings to Commands for tests
@@ -1174,5 +1175,93 @@ func TestTheme_TrueColorAndEffects(t *testing.T) {
 	fg, ok := matchStyle.GetForeground().(lipgloss.Color)
 	if !ok || !strings.HasPrefix(string(fg), "#") {
 		t.Errorf("matchStyle foreground should be a truecolor hex, got %#v", matchStyle.GetForeground())
+	}
+}
+
+func TestModel_ConfirmPaneSelection_SetsPaneAction(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.currentIndex = 0
+
+	// Confirming for a pane run tags the result so the shell knows to open a
+	// new multiplexer tab/window instead of running in the current shell.
+	m.confirmPaneSelection()
+
+	if len(m.results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(m.results))
+	}
+	if m.results[0].Action != "pane" {
+		t.Errorf("expected Action 'pane', got %q", m.results[0].Action)
+	}
+	if m.results[0].Command != "npm start" {
+		t.Errorf("expected command 'npm start', got %q", m.results[0].Command)
+	}
+}
+
+func TestModel_ConfirmPaneSelection_TagsWholeQueue(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.toggleSelection(0)
+	m.toggleSelection(2)
+
+	m.confirmPaneSelection()
+
+	if len(m.results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(m.results))
+	}
+	for i, r := range m.results {
+		if r.Action != "pane" {
+			t.Errorf("result %d: expected Action 'pane', got %q", i, r.Action)
+		}
+	}
+}
+
+func TestModel_CtrlO_RunsInPaneWhenMuxActive(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.mux = mux.Tmux
+	m.currentIndex = 0
+
+	updated, cmd := m.updateNormalMode(tea.KeyMsg{Type: tea.KeyCtrlO})
+	um := updated.(Model)
+
+	if cmd == nil {
+		t.Fatal("expected a quit command when running in a pane")
+	}
+	if !um.quitting {
+		t.Error("expected model to be quitting after Ctrl+O")
+	}
+	if len(um.results) != 1 || um.results[0].Action != "pane" {
+		t.Fatalf("expected one 'pane' result, got %#v", um.results)
+	}
+}
+
+func TestModel_CtrlO_NoOpWhenNoMux(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.mux = mux.None
+	m.currentIndex = 0
+
+	updated, _ := m.updateNormalMode(tea.KeyMsg{Type: tea.KeyCtrlO})
+	um := updated.(Model)
+
+	if um.quitting {
+		t.Error("Ctrl+O should not quit when no multiplexer is active")
+	}
+	if len(um.results) != 0 {
+		t.Errorf("Ctrl+O should not select when no multiplexer is active, got %#v", um.results)
+	}
+}
+
+func TestModel_HelpShowsPaneHintOnlyWithMux(t *testing.T) {
+	m := createTestModel(createTestConfig())
+	m.width = 120
+	m.height = 24
+
+	m.mux = mux.None
+	if got := ansi.Strip(m.View()); strings.Contains(got, "tmux") || strings.Contains(got, "zellij") {
+		t.Errorf("help should not mention a multiplexer when none is active:\n%s", got)
+	}
+
+	m.mux = mux.Tmux
+	view := ansi.Strip(m.View())
+	if !strings.Contains(view, "^O") || !strings.Contains(view, "tmux") {
+		t.Errorf("help should show the ^O tmux hint when tmux is active:\n%s", view)
 	}
 }
