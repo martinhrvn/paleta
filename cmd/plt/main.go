@@ -140,6 +140,18 @@ func exitConfigError(err error) {
 	os.Exit(1)
 }
 
+// attachTools resolves the config's enabled tools into rows the selector and
+// `plt list` render at the end of the command list. It runs the tools in the
+// user's current directory: discovery restores the original cwd before returning,
+// so os.Getwd() here is where the user invoked plt (not the .pltrc directory).
+func attachTools(cfg *config.Config) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	config.AttachTools(cfg, wd)
+}
+
 func handleListCommand() {
 	// Check for format flag
 	format := "default"
@@ -152,6 +164,7 @@ func handleListCommand() {
 	if err != nil {
 		exitConfigError(err)
 	}
+	attachTools(cfg)
 
 	// Generate command list
 	var cmdList []string
@@ -225,6 +238,7 @@ func handleSelectCommand() {
 	if err != nil {
 		exitConfigError(err)
 	}
+	attachTools(cfg)
 
 	// The local .pltrc path (if any) enables focus persistence and in-app
 	// project adding. An empty path (global-fallback config) disables both.
@@ -268,6 +282,8 @@ func handleLintCommand() {
 	if err != nil {
 		exitConfigError(err)
 	}
+	// Resolve tools so unknown enabled tools are reported alongside name/alias issues.
+	attachTools(cfg)
 	fmt.Println(commands.FormatLintReport(cfg.Warnings))
 	if len(cfg.Warnings) > 0 {
 		os.Exit(1)

@@ -403,6 +403,55 @@ func TestModel_LoadCommands(t *testing.T) {
 	}
 }
 
+// Enabled tools are appended after the location commands, flagged IsTool.
+func TestModel_LoadCommands_ToolsAppendedLast(t *testing.T) {
+	cfg := createTestConfig()
+	cfg.ResolvedTools = []config.ResolvedTool{
+		{Tool: "lazygit", Display: "lazygit", Command: "lazygit", Directory: "/w"},
+	}
+	m := NewModel(cfg, nil)
+	m.loadCommands()
+
+	// 5 location commands + 1 tool row.
+	if len(m.commands) != 6 {
+		t.Fatalf("expected 6 commands, got %d", len(m.commands))
+	}
+	last := m.commands[len(m.commands)-1]
+	if !last.IsTool || last.Display != "lazygit" || last.Command != "lazygit" {
+		t.Fatalf("expected tool row last, got %+v", last)
+	}
+}
+
+// Tool rows stay at the end even when their frecency score outranks every
+// location command.
+func TestModel_ToolsStayLastDespiteFrecency(t *testing.T) {
+	cfg := createTestConfig()
+	cfg.Frecency = config.FrecencyConfig{Enabled: true, RecencyWeight: 0.5, FrequencyWeight: 0.5}
+	cfg.ResolvedTools = []config.ResolvedTool{
+		{Tool: "lazygit", Display: "lazygit", Command: "lazygit", Directory: "/w"},
+	}
+	m := NewModel(cfg, nil)
+
+	// Give the tool a high frecency; the location commands have none.
+	hist, err := history.NewHistory(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 20; i++ {
+		_ = hist.RecordExecution("lazygit", "lazygit")
+	}
+	m.history = hist
+	m.frecencyEnabled = true
+
+	m.loadCommands()
+	m.updateFilteredCommands()
+
+	last := m.filteredCommands[len(m.filteredCommands)-1]
+	if !last.IsTool {
+		t.Fatalf("tool should remain last despite high frecency, got %+v", last)
+	}
+}
+
 // A command (or location) name flagged by validateNames should surface as an
 // invalid CommandInfo, while a valid sibling stays clean.
 func TestModel_LoadCommands_MarksInvalidNames(t *testing.T) {

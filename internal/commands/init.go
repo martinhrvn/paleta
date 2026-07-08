@@ -142,6 +142,7 @@ type generatedConfig struct {
 	Frecency  *config.FrecencyConfig `yaml:"frecency,omitempty"`
 	Locations []config.Location      `yaml:"locations"`
 	Focused   []string               `yaml:"focused,omitempty"`
+	Tools     []string               `yaml:"tools,omitempty"`
 }
 
 // GenerateConfig renders the selected locations as .pltrc YAML. When preserved
@@ -155,6 +156,9 @@ func GenerateConfig(locations []config.Location, preserved *config.Config) strin
 	}
 	if preserved != nil {
 		out.Focused = preserved.Focused
+		// Preserve the authored `tools:` enable-list so a rewrite (init, focus/queue
+		// save) never drops a project's enabled tools.
+		out.Tools = preserved.Tools.Enabled
 	}
 
 	data, err := yaml.Marshal(out)

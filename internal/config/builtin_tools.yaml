@@ -1,0 +1,18 @@
+# Built-in tool definitions shipped with paleta. A project enables any of these by
+# name in its .pltrc (`tools: [lazygit]`). A tool of the same name defined in the
+# global config (~/.config/paleta/config.yaml) overrides the entry here.
+tools:
+  lazygit:
+    command: lazygit
+  lazydocker:
+    command: lazydocker
+  docker:
+    commands:
+      - name: up
+        command: docker compose up
+      - name: down
+        command: docker compose down
+      - name: logs
+        command: docker compose logs -f
+      - name: ps
+        command: docker compose ps

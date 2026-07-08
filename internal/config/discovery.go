@@ -119,6 +119,7 @@ func loadConfigFromDiscoveryWithGlobalFallback(projectsDir string) (*Config, err
 	// We need to merge with global frecency settings
 	globalConfig, _ := LoadGlobalConfig()
 	matchedProject.Frecency = MergeFrecencyConfig(globalConfig.Frecency, matchedProject.Frecency)
+	matchedProject.ToolDefs = globalConfig.Tools.Defs
 
 	return matchedProject, nil
 }

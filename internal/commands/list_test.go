@@ -278,6 +278,44 @@ func TestFormatForFzf_MultiType(t *testing.T) {
 	}
 }
 
+// Resolved tools render after the location commands, at the end of the list.
+func TestListCommands_ToolsAppendedLast(t *testing.T) {
+	cfg := &config.Config{
+		Locations: []config.Location{
+			{Name: "root", Location: ".", Commands: stringsToCommands([]string{"build"})},
+		},
+		ResolvedTools: []config.ResolvedTool{
+			{Tool: "lazygit", Display: "lazygit", Command: "lazygit", Directory: "/w"},
+			{Tool: "docker", Display: "docker: up", Command: "docker compose up", Directory: "/w"},
+		},
+	}
+
+	got := ListCommands(cfg)
+	want := []string{"root:build", "lazygit", "docker: up"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("ListCommands with tools =\n%v\nwant\n%v", got, want)
+	}
+}
+
+// In fzf format, tools are grouped by tool name after the locations.
+func TestFormatForFzf_ToolsAppendedLast(t *testing.T) {
+	cfg := &config.Config{
+		Locations: []config.Location{
+			{Name: "root", Location: ".", Commands: stringsToCommands([]string{"build"})},
+		},
+		ResolvedTools: []config.ResolvedTool{
+			{Tool: "lazygit", Display: "lazygit", Command: "lazygit"},
+			{Tool: "docker", Display: "docker: up", Command: "docker compose up"},
+		},
+	}
+
+	got := FormatForFzf(cfg)
+	want := []string{"[root] build", "[lazygit] lazygit", "[docker] up"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("FormatForFzf with tools =\n%v\nwant\n%v", got, want)
+	}
+}
+
 // A single-type location must render exactly as before (no [type] prefix).
 func TestFormatForFzf_SingleTypeUnchanged(t *testing.T) {
 	cfg := &config.Config{

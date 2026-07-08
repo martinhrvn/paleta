@@ -147,6 +147,18 @@ func PrepareCommandInfoWithHistory(cfg *config.Config, hist *history.History, en
 		})
 	}
 
+	// Append enabled tools after the (possibly frecency-sorted) location commands so
+	// they render at the end of the list.
+	for _, tool := range cfg.ResolvedTools {
+		infos = append(infos, CommandInfo{
+			Display:     tool.Display,
+			Directory:   tool.Directory,
+			Command:     tool.Command,
+			DisplayName: tool.Tool,
+			Env:         tool.Env,
+		})
+	}
+
 	return infos
 }
 

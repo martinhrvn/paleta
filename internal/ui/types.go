@@ -25,4 +25,7 @@ type CommandInfo struct {
 	// InvalidReason is a short human explanation shown when Invalid (e.g.
 	// "contains a space").
 	InvalidReason string
+	// IsTool marks a row that comes from an enabled tool rather than a location's
+	// commands. Tool rows are pinned to the end of the default list.
+	IsTool bool
 }

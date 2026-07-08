@@ -607,6 +607,20 @@ func (m *Model) loadCommands() {
 			m.commands = append(m.commands, info)
 		}
 	}
+
+	// Append enabled tools at the end of the list. They are project-global (not
+	// tied to a location) and run in the user's current directory, so they are
+	// shown regardless of the focus filter.
+	for _, tool := range m.config.ResolvedTools {
+		m.commands = append(m.commands, CommandInfo{
+			Display:     tool.Display,
+			Directory:   tool.Directory,
+			Command:     tool.Command,
+			DisplayName: tool.Tool,
+			Env:         tool.Env,
+			IsTool:      true,
+		})
+	}
 }
 
 // reloadConfig re-reads the discovered config from disk so focus changes written
@@ -631,6 +645,11 @@ func (m *Model) updateFilteredCommands() {
 			)
 		}
 		sort.SliceStable(m.commands, func(i, j int) bool {
+			// Tool rows are pinned to the end of the default view; frecency orders
+			// within the location rows and within the tool rows separately.
+			if m.commands[i].IsTool != m.commands[j].IsTool {
+				return !m.commands[i].IsTool
+			}
 			return m.commands[i].FrecencyScore > m.commands[j].FrecencyScore
 		})
 	}

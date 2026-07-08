@@ -20,6 +20,18 @@ type Config struct {
 	// the matching locations. resolveFocus turns this into per-location runtime
 	// flags at load; entries matching no location are ignored.
 	Focused []string `yaml:"focused,omitempty"`
+	// Tools is the authored `tools:` value: a list of tool names to enable (in a
+	// project's .pltrc) or a map of tool definitions (in the global config). See
+	// ToolsField and tools.go.
+	Tools ToolsField `yaml:"tools,omitempty"`
+	// ToolDefs holds tool definitions carried over from the global config so the
+	// enabled tools in a local config can resolve against them. Populated during
+	// discovery/merge, never read from or written to this config's own YAML.
+	ToolDefs map[string]ToolDefinition `yaml:"-"`
+	// ResolvedTools holds the tool rows to render at the end of the command list,
+	// produced by AttachTools once the user's working directory is known. Never
+	// serialized.
+	ResolvedTools []ResolvedTool `yaml:"-"`
 	// Warnings collects non-fatal config issues found during load: names outside
 	// the alias-safe charset and unresolved @project:command references. Callers
 	// surface them (the selector banner, `plt lint`) rather than failing the load.
@@ -626,6 +638,10 @@ func LoadConfigWithGlobal(localConfigPath string) (*Config, error) {
 
 	// Merge frecency settings (local overrides global)
 	localConfig.Frecency = MergeFrecencyConfig(globalConfig.Frecency, localConfig.Frecency)
+
+	// Carry tool definitions from the global config so the local config's enabled
+	// tools can resolve against them (see AttachTools).
+	localConfig.ToolDefs = globalConfig.Tools.Defs
 
 	return localConfig, nil
 }

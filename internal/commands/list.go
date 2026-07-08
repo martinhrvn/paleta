@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/martinhrvn/paleta/internal/config"
 )
@@ -30,6 +31,11 @@ func ListCommands(cfg *config.Config) []string {
 		}
 	}
 
+	// Enabled tools render at the end of the list.
+	for _, tool := range cfg.ResolvedTools {
+		commands = append(commands, tool.Display)
+	}
+
 	return commands
 }
 
@@ -50,6 +56,12 @@ func FormatForFzf(cfg *config.Config) []string {
 			cmdDisplay := config.CommandLabel(location, command)
 			commands = append(commands, fmt.Sprintf("[%s] %s", displayName, cmdDisplay))
 		}
+	}
+
+	// Enabled tools render at the end, grouped by tool name like a location.
+	for _, tool := range cfg.ResolvedTools {
+		label := strings.TrimPrefix(tool.Display, tool.Tool+": ")
+		commands = append(commands, fmt.Sprintf("[%s] %s", tool.Tool, label))
 	}
 
 	return commands

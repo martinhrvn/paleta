@@ -14,6 +14,7 @@ A fast, lightweight CLI tool for managing and executing commands across multiple
 - **Global Project Configuration**: Centralized config management in `~/.config/paleta/projects/` with automatic project detection
 - **Monorepo Support**: Manage commands across multiple projects in a single configuration
 - **Project Type Detection**: Automatically discovers commands from package.json, go.mod, and other project files
+- **Tools**: Surface project-adjacent programs (e.g. `lazygit`, `docker`) at the end of the list, defined via a built-in registry or global config
 - **Glob Pattern Support**: Define locations using glob patterns to match multiple directories
 - **Enhanced Filtering**: Filter commands by location with an enhanced TUI mode
 - **Flexible Configuration**: YAML-based configuration with support for custom parsers
@@ -391,6 +392,53 @@ locations:
       - "*:watch"    # Exclude watch commands
       - "test:e2e"   # Exclude e2e tests
 ```
+
+### Tools
+
+Beyond location-scoped commands, you can surface **tools** — project-adjacent
+programs like `lazygit` that aren't tied to a single location. Tools appear at the
+**end** of the selector list and run in your **current directory**.
+
+Enable tools in a project by listing them in `.pltrc`:
+
+```yaml
+tools:
+  - lazygit
+  - docker
+```
+
+The listed names resolve against a **built-in registry** plus any definitions in
+your global config, so common tools work out of the box. Tools shipped built in:
+
+| Tool         | Rows                                   |
+| ------------ | -------------------------------------- |
+| `lazygit`    | `lazygit`                              |
+| `lazydocker` | `lazydocker`                           |
+| `docker`     | `docker: up` / `down` / `logs` / `ps`  |
+
+Define your own (or override a built-in of the same name) in the global config
+`~/.config/paleta/config.yaml`. A tool can be a single command or a set of named
+commands — each named command becomes its own selectable row (`docker: up`, …):
+
+```yaml
+tools:
+  # single command -> one row labeled "gitui"
+  gitui:
+    command: gitui
+  # multiple commands -> one row each: "compose: up", "compose: logs"
+  compose:
+    env:
+      COMPOSE_PROJECT_NAME: myapp   # optional tool-level env (per-command env overrides)
+    commands:
+      - name: up
+        command: docker compose up
+      - name: logs
+        command: docker compose logs -f
+```
+
+Enabling a name that is neither built in nor defined globally is a non-fatal
+warning (shown in the selector banner and reported by `plt lint`); the rest of your
+commands still load and run.
 
 ### Custom Parsers
 

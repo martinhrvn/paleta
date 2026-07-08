@@ -107,6 +107,12 @@ The project types we should support intitally are:
    - [x] fix: history was saved under an empty project-root hash when no prior file existed, so counts never accumulated across runs
 - [x] rank fuzzy matches by quality: word-boundary/contiguous/prefix matches sort to the top (best-alignment scorer), with frecency as the tiebreak, so less typing lands the intended command
 ### Advanced Features
+- [x] Tools: project-adjacent programs (lazygit, docker, …) surfaced at the end of the list
+  - [x] enable per-project via `tools: [name]` in `.pltrc`; run in the current directory
+  - [x] built-in registry (lazygit, lazydocker, docker) embedded via `//go:embed`
+  - [x] define/override tools in the global config `~/.config/paleta/config.yaml` under `tools:` (single `command` or a list of named `commands`, one selectable row each)
+  - [x] unknown enabled tool → non-fatal warning (selector banner + `plt lint`)
+  - [ ] (future) tool-level keybinding / dedicated section header in the selector
 - [ ] Support for pre/post command hooks
 - [ ] Support for command templates/variables
 - [ ] Support for running commands in parallel

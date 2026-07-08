@@ -144,12 +144,15 @@ func FormatLintReport(warnings []config.Warning) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d issue(s) found:\n", len(warnings))
 
-	nameIssues, aliasIssues := 0, 0
+	nameIssues, aliasIssues, toolIssues := 0, 0, 0
 	for _, w := range warnings {
 		switch w.Kind {
 		case "alias":
 			aliasIssues++
 			fmt.Fprintf(&b, "  unresolved alias — %s\n", w.Reason)
+		case "tool":
+			toolIssues++
+			fmt.Fprintf(&b, "  unknown tool  %q — %s\n", w.Context, w.Reason)
 		default:
 			nameIssues++
 			fmt.Fprintf(&b, "  %-9s %q — %s\n", w.Scope, w.Context, w.Reason)
@@ -167,6 +170,13 @@ func FormatLintReport(warnings []config.Warning) string {
 		}
 		b.WriteString("\nUnresolved aliases must be fixed by editing .pltrc — the referenced\n")
 		b.WriteString("project or command may be renamed, missing, or ambiguous.")
+	}
+	if toolIssues > 0 {
+		if nameIssues > 0 || aliasIssues > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString("\nEnabled tools must be built in or defined in the global config\n")
+		b.WriteString("(~/.config/paleta/config.yaml) under 'tools:'.")
 	}
 	return b.String()
 }
