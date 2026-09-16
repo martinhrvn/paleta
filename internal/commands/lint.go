@@ -9,11 +9,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// NameFix records a single name rewrite performed by FixConfigFile.
+// NameFix records a single rewrite performed by FixConfigFile.
 type NameFix struct {
-	Scope  string // "location" or "command"
+	Scope  string // "location", "command", or "key" (a deprecated key renamed)
 	Before string
 	After  string
+}
+
+// deprecatedKeyRenames maps each deprecated location key to its current spelling.
+// Applied to locations and to each folder entry under `overrides:`.
+var deprecatedKeyRenames = []struct{ before, after string }{
+	{"include", "include_commands"},
+	{"exclude", "exclude_commands"},
 }
 
 // SanitizeName replaces every character outside the alias-safe charset with '_'
@@ -38,10 +45,11 @@ func isAlnum(r rune) bool {
 	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
 }
 
-// FixConfigFile rewrites out-of-charset location and command names in the .pltrc
-// at path, replacing offending characters with '_'. It edits the parsed YAML
-// node tree in place and re-marshals, so comments and structure survive. When
-// nothing needs fixing the file is left untouched. Returns the applied fixes.
+// FixConfigFile repairs the .pltrc at path: out-of-charset location and command
+// names have their offending characters replaced with '_', and deprecated keys are
+// renamed to their current spellings. It edits the parsed YAML node tree in place
+// and re-marshals, so comments and structure survive. When nothing needs fixing the
+// file is left untouched. Returns the applied fixes.
 func FixConfigFile(path string) ([]NameFix, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -73,8 +81,9 @@ func FixConfigFile(path string) ([]NameFix, error) {
 	return fixes, nil
 }
 
-// sanitizeConfigNode walks locations[].name and locations[].commands[].name in
-// the parsed YAML tree, sanitizing any name in place and collecting the fixes.
+// sanitizeConfigNode walks locations[].name, locations[].commands[].name and each
+// location's deprecated keys in the parsed YAML tree, fixing them in place and
+// collecting the changes.
 func sanitizeConfigNode(root *yaml.Node) []NameFix {
 	doc := root
 	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
@@ -89,6 +98,13 @@ func sanitizeConfigNode(root *yaml.Node) []NameFix {
 	for _, loc := range locs.Content {
 		if before, after, ok := fixNameNode(mapValue(loc, "name"), false); ok {
 			fixes = append(fixes, NameFix{Scope: "location", Before: before, After: after})
+		}
+		fixes = append(fixes, renameDeprecatedKeys(loc)...)
+		// Each folder entry under `overrides:` takes the same filter keys.
+		if overrides := mapValue(loc, "overrides"); overrides != nil && overrides.Kind == yaml.MappingNode {
+			for i := 1; i < len(overrides.Content); i += 2 {
+				fixes = append(fixes, renameDeprecatedKeys(overrides.Content[i])...)
+			}
 		}
 		cmds := mapValue(loc, "commands")
 		if cmds == nil || cmds.Kind != yaml.SequenceNode {
@@ -120,6 +136,39 @@ func fixNameNode(node *yaml.Node, isCommand bool) (before, after string, changed
 	return before, fixed, true
 }
 
+// renameDeprecatedKeys rewrites the deprecated filter keys of one mapping node (a
+// location or an override entry) to their current spellings, reporting each
+// rename.
+func renameDeprecatedKeys(m *yaml.Node) []NameFix {
+	var fixes []NameFix
+	for _, r := range deprecatedKeyRenames {
+		if renameKeyNode(m, r.before, r.after) {
+			fixes = append(fixes, NameFix{Scope: "key", Before: r.before, After: r.after})
+		}
+	}
+	return fixes
+}
+
+// renameKeyNode renames a mapping key in place, reporting whether it changed. The
+// key node is mutated rather than replaced so its comments survive. A mapping that
+// already carries the new key is left alone: merging two authored keys is the
+// user's call, so lint keeps warning instead.
+func renameKeyNode(m *yaml.Node, old, new string) bool {
+	if m == nil || m.Kind != yaml.MappingNode {
+		return false
+	}
+	if mapValue(m, new) != nil {
+		return false
+	}
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == old {
+			m.Content[i].Value = new
+			return true
+		}
+	}
+	return false
+}
+
 // mapValue returns the value node for key in a mapping node, or nil.
 func mapValue(m *yaml.Node, key string) *yaml.Node {
 	if m == nil || m.Kind != yaml.MappingNode {
@@ -133,10 +182,11 @@ func mapValue(m *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-// FormatLintReport renders config warnings for `plt lint`. It handles both name
-// issues (out-of-charset names) and unresolved-alias issues, and only prints the
-// charset/`--fix` guidance when there are name issues (--fix repairs names, not
-// references). An empty slice yields a clean-result message.
+// FormatLintReport renders config warnings for `plt lint`: out-of-charset names,
+// unresolved aliases, unknown tools, deprecated keys, and keys with no effect.
+// Each kind's guidance is printed only when that kind occurred — the charset
+// guidance in particular must not follow a warning `--fix` can't repair that way.
+// An empty slice yields a clean-result message.
 func FormatLintReport(warnings []config.Warning) string {
 	if len(warnings) == 0 {
 		return "No issues found."
@@ -144,7 +194,7 @@ func FormatLintReport(warnings []config.Warning) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d issue(s) found:\n", len(warnings))
 
-	nameIssues, aliasIssues, toolIssues := 0, 0, 0
+	nameIssues, aliasIssues, toolIssues, deprecatedIssues, ignoredIssues := 0, 0, 0, 0, 0
 	for _, w := range warnings {
 		switch w.Kind {
 		case "alias":
@@ -153,6 +203,12 @@ func FormatLintReport(warnings []config.Warning) string {
 		case "tool":
 			toolIssues++
 			fmt.Fprintf(&b, "  unknown tool  %q — %s\n", w.Context, w.Reason)
+		case "deprecated":
+			deprecatedIssues++
+			fmt.Fprintf(&b, "  deprecated key in %q — %s\n", w.Context, w.Reason)
+		case "ignored":
+			ignoredIssues++
+			fmt.Fprintf(&b, "  ignored %-6s in %q — %s\n", w.Name, w.Context, w.Reason)
 		default:
 			nameIssues++
 			fmt.Fprintf(&b, "  %-9s %q — %s\n", w.Scope, w.Context, w.Reason)
@@ -177,6 +233,20 @@ func FormatLintReport(warnings []config.Warning) string {
 		}
 		b.WriteString("\nEnabled tools must be built in or defined in the global config\n")
 		b.WriteString("(~/.config/paleta/config.yaml) under 'tools:'.")
+	}
+	if deprecatedIssues > 0 {
+		if nameIssues > 0 || aliasIssues > 0 || toolIssues > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString("\nDeprecated keys still work, but should be renamed.\n")
+		b.WriteString("Run 'plt lint --fix' to rename them in place (comments are preserved).")
+	}
+	if ignoredIssues > 0 {
+		if nameIssues > 0 || aliasIssues > 0 || toolIssues > 0 || deprecatedIssues > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString("\n'exclude_locations:' and 'overrides:' only apply to a glob location, and\n")
+		b.WriteString("an override key must match a folder the glob expands to.")
 	}
 	return b.String()
 }

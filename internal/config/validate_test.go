@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // findWarning returns the first warning matching scope and name, or nil.
 func findWarning(ws []Warning, scope, name string) *Warning {
@@ -151,5 +154,56 @@ func TestValidateNames_EmptyNamesSkipped(t *testing.T) {
 
 	if len(cfg.Warnings) != 0 {
 		t.Fatalf("empty names should be skipped, got warnings: %+v", cfg.Warnings)
+	}
+}
+
+func TestCollectWarnings_DeprecatedIncludeExclude(t *testing.T) {
+	cfg := &Config{Locations: []Location{{
+		Name:       "web",
+		Location:   "/abs/web",
+		LegacyKeys: []string{"include", "overrides.api.exclude"},
+	}}}
+
+	collectDeprecatedKeyWarnings(cfg)
+	collectConfigWarnings(cfg)
+
+	if len(cfg.Warnings) != 2 {
+		t.Fatalf("expected 2 warnings, got %d: %+v", len(cfg.Warnings), cfg.Warnings)
+	}
+	w := cfg.Warnings[0]
+	if w.Kind != "deprecated" || w.Scope != "location" || w.Context != "web" || w.Name != "include" {
+		t.Errorf("first warning = %+v, want a deprecated location warning for 'include'", w)
+	}
+	if !strings.Contains(w.Reason, "include_commands") {
+		t.Errorf("Reason = %q, want it to name the replacement key", w.Reason)
+	}
+	if cfg.Warnings[1].Name != "overrides.api.exclude" {
+		t.Errorf("second warning Name = %q, want the override key path", cfg.Warnings[1].Name)
+	}
+}
+
+// TestCollectWarnings_PendingSurviveReset pins that warnings gathered before
+// collectConfigWarnings runs (decode-time deprecations, glob-time notices) are not
+// wiped when it rebuilds cfg.Warnings.
+func TestCollectWarnings_PendingSurviveReset(t *testing.T) {
+	cfg := &Config{Locations: []Location{{
+		Name:     "bad name",
+		Location: "/abs/web",
+	}}}
+	cfg.pendingWarnings = []Warning{{Kind: "ignored", Scope: "location", Context: "web", Name: "overrides"}}
+
+	collectConfigWarnings(cfg)
+
+	if len(cfg.Warnings) != 2 {
+		t.Fatalf("expected the pending warning plus the name warning, got %+v", cfg.Warnings)
+	}
+	if cfg.Warnings[0].Kind != "ignored" {
+		t.Errorf("pending warning lost: %+v", cfg.Warnings)
+	}
+
+	// A second run must not duplicate the pending warnings.
+	collectConfigWarnings(cfg)
+	if len(cfg.Warnings) != 2 {
+		t.Fatalf("re-running collectConfigWarnings duplicated warnings: %+v", cfg.Warnings)
 	}
 }

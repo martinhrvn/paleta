@@ -155,8 +155,44 @@ func TestGenerateConfig_IncludeExcludeRoundTrip(t *testing.T) {
 			Name:     "web",
 			Location: "packages/web",
 			Types:    config.Types{"npm"},
-			Include:  []string{"npm run dev"},
-			Exclude:  []string{"npm run test:watch"},
+			Include:  []string{"dev"},
+			Exclude:  []string{"test:watch"},
+		},
+	}
+	out := GenerateConfig(locs, nil)
+
+	// Rewrites emit the current spelling.
+	if !strings.Contains(out, "include_commands:") || !strings.Contains(out, "exclude_commands:") {
+		t.Errorf("expected the canonical filter keys:\n%s", out)
+	}
+	if strings.Contains(out, "\n      include:") || strings.Contains(out, "\n      exclude:") {
+		t.Errorf("expected no deprecated filter keys:\n%s", out)
+	}
+
+	var parsed config.Config
+	if err := yaml.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("invalid YAML: %v\n%s", err, out)
+	}
+	loc := parsed.Locations[0]
+	if len(loc.Include) != 1 || loc.Include[0] != "dev" {
+		t.Errorf("include not round-tripped: %+v", loc.Include)
+	}
+	if len(loc.Exclude) != 1 || loc.Exclude[0] != "test:watch" {
+		t.Errorf("exclude not round-tripped: %+v", loc.Exclude)
+	}
+}
+
+func TestGenerateConfig_OverridesRoundTrip(t *testing.T) {
+	locs := []config.Location{
+		{
+			Location:         "services/*",
+			Types:            config.Types{"npm"},
+			ExcludeLocations: []string{"legacy"},
+			Overrides: map[string]config.LocationOverride{
+				"zeta":  {Name: "z"},
+				"alpha": {Env: map[string]string{"PORT": "3001"}},
+				"mid":   {Commands: []config.Command{{Name: "commandx", Command: "npm run commandx"}}},
+			},
 		},
 	}
 	out := GenerateConfig(locs, nil)
@@ -166,11 +202,58 @@ func TestGenerateConfig_IncludeExcludeRoundTrip(t *testing.T) {
 		t.Fatalf("invalid YAML: %v\n%s", err, out)
 	}
 	loc := parsed.Locations[0]
-	if len(loc.Include) != 1 || loc.Include[0] != "npm run dev" {
-		t.Errorf("include not round-tripped: %+v", loc.Include)
+	if !reflect.DeepEqual(loc.ExcludeLocations, []string{"legacy"}) {
+		t.Errorf("exclude_locations not round-tripped: %+v", loc.ExcludeLocations)
 	}
-	if len(loc.Exclude) != 1 || loc.Exclude[0] != "npm run test:watch" {
-		t.Errorf("exclude not round-tripped: %+v", loc.Exclude)
+	if len(loc.Overrides) != 3 {
+		t.Fatalf("overrides not round-tripped: %+v", loc.Overrides)
+	}
+	if loc.Overrides["zeta"].Name != "z" {
+		t.Errorf("override name lost: %+v", loc.Overrides["zeta"])
+	}
+	if loc.Overrides["alpha"].Env["PORT"] != "3001" {
+		t.Errorf("override env lost: %+v", loc.Overrides["alpha"])
+	}
+	if cmds := loc.Overrides["mid"].Commands; len(cmds) != 1 || cmds[0].Name != "commandx" {
+		t.Errorf("override commands lost: %+v", cmds)
+	}
+
+	// Override keys are emitted in a stable (sorted) order, so repeated rewrites
+	// don't churn the file.
+	alpha, mid, zeta := strings.Index(out, "alpha:"), strings.Index(out, "mid:"), strings.Index(out, "zeta:")
+	if !(alpha >= 0 && alpha < mid && mid < zeta) {
+		t.Errorf("override keys not emitted in sorted order (alpha=%d mid=%d zeta=%d):\n%s", alpha, mid, zeta, out)
+	}
+}
+
+// TestLoadAuthoredConfig_LegacyKeysCanonicalized: reading a legacy-spelling file
+// and writing it back through GenerateConfig (as `plt init`, focus and queue-save
+// all do) upgrades the spelling.
+func TestLoadAuthoredConfig_LegacyKeysCanonicalized(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".pltrc")
+	original := `locations:
+    - name: web
+      location: packages/web
+      type: npm
+      include:
+        - build*
+`
+	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	authored, err := LoadAuthoredConfig(path)
+	if err != nil {
+		t.Fatalf("LoadAuthoredConfig: %v", err)
+	}
+	if !reflect.DeepEqual(authored.Locations[0].Include, []string{"build*"}) {
+		t.Fatalf("legacy include not decoded: %+v", authored.Locations[0])
+	}
+
+	out := GenerateConfig(authored.Locations, authored)
+	if !strings.Contains(out, "include_commands:") {
+		t.Errorf("rewrite did not upgrade the spelling:\n%s", out)
 	}
 }
 

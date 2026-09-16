@@ -127,3 +127,145 @@ func TestFormatLintReport(t *testing.T) {
 		t.Errorf("report should mention --fix, got %q", report)
 	}
 }
+
+func TestFormatLintReport_DeprecatedKeys(t *testing.T) {
+	report := FormatLintReport([]config.Warning{{
+		Kind:    "deprecated",
+		Scope:   "location",
+		Context: "web",
+		Name:    "include",
+		Reason:  `"include:" is deprecated — use "include_commands:" (run 'plt lint --fix')`,
+	}})
+
+	if !strings.Contains(report, "include_commands") || !strings.Contains(report, "web") {
+		t.Errorf("report missing detail, got %q", report)
+	}
+	// The charset guidance belongs to name issues only; a deprecated key is not one.
+	if strings.Contains(report, "alias-safe") || strings.Contains(report, "@project:command aliases") {
+		t.Errorf("deprecated-key report should not print name-charset guidance, got %q", report)
+	}
+}
+
+func TestFormatLintReport_IgnoredKeys(t *testing.T) {
+	report := FormatLintReport([]config.Warning{{
+		Kind:    "ignored",
+		Scope:   "location",
+		Context: "services/*",
+		Name:    "legacy",
+		Reason:  `override key matches no folder expanded from "services/*"`,
+	}})
+
+	if !strings.Contains(report, "legacy") || !strings.Contains(report, "no folder") {
+		t.Errorf("report missing detail, got %q", report)
+	}
+	if strings.Contains(report, "@project:command aliases") {
+		t.Errorf("ignored-key report should not print name-charset guidance, got %q", report)
+	}
+}
+
+func TestFixConfigFile_RenamesDeprecatedKeys(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".pltrc")
+	original := `# paleta config
+locations:
+    - name: root
+      location: .
+      type: npm
+      # only the build scripts
+      include: # whitelist
+        - build*
+      exclude:
+        - "*:watch"
+`
+	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	fixes, err := FixConfigFile(path)
+	if err != nil {
+		t.Fatalf("FixConfigFile: %v", err)
+	}
+	if len(fixes) != 2 {
+		t.Fatalf("fixes = %+v, want one per renamed key", fixes)
+	}
+	if fixes[0].Scope != "key" || fixes[0].Before != "include" || fixes[0].After != "include_commands" {
+		t.Errorf("fixes[0] = %+v, want the include rename", fixes[0])
+	}
+
+	out, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	got := string(out)
+	for _, want := range []string{"include_commands:", "exclude_commands:", "# only the build scripts", "# whitelist", "# paleta config"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rewritten config missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "\n      include:") || strings.Contains(got, "\n      exclude:") {
+		t.Errorf("deprecated keys still present:\n%s", got)
+	}
+
+	// Nothing left to fix on a second run.
+	again, err := FixConfigFile(path)
+	if err != nil {
+		t.Fatalf("second FixConfigFile: %v", err)
+	}
+	if len(again) != 0 {
+		t.Errorf("second run reported fixes: %+v", again)
+	}
+}
+
+func TestFixConfigFile_RenamesInsideOverrides(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".pltrc")
+	original := `locations:
+    - location: "services/*"
+      overrides:
+        api:
+          include:
+            - build*
+`
+	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	fixes, err := FixConfigFile(path)
+	if err != nil {
+		t.Fatalf("FixConfigFile: %v", err)
+	}
+	if len(fixes) != 1 || fixes[0].Before != "include" {
+		t.Fatalf("fixes = %+v, want the override's include renamed", fixes)
+	}
+	out, _ := os.ReadFile(path)
+	if !strings.Contains(string(out), "include_commands:") {
+		t.Errorf("override key not renamed:\n%s", out)
+	}
+}
+
+// TestFixConfigFile_SkipsRenameWhenBothKeysPresent: renaming would collide with the
+// authored canonical key, so leave the file alone and let lint keep warning.
+func TestFixConfigFile_SkipsRenameWhenBothKeysPresent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".pltrc")
+	original := `locations:
+    - location: .
+      include: [old]
+      include_commands: [new]
+`
+	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	fixes, err := FixConfigFile(path)
+	if err != nil {
+		t.Fatalf("FixConfigFile: %v", err)
+	}
+	if len(fixes) != 0 {
+		t.Errorf("fixes = %+v, want none", fixes)
+	}
+	out, _ := os.ReadFile(path)
+	if string(out) != original {
+		t.Errorf("file was rewritten:\n%s", out)
+	}
+}

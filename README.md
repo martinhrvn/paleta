@@ -197,9 +197,16 @@ locations:
   `svc: [npm] build` and `svc: [docker] build`, so commands sharing a name stay
   distinguishable.
 - **commands** (optional): Additional commands to include (supports both string and object formats)
-- **include** (optional): Whitelist patterns for filtering commands (glob patterns)
-- **exclude** (optional): Blacklist patterns for filtering commands (glob patterns)
+- **include_commands** (optional): Whitelist patterns for filtering commands (glob patterns)
+- **exclude_commands** (optional): Blacklist patterns for filtering commands (glob patterns)
+- **exclude_locations** (optional, glob locations only): Patterns matching folders
+  to drop from the expansion
+- **overrides** (optional, glob locations only): Per-folder additions and tweaks
 - **env** (optional): Environment variables applied to every command in the location
+
+> `include_commands` / `exclude_commands` were previously spelled `include` /
+> `exclude`. The old names still work, but `plt lint` reports them and
+> `plt lint --fix` renames them in place (keeping your comments).
 
 ### Supported Project Types
 
@@ -212,17 +219,86 @@ locations:
 
 ### Glob Patterns
 
-Use glob patterns to match multiple directories:
+Use a glob pattern to match every directory one level below a path. Each matching
+folder becomes its own location, named after the folder, inheriting the pattern's
+`type`, `commands`, `env` and filters:
 
 ```yaml
 locations:
   - location: "packages/*"      # Matches all directories in packages/
     type: "npm"
-
-  - location: "apps/*/backend"  # Matches backend dirs in all apps
-    commands:
-      - "npm start"
 ```
+
+The pattern must be a single `*` at the end, directly after a `/` — `packages/*`
+is valid, `apps/*/backend` and `packages/**` are not (they're rejected at load
+time). Only directories match; files are skipped.
+
+#### Excluding folders
+
+`exclude_locations` drops folders from the expansion. Patterns are matched against
+the folder's own name:
+
+```yaml
+locations:
+  - location: "services/*"
+    type: "npm"
+    exclude_locations:
+      - "legacy"            # exact folder name
+      - "*-deprecated"      # or a pattern
+```
+
+A pattern matching nothing is fine — a folder you plan to add later can be
+excluded up front.
+
+#### Per-folder overrides
+
+`overrides` refines individual folders of a glob. Keys are matched against folder
+names the same way, so `frontend-next` hits one folder and `*-worker` hits several:
+
+```yaml
+locations:
+  - location: "services/*"
+    type: "npm"
+    commands: ["foo", "bar"]
+    env:
+      LOG: "info"
+    overrides:
+      frontend-next:
+        commands:
+          - name: "commandx"
+            command: "npm run commandx"
+        env:
+          PORT: "3001"
+      "*-worker":
+        type: ["npm", "docker"]
+```
+
+How each field merges into the folder's location:
+
+| Field | Merge |
+|---|---|
+| `commands` | Added. A command whose `name` matches an inherited one replaces it in place. |
+| `env` | Merged per key; the override wins (the same rule as command-level env). |
+| `name`, `type`, `include_commands`, `exclude_commands` | Replace the inherited value. |
+
+Replacement (rather than merging) is what lets one folder narrow a filter or drop a
+type its siblings have. To *remove* an inherited command from one folder, exclude it
+by name:
+
+```yaml
+    overrides:
+      legacy-svc:
+        exclude_commands: ["bar"]
+```
+
+An override key that matches no folder is reported by `plt lint` — usually a typo
+or a renamed directory. Excluding a folder you still have an override for is
+silent, so the two keys can be used together.
+
+Because `overrides` can rename a single folder, prefer leaving `name:` off a glob
+location: without it each folder is named after itself, which keeps
+`@project:command` references unambiguous. Note that `focused:` matches the
+authored entry, so a glob can only be focused as a whole.
 
 ### Command Formats
 
@@ -249,7 +325,7 @@ commands:
 
 **Benefits of Named Commands:**
 - **Better UI**: Command names appear clearly in the selector
-- **Filtering**: Use `include` and `exclude` patterns to filter by name
+- **Filtering**: Use `include_commands` and `exclude_commands` patterns to filter by name
 - **Clarity**: Easier to understand what each command does
 
 **List Format (chained commands):**
@@ -357,16 +433,16 @@ locations:
 
 ### Command Filtering
 
-Filter auto-discovered commands using `include` and `exclude` patterns:
+Filter a location's commands using `include_commands` and `exclude_commands`:
 
 ```yaml
 locations:
   - location: "packages/api"
     type: "npm"
-    include:
+    include_commands:
       - "test*"     # Only include commands starting with "test"
       - "build"     # And the "build" command
-    exclude:
+    exclude_commands:
       - "*:watch"   # But exclude any watch commands
 ```
 
@@ -375,6 +451,8 @@ locations:
 - Supports glob patterns (`*`, `?`, etc.)
 - Include patterns act as a whitelist (if specified)
 - Exclude patterns act as a blacklist (applied after include)
+- Both auto-discovered and hand-written commands are filtered, so a whitelist has
+  to cover the commands you authored yourself
 
 **Example:**
 ```yaml
@@ -384,11 +462,11 @@ locations:
     commands:
       - name: "local-deploy"
         command: "docker compose up"
-    include:
+    include_commands:
       - "test*"      # Include test commands from package.json
       - "build*"     # Include build commands
       - "local-*"    # Include our custom local-* commands
-    exclude:
+    exclude_commands:
       - "*:watch"    # Exclude watch commands
       - "test:e2e"   # Exclude e2e tests
 ```
@@ -708,12 +786,12 @@ locations:
         command: "docker compose down"
       - name: "migrate"
         command: "make migrate"
-    include:
+    include_commands:
       - "test*"      # Include test commands from package.json
       - "build"      # Include build command
       - "docker-*"   # Include our custom docker commands
       - "migrate"    # Include migrate command
-    exclude:
+    exclude_commands:
       - "test:e2e"   # Exclude e2e tests
 ```
 
@@ -732,11 +810,12 @@ locations:
         command: "npm run dev -- --host 0.0.0.0 --port 3000 --public"
       # Legacy string format still works
       - "npm run storybook"
-    include:
-      - "build*"     # Include all build variants
-      - "test:unit"  # Include unit tests only
-      - "dev-*"      # Include our custom dev commands
-    exclude:
+    include_commands:
+      - "build*"            # Include all build variants
+      - "test:unit"         # Include unit tests only
+      - "dev-*"             # Include our custom dev commands
+      - "npm run storybook" # Unnamed commands match their full command string
+    exclude_commands:
       - "test:e2e"   # Exclude e2e tests
 
   - name: "backend"

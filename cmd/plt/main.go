@@ -290,8 +290,8 @@ func handleLintCommand() {
 	}
 }
 
-// lintFix rewrites out-of-charset names in the local .pltrc. It requires a local
-// file (a global-fallback config has no single file to rewrite).
+// lintFix repairs the local .pltrc (out-of-charset names, deprecated keys). It
+// requires a local file (a global-fallback config has no single file to rewrite).
 func lintFix() {
 	configPath, err := config.FindConfigFile()
 	if err != nil {
@@ -306,9 +306,9 @@ func lintFix() {
 	}
 
 	if len(fixes) == 0 {
-		fmt.Println("No name issues found; nothing to fix.")
+		fmt.Println("No fixable issues found; nothing to fix.")
 	} else {
-		fmt.Printf("Fixed %d name(s) in %s:\n", len(fixes), configPath)
+		fmt.Printf("Fixed %d item(s) in %s:\n", len(fixes), configPath)
 		for _, f := range fixes {
 			fmt.Printf("  %-9s %q -> %q\n", f.Scope, f.Before, f.After)
 		}

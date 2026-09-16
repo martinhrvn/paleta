@@ -37,6 +37,11 @@ type Config struct {
 	// surface them (the selector banner, `plt lint`) rather than failing the load.
 	// Never serialized.
 	Warnings []Warning `yaml:"-"`
+	// pendingWarnings holds issues found before collectConfigWarnings runs —
+	// deprecated keys (found at decode time) and glob-expansion notices — which
+	// would otherwise be lost when it rebuilds Warnings. Unexported, so yaml never
+	// sees it.
+	pendingWarnings []Warning
 }
 
 // FrecencyConfig configures frecency sorting behavior
@@ -234,13 +239,25 @@ func (c Command) MarshalYAML() (any, error) {
 }
 
 type Location struct {
-	Name     string            `yaml:"name,omitempty"`
-	Location string            `yaml:"location,omitempty"`
-	Types    Types             `yaml:"type,omitempty"`
-	Commands []Command         `yaml:"commands,omitempty"`
-	Include  []string          `yaml:"include,omitempty"`
-	Exclude  []string          `yaml:"exclude,omitempty"`
-	Env      map[string]string `yaml:"env,omitempty"`
+	Name     string    `yaml:"name,omitempty"`
+	Location string    `yaml:"location,omitempty"`
+	Types    Types     `yaml:"type,omitempty"`
+	Commands []Command `yaml:"commands,omitempty"`
+	// Include and Exclude filter this location's commands (both authored and
+	// type-discovered) by name. Authored as `include_commands:`/`exclude_commands:`;
+	// the pre-rename `include:`/`exclude:` spellings still decode (see
+	// Location.UnmarshalYAML) and are reported as deprecated.
+	Include []string `yaml:"include_commands,omitempty"`
+	Exclude []string `yaml:"exclude_commands,omitempty"`
+	// ExcludeLocations drops folders from a glob location's expansion. Patterns are
+	// matched against each expanded folder's base name with filepath.Match. Only
+	// meaningful on a glob location; ignored (with a warning) elsewhere.
+	ExcludeLocations []string `yaml:"exclude_locations,omitempty"`
+	// Overrides carries per-folder additions/overrides for a glob location, keyed by
+	// a pattern matched against each expanded folder's base name. Consumed by glob
+	// expansion, so it never appears on an expanded child.
+	Overrides map[string]LocationOverride `yaml:"overrides,omitempty"`
+	Env       map[string]string           `yaml:"env,omitempty"`
 	// Focused is a runtime-only flag set by resolveFocus from the top-level
 	// Config.Focused list; it drives the selector's focus filter. It is never
 	// read from or written to YAML (focus lives in the top-level list).
@@ -249,6 +266,156 @@ type Location struct {
 	// alias-safe charset, so it can never be used as a project reference. Non-fatal;
 	// surfaced by the selector and `plt lint`. Never serialized.
 	NameError string `yaml:"-"`
+	// LegacyKeys lists the deprecated key spellings this location was authored with
+	// (e.g. "include", "overrides.api.exclude"), in a stable order, so
+	// collectDeprecatedKeyWarnings can report them. Set at decode time; never
+	// serialized.
+	LegacyKeys []string `yaml:"-"`
+}
+
+// LocationOverride carries per-folder additions/overrides for a glob location.
+// Commands merge by name (a same-named command replaces the inherited one, the
+// rest append) and Env merges per key; every other field replaces the inherited
+// value when non-empty. It is a separate type from Location on purpose: a folder
+// override can't carry its own `location:` or nested `overrides:`.
+type LocationOverride struct {
+	Name     string            `yaml:"name,omitempty"`
+	Types    Types             `yaml:"type,omitempty"`
+	Commands []Command         `yaml:"commands,omitempty"`
+	Include  []string          `yaml:"include_commands,omitempty"`
+	Exclude  []string          `yaml:"exclude_commands,omitempty"`
+	Env      map[string]string `yaml:"env,omitempty"`
+	// legacyKeys lists the deprecated key spellings used in this override; folded
+	// into the parent location's LegacyKeys at decode time.
+	legacyKeys []string `yaml:"-"`
+}
+
+// locationYAML is the authored shape of a Location: every serialized field plus
+// the deprecated `include:`/`exclude:` spellings, which UnmarshalYAML folds into
+// the canonical fields. Adding a field to Location means adding it here too — a
+// field missing from this struct decodes to nothing, silently.
+type locationYAML struct {
+	Name             string                      `yaml:"name,omitempty"`
+	Location         string                      `yaml:"location,omitempty"`
+	Types            Types                       `yaml:"type,omitempty"`
+	Commands         []Command                   `yaml:"commands,omitempty"`
+	IncludeCommands  []string                    `yaml:"include_commands,omitempty"`
+	ExcludeCommands  []string                    `yaml:"exclude_commands,omitempty"`
+	Include          []string                    `yaml:"include,omitempty"` // deprecated
+	Exclude          []string                    `yaml:"exclude,omitempty"` // deprecated
+	ExcludeLocations []string                    `yaml:"exclude_locations,omitempty"`
+	Overrides        map[string]LocationOverride `yaml:"overrides,omitempty"`
+	Env              map[string]string           `yaml:"env,omitempty"`
+}
+
+// UnmarshalYAML decodes a location, accepting the deprecated `include:`/`exclude:`
+// spellings alongside the canonical `include_commands:`/`exclude_commands:`. The
+// canonical key wins when both are authored; either legacy key is recorded in
+// LegacyKeys so the load can warn about it. Canonicalizing at decode time means
+// every rewrite path (`plt init`, focus, queue-save) emits the new spelling.
+func (l *Location) UnmarshalYAML(value *yaml.Node) error {
+	var raw locationYAML
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+
+	var legacy []string
+	include, usedLegacyInclude := resolveFilterKeys(raw.IncludeCommands, raw.Include)
+	if usedLegacyInclude {
+		legacy = append(legacy, "include")
+	}
+	exclude, usedLegacyExclude := resolveFilterKeys(raw.ExcludeCommands, raw.Exclude)
+	if usedLegacyExclude {
+		legacy = append(legacy, "exclude")
+	}
+
+	// Fold each override's legacy keys in, sorted by folder key so the reported
+	// order never depends on map iteration.
+	for _, key := range sortedOverrideKeys(raw.Overrides) {
+		for _, k := range raw.Overrides[key].legacyKeys {
+			legacy = append(legacy, "overrides."+key+"."+k)
+		}
+	}
+
+	l.Name = raw.Name
+	l.Location = raw.Location
+	l.Types = raw.Types
+	l.Commands = raw.Commands
+	l.Include = include
+	l.Exclude = exclude
+	l.ExcludeLocations = raw.ExcludeLocations
+	l.Overrides = raw.Overrides
+	l.Env = raw.Env
+	l.LegacyKeys = legacy
+	return nil
+}
+
+// locationOverrideYAML is the authored shape of a LocationOverride, including the
+// deprecated filter spellings. See locationYAML.
+type locationOverrideYAML struct {
+	Name            string            `yaml:"name,omitempty"`
+	Types           Types             `yaml:"type,omitempty"`
+	Commands        []Command         `yaml:"commands,omitempty"`
+	IncludeCommands []string          `yaml:"include_commands,omitempty"`
+	ExcludeCommands []string          `yaml:"exclude_commands,omitempty"`
+	Include         []string          `yaml:"include,omitempty"` // deprecated
+	Exclude         []string          `yaml:"exclude,omitempty"` // deprecated
+	Env             map[string]string `yaml:"env,omitempty"`
+}
+
+// UnmarshalYAML applies the same legacy-key folding as Location.UnmarshalYAML, so
+// an `include:` copy-pasted into an override isn't silently ignored.
+func (o *LocationOverride) UnmarshalYAML(value *yaml.Node) error {
+	var raw locationOverrideYAML
+	if err := value.Decode(&raw); err != nil {
+		return err
+	}
+
+	var legacy []string
+	include, usedLegacyInclude := resolveFilterKeys(raw.IncludeCommands, raw.Include)
+	if usedLegacyInclude {
+		legacy = append(legacy, "include")
+	}
+	exclude, usedLegacyExclude := resolveFilterKeys(raw.ExcludeCommands, raw.Exclude)
+	if usedLegacyExclude {
+		legacy = append(legacy, "exclude")
+	}
+
+	o.Name = raw.Name
+	o.Types = raw.Types
+	o.Commands = raw.Commands
+	o.Include = include
+	o.Exclude = exclude
+	o.Env = raw.Env
+	o.legacyKeys = legacy
+	return nil
+}
+
+// resolveFilterKeys picks the effective filter list from the canonical and
+// deprecated spellings of a key, reporting whether the deprecated one was
+// authored (whether or not it won).
+func resolveFilterKeys(canonical, legacy []string) ([]string, bool) {
+	if len(legacy) == 0 {
+		return canonical, false
+	}
+	if len(canonical) > 0 {
+		return canonical, true // both authored: canonical wins, legacy still reported
+	}
+	return legacy, true
+}
+
+// sortedOverrideKeys returns an override map's keys in lexical order, for
+// deterministic iteration.
+func sortedOverrideKeys(overrides map[string]LocationOverride) []string {
+	if len(overrides) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(overrides))
+	for k := range overrides {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // FocusKey derives the stable identity used to reference a location in the
@@ -309,6 +476,10 @@ func LoadConfig(configPath string) (*Config, error) {
 	// Apply default frecency config if not specified
 	applyDefaultFrecencyConfig(&config)
 
+	// Report deprecated key spellings folded in at decode time. Runs on the
+	// authored locations, before expansion, so one authored key yields one warning.
+	collectDeprecatedKeyWarnings(&config)
+
 	// Normalize empty paths to current directory
 	normalizeEmptyPaths(&config)
 
@@ -317,11 +488,12 @@ func LoadConfig(configPath string) (*Config, error) {
 	resolveFocus(&config)
 
 	// Expand glob patterns in locations
-	expandedLocations, err := ExpandGlobPatterns(config.Locations)
+	expandedLocations, globWarnings, err := ExpandGlobPatterns(config.Locations)
 	if err != nil {
 		return nil, fmt.Errorf("failed to expand glob patterns: %w", err)
 	}
 	config.Locations = expandedLocations
+	config.pendingWarnings = append(config.pendingWarnings, globWarnings...)
 
 	// Convert all location paths to absolute paths
 	// This must happen while we're still in the config directory
@@ -476,13 +648,12 @@ func CommandLabel(loc Location, cmd Command) string {
 	return name
 }
 
-// processProjectTypes processes project types and adds their commands to locations
+// processProjectTypes adds each location's type-discovered commands to its
+// authored ones (authored first), then applies the location's command filters to
+// the combined list. A location with no `type:` still gets filtered — it just has
+// nothing to discover.
 func processProjectTypes(config *Config) error {
 	for i, location := range config.Locations {
-		if len(location.Types) == 0 {
-			continue
-		}
-
 		// Accumulate discovered commands across every type the location declares.
 		var discovered []Command
 		for _, typeName := range location.Types {
@@ -502,11 +673,12 @@ func processProjectTypes(config *Config) error {
 			return discovered[a].Name < discovered[b].Name
 		})
 
-		// Filter discovered commands based on include/exclude patterns.
-		filteredCommands := filterCommands(discovered, location.Include, location.Exclude)
+		if len(discovered) == 0 && len(location.Include) == 0 && len(location.Exclude) == 0 {
+			continue
+		}
 
-		// Merge filtered auto-discovered commands with manual commands (manual first).
-		config.Locations[i].Commands = append(location.Commands, filteredCommands...)
+		all := append(append([]Command{}, location.Commands...), discovered...)
+		config.Locations[i].Commands = filterCommands(all, location.Include, location.Exclude)
 	}
 
 	return nil

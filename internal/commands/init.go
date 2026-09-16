@@ -213,22 +213,34 @@ locations:
   #   location: "services/svc"
   #   type: [npm, docker]
 
-  # Example: Filtering auto-discovered commands with include/exclude
+  # Example: Filtering a location's commands
   # - name: "app"
   #   location: "app"
   #   type: "npm"
-  #   include:           # Only include commands matching these patterns
-  #     - "npm run dev"
-  #     - "npm run build*"
-  #     - "npm run test"
-  #   exclude:           # Exclude commands matching these patterns
-  #     - "npm run test:watch"
-  #   commands:
-  #     - "custom-command"
+  #   include_commands:   # Only keep commands matching these patterns
+  #     - "dev"
+  #     - "build*"
+  #     - "test"
+  #   exclude_commands:   # Drop commands matching these patterns
+  #     - "test:watch"
 
   # Example: Using glob patterns to match multiple directories
   # - location: "packages/*"
   #   type: "npm"
+
+  # Example: Dropping folders from a glob, and refining one of them
+  # - location: "services/*"
+  #   type: "npm"
+  #   exclude_locations:        # Folders to leave out of the expansion
+  #     - "legacy"
+  #     - "*-deprecated"
+  #   overrides:                # Per-folder additions; keys match folder names
+  #     frontend-next:
+  #       commands:
+  #         - name: "commandx"
+  #           command: "npm run commandx"
+  #       env:
+  #         PORT: "3001"
 
   # Example: Scripts directory with shell scripts
   # - name: "scripts"
@@ -246,14 +258,24 @@ locations:
 #   type:     (optional) Project type(s) for automatic command detection.
 #             Single value (type: npm) or a list (type: [npm, docker]).
 #   commands: (optional) List of commands to make available
-#   include:  (optional) Glob patterns to filter auto-discovered commands (whitelist)
-#   exclude:  (optional) Glob patterns to exclude from auto-discovered commands (blacklist)
+#   include_commands:  (optional) Glob patterns to filter this location's commands (whitelist)
+#   exclude_commands:  (optional) Glob patterns to drop commands (blacklist)
+#   exclude_locations: (optional) Folder patterns to drop from a glob expansion
+#   overrides:         (optional) Per-folder overrides for a glob location
 #
-# include/exclude notes:
-#   - Only applies to auto-discovered commands (from type), not manual commands
-#   - Patterns support glob syntax (e.g., "npm run test*" matches "npm run test:ci")
+# include_commands/exclude_commands notes:
+#   - Applies to auto-discovered commands (from type) and to the ones you write here
+#   - Patterns match a command's name when it has one (npm scripts: "dev", "test:ci"),
+#     otherwise its full command string (e.g. "npm run legacy")
+#   - Patterns support glob syntax (e.g., "test*" matches "test:ci")
 #   - Include is applied first (whitelist), then exclude (blacklist)
-#   - Commands must match the format shown in the UI (e.g., "npm run dev", not "dev")
+#   - The older spellings "include:"/"exclude:" still work; 'plt lint --fix' renames them
+#
+# exclude_locations/overrides notes:
+#   - Only apply to a glob location (e.g. "services/*")
+#   - Patterns/keys match the expanded folder's own name ("api", "*-worker")
+#   - An override adds its commands (a same-named one replaces) and merges its env;
+#     name, type and the command filters replace the inherited value
 #
 # Supported project types:
 #   npm, yarn, pnpm: Automatically discovers scripts from package.json

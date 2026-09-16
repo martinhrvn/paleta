@@ -79,7 +79,7 @@ func TestExpandGlobPatternsPropagatesFocused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expanded, err := ExpandGlobPatterns([]Location{
+	expanded, _, err := ExpandGlobPatterns([]Location{
 		{Name: "svc", Location: "packages/*", Types: Types{"npm"}, Focused: true},
 	})
 	if err != nil {

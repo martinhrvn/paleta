@@ -18,6 +18,14 @@
   - this can be specified as a list of commands, if type is specified for project it will add this as extra commands
 - [x] Support glob patterns in location paths (e.g., `packages/bar/*`)
     - This should be simple eg. expand * to all directories in the path, but not recurse into subdirectories
+  - [x] `exclude_locations:` — drop folders from a glob expansion (patterns match the folder's own name)
+  - [x] `overrides:` — per-folder additions/overrides on a glob location (commands merge by name, env merges per key, `name`/`type`/filters replace); keys matching no folder are reported by `plt lint`
+- [x] `include_commands:`/`exclude_commands:` filter a location's commands — authored and type-discovered alike
+  - [x] the old `include:`/`exclude:` spellings still parse, are reported as deprecated by the selector banner and `plt lint`, and are renamed in place (comments preserved) by `plt lint --fix`
+- [ ] Glob children can share one authored `name:`, which makes `@project:command` references ambiguous and collides frecency history; an override's `name:` is the per-folder workaround
+- [ ] `focused:` matches authored keys (resolved before glob expansion), so a glob can only be focused as a whole — and `plt focus` writes keys taken from expanded locations, which then match nothing
+- [ ] No dedup when two locations resolve to the same directory (duplicate rows + ambiguous aliases); `exclude_locations` is a partial workaround
+- [ ] Unknown `.pltrc` keys are silently ignored (a typo'd `exclude_location:` does nothing) — consider `yaml.Decoder.KnownFields(true)`
 - [x] Config file discovery (search current dir and parents)
 - [x] Validate config file structure
 - [x] Handle malformed config gracefully
@@ -61,7 +69,7 @@ The project types we should support intitally are:
   - [x] ${VAR}/$VAR expansion against ambient + sibling vars (undefined → empty)
 - [ ] Support for command aliases/shortcuts
 - [ ] Support for default commands per location
-- [ ] Support for inheriting/extending configurations
+- [ ] Support for inheriting/extending configurations (partially covered by `overrides:` within a glob location)
 - [ ] Support JSON/TOML formats as alternatives
 - [ ] Support for comments in config file
 
@@ -309,3 +317,22 @@ flat look came from muted 256-palette colors with no effects.
 - Live fuzzy-match highlighting via `fuzzySubsequenceIndices` + `highlightMatches`
 - Nerd Font glyphs (folder/terminal/`❯`) with `PLT_NO_ICONS=1` ASCII fallback
 - Tests: `fuzzySubsequenceIndices`, `highlightMatches`, theme sanity (TDD)
+### Location Overrides & Command-Filter Rename (Completed)
+Made a glob location (`location: "services/*"`) something you can shape per folder,
+and gave the command filters honest names:
+- **`include_commands:`/`exclude_commands:`** replace `include:`/`exclude:`. They now
+  filter authored commands as well as type-discovered ones (the old behavior filtered
+  only discovered ones, which contradicted the README).
+- **Back-compat**: the old spellings still decode (`Location.UnmarshalYAML` folds them
+  into the canonical fields), are reported as `Kind: "deprecated"` warnings in the
+  selector banner and `plt lint`, and are renamed in place — comments intact — by
+  `plt lint --fix`. Any rewrite (`plt init`, focus save, queue save) emits the new names.
+- **`exclude_locations:`** drops folders from a glob expansion; patterns match the
+  folder's own name via `filepath.Match`.
+- **`overrides:`** — a map of folder pattern → per-folder overrides. Commands merge by
+  name (same name replaces in place, the rest append), env merges per key, and
+  `name`/`type`/filters replace. Keys matching no folder are reported as
+  `Kind: "ignored"`, as are both keys used on a non-glob location.
+- **Bug fixed**: glob expansion silently dropped `Location.Env`, so location-level env
+  never worked under a glob. Each expanded child now gets its own copy (a shared map
+  would let one folder's override leak into its siblings).

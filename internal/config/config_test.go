@@ -707,7 +707,9 @@ func TestFilterCommands(t *testing.T) {
 	}
 }
 
-func TestLoadConfigWithIncludeExclude(t *testing.T) {
+// TestLoadConfig_LegacyIncludeExcludeStillWorks covers the deprecated
+// `include:`/`exclude:` spellings: they keep filtering, and the load reports them.
+func TestLoadConfig_LegacyIncludeExcludeStillWorks(t *testing.T) {
 	// Create a temp directory with package.json
 	tmpDir, err := os.MkdirTemp("", "plt-test")
 	if err != nil {
@@ -779,16 +781,12 @@ func TestLoadConfigWithIncludeExclude(t *testing.T) {
 
 	location := config.Locations[0]
 
-	// Manual command should be present
-	hasCustom := false
+	// Authored commands are filtered too: "custom-command" matches no include
+	// pattern, so the whitelist drops it.
 	for _, cmd := range location.Commands {
 		if cmd.Command == "custom-command" {
-			hasCustom = true
-			break
+			t.Errorf("Authored command 'custom-command' matches no include pattern and should have been filtered out")
 		}
-	}
-	if !hasCustom {
-		t.Errorf("Manual command 'custom-command' should not be filtered")
 	}
 
 	// Check that included commands are present (by name)
@@ -814,5 +812,230 @@ func TestLoadConfigWithIncludeExclude(t *testing.T) {
 				t.Errorf("Command with name %q should have been filtered out", excludedName)
 			}
 		}
+	}
+
+	// Both deprecated keys are reported once for the location.
+	var deprecated []string
+	for _, w := range config.Warnings {
+		if w.Kind == "deprecated" {
+			deprecated = append(deprecated, w.Name)
+		}
+	}
+	if !reflect.DeepEqual(deprecated, []string{"include", "exclude"}) {
+		t.Errorf("deprecated warnings = %v, want [include exclude]", deprecated)
+	}
+}
+
+// TestLoadConfigWithIncludeExcludeCommands is the same scenario in the canonical
+// spelling, and pins that the filters apply to authored commands as well as
+// type-discovered ones.
+func TestLoadConfigWithIncludeExcludeCommands(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	defer os.Chdir(oldDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	packageJSON := `{
+  "name": "test-project",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:prod": "vite build --mode production",
+    "lint": "eslint ."
+  }
+}`
+	if err := os.WriteFile("package.json", []byte(packageJSON), 0644); err != nil {
+		t.Fatalf("Failed to write package.json: %v", err)
+	}
+
+	configYAML := `locations:
+  - name: "test"
+    location: "."
+    type: "npm"
+    include_commands:
+      - "build*"
+      - "deploy"
+    exclude_commands:
+      - "build:prod"
+    commands:
+      - name: "deploy"
+        command: "./deploy.sh"
+      - name: "release"
+        command: "./release.sh"`
+
+	configPath := filepath.Join(tmpDir, ".pltrc")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() failed: %v", err)
+	}
+	if len(config.Locations) != 1 {
+		t.Fatalf("Expected 1 location, got %d", len(config.Locations))
+	}
+
+	var names []string
+	for _, cmd := range config.Locations[0].Commands {
+		names = append(names, cmd.Name)
+	}
+	// Authored "deploy" kept (matches include), authored "release" dropped (no
+	// match), discovered "build" kept, "build:prod" excluded, "dev"/"lint" not
+	// included. Authored commands still come before discovered ones.
+	want := []string{"deploy", "build"}
+	if !reflect.DeepEqual(names, want) {
+		t.Errorf("commands = %v, want %v", names, want)
+	}
+
+	if len(config.Warnings) != 0 {
+		t.Errorf("expected no warnings for the canonical spelling, got %v", config.Warnings)
+	}
+}
+
+// TestLoadConfig_FiltersApplyWithoutType covers a location with no `type:` — its
+// filters used to be a silent no-op because command processing skipped it.
+func TestLoadConfig_FiltersApplyWithoutType(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	defer os.Chdir(oldDir)
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	configYAML := `locations:
+  - name: "test"
+    location: "."
+    exclude_commands:
+      - "secret*"
+    commands:
+      - name: "deploy"
+        command: "./deploy.sh"
+      - name: "secret-deploy"
+        command: "./secret.sh"`
+
+	configPath := filepath.Join(tmpDir, ".pltrc")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() failed: %v", err)
+	}
+
+	var names []string
+	for _, cmd := range config.Locations[0].Commands {
+		names = append(names, cmd.Name)
+	}
+	if !reflect.DeepEqual(names, []string{"deploy"}) {
+		t.Errorf("commands = %v, want [deploy]", names)
+	}
+}
+
+// TestLoadConfig_GlobOverridesEndToEnd exercises exclude_locations + overrides +
+// filters through the whole load pipeline, pinning the ordering between glob
+// expansion, path resolution and command processing.
+func TestLoadConfig_GlobOverridesEndToEnd(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	defer os.Chdir(oldDir)
+
+	pkg := `{"name":"svc","scripts":{"build":"tsc","dev":"vite","lint":"eslint ."}}`
+	for _, svc := range []string{"api", "frontend-next", "legacy"} {
+		dir := filepath.Join(tmpDir, "services", svc)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("Failed to create %s: %v", dir, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(pkg), 0644); err != nil {
+			t.Fatalf("Failed to write package.json: %v", err)
+		}
+	}
+
+	configYAML := `locations:
+  - location: "services/*"
+    type: npm
+    env:
+      LOG: info
+    include_commands: ["build", "deploy", "commandx"]
+    commands:
+      - name: deploy
+        command: "./deploy.sh"
+    exclude_locations: ["legacy"]
+    overrides:
+      frontend-next:
+        name: next
+        commands:
+          - name: commandx
+            command: "npm run commandx"
+        env:
+          PORT: "3001"
+`
+	configPath := filepath.Join(tmpDir, ".pltrc")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change directory: %v", err)
+	}
+
+	config, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() failed: %v", err)
+	}
+	if len(config.Warnings) != 0 {
+		t.Errorf("expected no warnings, got %+v", config.Warnings)
+	}
+
+	var names []string
+	for _, loc := range config.Locations {
+		names = append(names, loc.Name)
+	}
+	if !reflect.DeepEqual(names, []string{"api", "next"}) {
+		t.Fatalf("locations = %v, want [api next] (legacy excluded, frontend-next renamed)", names)
+	}
+
+	// api: inherited authored deploy + discovered build (dev/lint not included).
+	var apiCmds []string
+	for _, cmd := range config.Locations[0].Commands {
+		apiCmds = append(apiCmds, cmd.Name)
+	}
+	if !reflect.DeepEqual(apiCmds, []string{"deploy", "build"}) {
+		t.Errorf("api commands = %v, want [deploy build]", apiCmds)
+	}
+	if !reflect.DeepEqual(config.Locations[0].Env, map[string]string{"LOG": "info"}) {
+		t.Errorf("api env = %v, want the location env", config.Locations[0].Env)
+	}
+
+	// next: the override's commandx appended, env merged.
+	var nextCmds []string
+	for _, cmd := range config.Locations[1].Commands {
+		nextCmds = append(nextCmds, cmd.Name)
+	}
+	if !reflect.DeepEqual(nextCmds, []string{"deploy", "commandx", "build"}) {
+		t.Errorf("next commands = %v, want [deploy commandx build]", nextCmds)
+	}
+	if want := (map[string]string{"LOG": "info", "PORT": "3001"}); !reflect.DeepEqual(config.Locations[1].Env, want) {
+		t.Errorf("next env = %v, want %v", config.Locations[1].Env, want)
+	}
+
+	// Paths resolved to the real directories.
+	if config.Locations[1].Location != filepath.Join(tmpDir, "services", "frontend-next") {
+		t.Errorf("next location = %q, want the absolute services/frontend-next path", config.Locations[1].Location)
 	}
 }

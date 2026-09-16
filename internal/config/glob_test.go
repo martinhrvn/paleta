@@ -281,7 +281,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 				t.Fatalf("Failed to change to temp directory: %v", err)
 			}
 
-			result, err := ExpandGlobPatterns(tt.locations)
+			result, _, err := ExpandGlobPatterns(tt.locations)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ExpandGlobPatterns() error = %v, wantErr %v", err, tt.wantErr)
