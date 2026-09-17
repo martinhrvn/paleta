@@ -28,4 +28,9 @@ type CommandInfo struct {
 	// IsTool marks a row that comes from an enabled tool rather than a location's
 	// commands. Tool rows are pinned to the end of the default list.
 	IsTool bool
+	// Loading marks a placeholder standing in for a location whose project type
+	// is still being resolved in the background (a `make`/`gradle` parser has to
+	// run a shell command to list its targets). It carries no command, and is
+	// neither queueable nor runnable.
+	Loading bool
 }

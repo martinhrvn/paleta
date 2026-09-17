@@ -33,6 +33,16 @@ var ProjectTypeRegistry = map[string]ProjectType{}
 var registryMutex sync.RWMutex
 var registryInitialized bool
 
+// ReloadRegistry discards the registered project types so the next lookup
+// re-reads the parser configuration (the embedded defaults plus
+// ~/.paleta/parsers.yaml). The registry is otherwise built once per process.
+func ReloadRegistry() {
+	registryMutex.Lock()
+	defer registryMutex.Unlock()
+	ProjectTypeRegistry = map[string]ProjectType{}
+	registryInitialized = false
+}
+
 // initializeRegistry initializes the registry with parsers from configuration
 func initializeRegistry() error {
 	registryMutex.Lock()
@@ -111,4 +121,15 @@ func ListAvailableTypes() ([]string, error) {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// DefersLoading reports whether a type resolves its commands by running a shell
+// command. An unknown type defers nothing — it fails the load elsewhere.
+func DefersLoading(typeName string) bool {
+	projectType, err := GetProjectType(typeName)
+	if err != nil {
+		return false
+	}
+	configurable, ok := projectType.(*ConfigurableProjectType)
+	return ok && configurable.DefersLoading()
 }

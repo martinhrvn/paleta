@@ -121,3 +121,22 @@ func TestNullParser(t *testing.T) {
 		t.Errorf("Expected 0 commands from null parser, got %d", len(commands))
 	}
 }
+
+// TestParseAndFormatCommands_KeepsBaseCommandsOnParserError pins that a broken
+// parser command degrades to the base commands instead of losing everything: a
+// missing `mvn` or a broken Makefile must not be able to fail a config load.
+func TestParseAndFormatCommands_KeepsBaseCommandsOnParserError(t *testing.T) {
+	cfg := ParserConfig{
+		BaseCommands:  map[string]string{"build": "make build"},
+		ParserCommand: "exit 3",
+	}
+
+	commands, err := ParseAndFormatCommands(t.TempDir(), cfg)
+
+	if err == nil {
+		t.Fatalf("expected the parser error to be reported")
+	}
+	if got := commands["build"]; got != "make build" {
+		t.Errorf("commands = %v, want the base commands preserved alongside the error", commands)
+	}
+}

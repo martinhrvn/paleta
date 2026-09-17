@@ -1,12 +1,14 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/martinhrvn/paleta/internal/parsers"
 	"github.com/martinhrvn/paleta/internal/projecttypes"
 	"gopkg.in/yaml.v3"
 )
@@ -271,6 +273,18 @@ type Location struct {
 	// collectDeprecatedKeyWarnings can report them. Set at decode time; never
 	// serialized.
 	LegacyKeys []string `yaml:"-"`
+	// PendingTypes lists this location's declared types whose commands come from
+	// running a shell command (make, gradle, maven, python). They are left
+	// unresolved by the load so a slow project can't stall a launch; the selector
+	// resolves them in the background and `plt list` resolves them up front. See
+	// pending.go. Never serialized.
+	PendingTypes []string `yaml:"-"`
+	// authoredCommands and cheapCommands retain the two halves of Commands as they
+	// were at load — what the user wrote, and what the non-deferred types produced
+	// — so resolving a pending type can rebuild the list exactly as a blocking load
+	// would have produced it. Runtime only.
+	authoredCommands []Command
+	cheapCommands    []Command
 }
 
 // LocationOverride carries per-folder additions/overrides for a glob location.
@@ -501,10 +515,14 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to make location paths absolute: %w", err)
 	}
 
-	// Process project types and add their commands
-	if err := processProjectTypes(&config); err != nil {
+	// Process project types and add their commands. A type whose parser fails or
+	// times out degrades to its base commands and reports a warning rather than
+	// failing the load; only an invalid type name is fatal.
+	typeWarnings, err := processProjectTypes(&config)
+	if err != nil {
 		return nil, fmt.Errorf("failed to process project types: %w", err)
 	}
+	config.pendingWarnings = append(config.pendingWarnings, typeWarnings...)
 
 	// Expand @project[type]:command references into resolved command strings. An
 	// unresolvable reference is recorded on the command (Command.Error) rather
@@ -652,58 +670,101 @@ func CommandLabel(loc Location, cmd Command) string {
 // authored ones (authored first), then applies the location's command filters to
 // the combined list. A location with no `type:` still gets filtered — it just has
 // nothing to discover.
-func processProjectTypes(config *Config) error {
+func processProjectTypes(config *Config) ([]Warning, error) {
+	var warnings []Warning
 	for i, location := range config.Locations {
-		// Accumulate discovered commands across every type the location declares.
+		// Accumulate discovered commands across every type the location declares,
+		// deferring the ones that would have to run a shell command to find out.
 		var discovered []Command
+		var pending []string
 		for _, typeName := range location.Types {
-			cmds, err := commandsForType(typeName, location.Location)
+			if projecttypes.DefersLoading(typeName) {
+				pending = append(pending, typeName)
+				continue
+			}
+			cmds, degraded, err := commandsForType(typeName, location.Location)
 			if err != nil {
-				return err
+				return nil, err
+			}
+			if degraded != nil {
+				degraded.Context = locationLabel(location)
+				warnings = append(warnings, *degraded)
 			}
 			discovered = append(discovered, cmds...)
 		}
 
-		// Stable order (map iteration in the parsers is non-deterministic, and we
-		// merge several maps). Sort by type, then name.
-		sort.SliceStable(discovered, func(a, b int) bool {
-			if discovered[a].Type != discovered[b].Type {
-				return discovered[a].Type < discovered[b].Type
-			}
-			return discovered[a].Name < discovered[b].Name
-		})
+		config.Locations[i].PendingTypes = pending
 
-		if len(discovered) == 0 && len(location.Include) == 0 && len(location.Exclude) == 0 {
+		if len(discovered) == 0 && len(pending) == 0 &&
+			len(location.Include) == 0 && len(location.Exclude) == 0 {
 			continue
 		}
 
-		all := append(append([]Command{}, location.Commands...), discovered...)
-		config.Locations[i].Commands = filterCommands(all, location.Include, location.Exclude)
+		config.Locations[i].authoredCommands = location.Commands
+		config.Locations[i].cheapCommands = sortDiscovered(discovered)
+		config.Locations[i].Commands = composeCommands(config.Locations[i], nil)
 	}
 
-	return nil
+	return warnings, nil
+}
+
+// sortDiscovered puts type-discovered commands in a stable order: map iteration
+// in the parsers is non-deterministic and several maps get merged, so sort by
+// type, then name.
+func sortDiscovered(discovered []Command) []Command {
+	sort.SliceStable(discovered, func(a, b int) bool {
+		if discovered[a].Type != discovered[b].Type {
+			return discovered[a].Type < discovered[b].Type
+		}
+		return discovered[a].Name < discovered[b].Name
+	})
+	return discovered
+}
+
+// composeCommands rebuilds a location's command list from its authored commands
+// plus everything its types discovered — the ones resolved at load and any that
+// arrived later — so a deferred type produces exactly the list a blocking load
+// would have.
+func composeCommands(loc Location, late []Command) []Command {
+	discovered := append(append([]Command{}, loc.cheapCommands...), late...)
+	all := append(append([]Command{}, loc.authoredCommands...), sortDiscovered(discovered)...)
+	return filterCommands(all, loc.Include, loc.Exclude)
+}
+
+// locationLabel is the human name for a location in warnings: its authored name,
+// falling back to its path.
+func locationLabel(loc Location) string {
+	if loc.Name != "" {
+		return loc.Name
+	}
+	return loc.Location
 }
 
 // commandsForType resolves a single project type in a directory and returns its
 // commands, each tagged with the type. A type whose detect file is absent
 // contributes nothing (the location may declare several types, only some of which
 // apply here).
-func commandsForType(typeName, directory string) ([]Command, error) {
+//
+// The second return value is a non-fatal warning: when a type's parser fails or
+// times out, its base commands are still returned and the failure is reported
+// rather than breaking the load. Only a genuinely invalid config — an unknown
+// type name — produces an error.
+func commandsForType(typeName, directory string) ([]Command, *Warning, error) {
 	projectType, err := projecttypes.GetProjectType(typeName)
 	if err != nil {
-		return nil, fmt.Errorf("location %s has invalid type: %w", directory, err)
+		return nil, nil, fmt.Errorf("location %s has invalid type: %w", directory, err)
 	}
 
 	if !projectType.CanHandleDirectory(directory) {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// For configurable project types, get the full commands directly.
 	if configurableType, ok := projectType.(*projecttypes.ConfigurableProjectType); ok {
-		commands, err := configurableType.GetAllCommands(directory)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse commands for location %s: %w", directory, err)
-		}
+		// A parser failure (broken Makefile, missing `mvn`, a command that timed
+		// out) still yields the type's base commands, so keep them and report the
+		// problem rather than losing the location — or the whole load.
+		commands, parseErr := configurableType.GetAllCommands(directory)
 
 		var commandList []Command
 		for name, cmd := range commands {
@@ -713,14 +774,28 @@ func commandsForType(typeName, directory string) ([]Command, error) {
 				Type:    typeName,
 			})
 		}
-		return commandList, nil
+
+		var warning *Warning
+		if parseErr != nil {
+			reason := parseErr.Error()
+			if errors.Is(parseErr, parsers.ErrParserTimeout) {
+				reason = fmt.Sprintf("%s parser timed out; only its base commands are available", typeName)
+			}
+			warning = &Warning{
+				Kind:   "parser",
+				Scope:  "location",
+				Name:   typeName,
+				Reason: reason,
+			}
+		}
+		return commandList, warning, nil
 	}
 
 	// Fallback to old behavior for backward compatibility.
 	configFile := filepath.Join(directory, projectType.DetectConfigFile())
 	projectCommands, err := projectType.ParseCommands(configFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse commands for location %s: %w", directory, err)
+		return nil, nil, fmt.Errorf("failed to parse commands for location %s: %w", directory, err)
 	}
 
 	var commandList []Command
@@ -735,7 +810,7 @@ func commandsForType(typeName, directory string) ([]Command, error) {
 			Type:    typeName,
 		})
 	}
-	return commandList, nil
+	return commandList, nil, nil
 }
 
 // fileExists checks if a file exists

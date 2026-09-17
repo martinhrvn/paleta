@@ -54,10 +54,12 @@ func ParseAndFormatCommands(directory string, config ParserConfig) (map[string]s
 		commands[key] = cmd
 	}
 
-	// Parse additional commands
+	// Parse additional commands. A parser failure (a broken Makefile, a missing
+	// `mvn`, a command that timed out) returns the base commands alongside the
+	// error so the caller can degrade to them instead of losing the location.
 	parsedKeys, err := parser.ParseCommands(directory, config)
 	if err != nil {
-		return nil, err
+		return commands, err
 	}
 
 	// Apply command template to parsed commands

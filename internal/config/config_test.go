@@ -368,7 +368,7 @@ func TestProcessProjectTypesWithEmptyLocation(t *testing.T) {
 	}
 
 	// Process project types
-	err = processProjectTypes(config)
+	_, err = processProjectTypes(config)
 	if err != nil {
 		t.Errorf("processProjectTypes() failed with empty location: %v", err)
 	}

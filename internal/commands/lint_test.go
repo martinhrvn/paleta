@@ -269,3 +269,20 @@ func TestFixConfigFile_SkipsRenameWhenBothKeysPresent(t *testing.T) {
 		t.Errorf("file was rewritten:\n%s", out)
 	}
 }
+
+func TestFormatLintReport_ParserKind(t *testing.T) {
+	report := FormatLintReport([]config.Warning{{
+		Kind:    "parser",
+		Scope:   "location",
+		Context: "infra",
+		Name:    "gradle",
+		Reason:  "gradle parser timed out; only its base commands are available",
+	}})
+
+	if !strings.Contains(report, "infra") || !strings.Contains(report, "timed out") {
+		t.Errorf("report missing detail, got %q", report)
+	}
+	if strings.Contains(report, "@project:command aliases") {
+		t.Errorf("parser report should not print name-charset guidance, got %q", report)
+	}
+}

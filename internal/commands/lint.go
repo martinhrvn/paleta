@@ -194,7 +194,8 @@ func FormatLintReport(warnings []config.Warning) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d issue(s) found:\n", len(warnings))
 
-	nameIssues, aliasIssues, toolIssues, deprecatedIssues, ignoredIssues := 0, 0, 0, 0, 0
+	nameIssues, aliasIssues, toolIssues := 0, 0, 0
+	deprecatedIssues, ignoredIssues, parserIssues := 0, 0, 0
 	for _, w := range warnings {
 		switch w.Kind {
 		case "alias":
@@ -209,6 +210,9 @@ func FormatLintReport(warnings []config.Warning) string {
 		case "ignored":
 			ignoredIssues++
 			fmt.Fprintf(&b, "  ignored %-6s in %q — %s\n", w.Name, w.Context, w.Reason)
+		case "parser":
+			parserIssues++
+			fmt.Fprintf(&b, "  parser failed in %q — %s\n", w.Context, w.Reason)
 		default:
 			nameIssues++
 			fmt.Fprintf(&b, "  %-9s %q — %s\n", w.Scope, w.Context, w.Reason)
@@ -247,6 +251,13 @@ func FormatLintReport(warnings []config.Warning) string {
 		}
 		b.WriteString("\n'exclude_locations:' and 'overrides:' only apply to a glob location, and\n")
 		b.WriteString("an override key must match a folder the glob expands to.")
+	}
+	if parserIssues > 0 {
+		if nameIssues > 0 || aliasIssues > 0 || toolIssues > 0 || deprecatedIssues > 0 || ignoredIssues > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString("\nA type whose parser failed still contributes its base commands. Check that\n")
+		b.WriteString("the tool runs in that directory (e.g. ./gradlew, mvn, make).")
 	}
 	return b.String()
 }

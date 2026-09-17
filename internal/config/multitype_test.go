@@ -113,7 +113,7 @@ func TestProcessProjectTypes_MultiType(t *testing.T) {
 		Location: dir,
 		Types:    Types{"npm", "docker"},
 	}}}
-	if err := processProjectTypes(cfg); err != nil {
+	if _, err := processProjectTypes(cfg); err != nil {
 		t.Fatalf("processProjectTypes: %v", err)
 	}
 
@@ -147,7 +147,7 @@ func TestProcessProjectTypes_ComposeGlobOnly(t *testing.T) {
 		Location: dir,
 		Types:    Types{"compose"},
 	}}}
-	if err := processProjectTypes(cfg); err != nil {
+	if _, err := processProjectTypes(cfg); err != nil {
 		t.Fatalf("processProjectTypes: %v", err)
 	}
 

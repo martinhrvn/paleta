@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -131,6 +132,13 @@ type Model struct {
 	// Viewport scrolling
 	viewportOffset int
 
+	// spinner animates the placeholder rows of locations still being resolved.
+	spinner spinner.Model
+
+	// resolvePending resolves a location's deferred project types in the
+	// background. nil means config.ResolvePendingTypes; tests substitute their own.
+	resolvePending func(config.Location) ([]config.Command, []config.Warning)
+
 	// State
 	quitting bool
 }
@@ -151,6 +159,10 @@ func NewModel(cfg *config.Config, focus *FocusStore) Model {
 	sv.Prompt = "Save as> "
 	sv.PromptStyle = editPromptStyle
 
+	sp := spinner.New()
+	sp.Spinner = spinner.MiniDot
+	sp.Style = listLocationStyle
+
 	m := Model{
 		config:          cfg,
 		frecencyEnabled: cfg.Frecency.Enabled,
@@ -159,6 +171,7 @@ func NewModel(cfg *config.Config, focus *FocusStore) Model {
 		searchInput:     si,
 		editInput:       ei,
 		saveInput:       sv,
+		spinner:         sp,
 		mux:             mux.DetectEnv(),
 	}
 
@@ -174,9 +187,15 @@ func NewModel(cfg *config.Config, focus *FocusStore) Model {
 	return m
 }
 
-// Init implements tea.Model
+// Init implements tea.Model. Besides the cursor blink it kicks off one background
+// command per location whose project types still have to be resolved, so the
+// palette paints immediately and those rows fill in as they arrive.
 func (m Model) Init() tea.Cmd {
-	return textinput.Blink
+	cmds := m.resolvePendingCmds()
+	if len(cmds) > 0 {
+		cmds = append(cmds, m.spinner.Tick)
+	}
+	return tea.Batch(append(cmds, textinput.Blink)...)
 }
 
 // Update implements tea.Model
@@ -186,6 +205,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
+
+	case pendingResolvedMsg:
+		m.applyPendingResolved(msg)
+		return m, nil
+
+	case spinner.TickMsg:
+		// Keep ticking only while something is still resolving.
+		if !m.config.HasPendingTypes() {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 
 	case tea.KeyMsg:
 		if m.queueEditing {
@@ -606,6 +638,19 @@ func (m *Model) loadCommands() {
 			}
 			m.commands = append(m.commands, info)
 		}
+
+		// A location whose types are still resolving gets a placeholder so the
+		// palette shows that something is on its way rather than looking empty.
+		// The marker is swapped for the live spinner frame at render time.
+		if len(location.PendingTypes) > 0 {
+			m.commands = append(m.commands, CommandInfo{
+				Display: fmt.Sprintf("%s: %s %s…", displayName, loadingRowMarker,
+					strings.Join(location.PendingTypes, ", ")),
+				Directory:   location.Location,
+				DisplayName: displayName,
+				Loading:     true,
+			})
+		}
 	}
 
 	// Append enabled tools at the end of the list. They are project-global (not
@@ -687,7 +732,7 @@ func (m Model) formatListItem(index, queuePos int, matched map[int]bool) string 
 	if queuePos > 0 {
 		prefix = selectedMarkStyle.Render(queueBadgePlain(queuePos))
 	}
-	display := m.filteredCommands[index].Display
+	display := m.rowDisplay(index)
 	return prefix + rowContent(display, matched, listLocationStyle, listCommandStyle, matchStyle, m.filteredCommands[index].Invalid, m.filteredCommands[index].Type)
 }
 
@@ -698,7 +743,7 @@ func (m Model) renderCursorRow(index, queuePos int, matched map[int]bool, width 
 	if index < 0 || index >= len(m.filteredCommands) {
 		return ""
 	}
-	display := m.filteredCommands[index].Display
+	display := m.rowDisplay(index)
 	typ := m.filteredCommands[index].Type
 	badgePlain := queueBadgePlain(queuePos)
 	badgeStyle := selBaseStyle
@@ -721,7 +766,7 @@ func (m Model) renderQueuedRow(index, queuePos int, matched map[int]bool, width 
 	if index < 0 || index >= len(m.filteredCommands) {
 		return ""
 	}
-	display := m.filteredCommands[index].Display
+	display := m.rowDisplay(index)
 	typ := m.filteredCommands[index].Type
 	badgePlain := queueBadgePlain(queuePos)
 	content := queuedBadgeStyle.Render(badgePlain) + rowContent(display, matched, queuedBaseStyle, queuedBaseStyle, queuedHlStyle, m.filteredCommands[index].Invalid, typ)
@@ -1066,6 +1111,10 @@ func (m *Model) toggleSelection(index int) {
 	if index < 0 || index >= len(m.filteredCommands) {
 		return
 	}
+	// A placeholder for a still-resolving location has nothing to queue.
+	if m.filteredCommands[index].Loading {
+		return
+	}
 	m.enqueueToggle(m.filteredCommands[index])
 }
 
@@ -1085,6 +1134,9 @@ func (m *Model) enqueueToggle(c CommandInfo) {
 func (m *Model) toggleSelectAll() {
 	allQueued := true
 	for i := range m.filteredCommands {
+		if m.filteredCommands[i].Loading {
+			continue
+		}
 		if _, ok := m.queuePos(m.filteredCommands[i]); !ok {
 			allQueued = false
 			break
@@ -1095,6 +1147,9 @@ func (m *Model) toggleSelectAll() {
 		return
 	}
 	for i := range m.filteredCommands {
+		if m.filteredCommands[i].Loading {
+			continue
+		}
 		if _, ok := m.queuePos(m.filteredCommands[i]); !ok {
 			m.queue = append(m.queue, m.filteredCommands[i])
 		}
@@ -1123,8 +1178,10 @@ func (m Model) getSelectedCommands() []SelectionResult {
 		})
 	}
 
-	// If nothing queued, return the current item under the cursor.
-	if len(results) == 0 && m.currentIndex >= 0 && m.currentIndex < len(m.filteredCommands) {
+	// If nothing queued, return the current item under the cursor — unless it is a
+	// placeholder for a location still being resolved, which has no command.
+	if len(results) == 0 && m.currentIndex >= 0 && m.currentIndex < len(m.filteredCommands) &&
+		!m.filteredCommands[m.currentIndex].Loading {
 		cmd := m.filteredCommands[m.currentIndex]
 		results = append(results, SelectionResult{
 			Directory:   cmd.Directory,
@@ -1311,4 +1368,83 @@ func (m *Model) Run() ([]SelectionResult, bool, error) {
 	}
 
 	return fm.results, false, nil
+}
+
+// loadingRowMarker stands in for the spinner frame inside a placeholder row's
+// Display. The row text is built once in loadCommands, but the frame changes on
+// every tick, so rowDisplay substitutes the current one at render time. It is a
+// single character, matching a spinner frame's width, so the fuzzy-match indices
+// computed against Display still line up with what gets rendered.
+const loadingRowMarker = "\x00"
+
+// pendingResolvedMsg carries the outcome of resolving one location's deferred
+// project types (see config.ResolvePendingTypes). index is the location's
+// position in the config, so results land in the location's own slot no matter
+// what order they arrive in.
+type pendingResolvedMsg struct {
+	index    int
+	commands []config.Command
+	warnings []config.Warning
+}
+
+// resolvePendingCmds returns one background command per location with types left
+// to resolve. They run concurrently and each sends a pendingResolvedMsg when it
+// finishes, so a slow `./gradlew tasks --all` never delays the palette opening —
+// its rows just appear a moment later.
+func (m Model) resolvePendingCmds() []tea.Cmd {
+	resolve := m.resolvePending
+	if resolve == nil {
+		resolve = config.ResolvePendingTypes
+	}
+
+	var cmds []tea.Cmd
+	for i := range m.config.Locations {
+		if len(m.config.Locations[i].PendingTypes) == 0 {
+			continue
+		}
+		index := i
+		loc := m.config.Locations[i]
+		cmds = append(cmds, func() tea.Msg {
+			commands, warnings := resolve(loc)
+			return pendingResolvedMsg{index: index, commands: commands, warnings: warnings}
+		})
+	}
+	return cmds
+}
+
+// applyPendingResolved merges a resolved location's commands into the config and
+// rebuilds the list, preserving the row the cursor is on.
+func (m *Model) applyPendingResolved(msg pendingResolvedMsg) {
+	if msg.index < 0 || msg.index >= len(m.config.Locations) {
+		return
+	}
+
+	if msg.commands != nil {
+		m.config.Locations[msg.index].Commands = msg.commands
+	}
+	m.config.Locations[msg.index].PendingTypes = nil
+	m.config.Warnings = append(m.config.Warnings, msg.warnings...)
+
+	m.loadCommands()
+	m.updateFilteredCommands()
+}
+
+// SetPendingResolver overrides how deferred project types are resolved. Used by
+// tests; production uses config.ResolvePendingTypes.
+func (m *Model) SetPendingResolver(resolve func(config.Location) ([]config.Command, []config.Warning)) {
+	m.resolvePending = resolve
+}
+
+// rowDisplay is the text for a list row. A placeholder for a location whose
+// types are still resolving gets the live spinner frame, so the row reads
+// "infra: ⠋ make…" and animates until the real commands replace it.
+func (m Model) rowDisplay(index int) string {
+	if index < 0 || index >= len(m.filteredCommands) {
+		return ""
+	}
+	row := m.filteredCommands[index]
+	if !row.Loading {
+		return row.Display
+	}
+	return strings.Replace(row.Display, loadingRowMarker, m.spinner.View(), 1)
 }

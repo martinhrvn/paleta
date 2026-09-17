@@ -164,6 +164,9 @@ func handleListCommand() {
 	if err != nil {
 		exitConfigError(err)
 	}
+	// Scripts consume this output, so wait for the types the selector would load
+	// in the background rather than printing a partial list.
+	config.ResolveAllPending(cfg)
 	attachTools(cfg)
 
 	// Generate command list
@@ -282,6 +285,7 @@ func handleLintCommand() {
 	if err != nil {
 		exitConfigError(err)
 	}
+	config.ResolveAllPending(cfg)
 	// Resolve tools so unknown enabled tools are reported alongside name/alias issues.
 	attachTools(cfg)
 	fmt.Println(commands.FormatLintReport(cfg.Warnings))
@@ -322,6 +326,7 @@ func lintFix() {
 		fmt.Fprintf(os.Stderr, "Error reloading config after fix: %v\n", err)
 		os.Exit(1)
 	}
+	config.ResolveAllPending(cfg)
 	if len(cfg.Warnings) > 0 {
 		fmt.Println()
 		fmt.Println(commands.FormatLintReport(cfg.Warnings))

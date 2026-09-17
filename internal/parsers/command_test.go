@@ -1,8 +1,10 @@
 package parsers
 
 import (
+	"errors"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestCommandParserEmptyCommand(t *testing.T) {
@@ -64,5 +66,45 @@ func TestCommandParserCommandFailure(t *testing.T) {
 	_, err := parser.ParseCommands(t.TempDir(), cfg)
 	if err == nil {
 		t.Fatal("expected error when parser command fails, got nil")
+	}
+}
+
+// TestCommandParser_TimesOut pins that a hanging parser command can't stall a
+// `plt` launch: it returns promptly with the timeout sentinel.
+func TestCommandParser_TimesOut(t *testing.T) {
+	parser := &CommandParser{}
+	old := ParserCommandTimeout
+	ParserCommandTimeout = 150 * time.Millisecond
+	defer func() { ParserCommandTimeout = old }()
+
+	start := time.Now()
+	_, err := parser.ParseCommands(t.TempDir(), ParserConfig{ParserCommand: "sleep 30"})
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, ErrParserTimeout) {
+		t.Fatalf("err = %v, want ErrParserTimeout", err)
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("took %s, want the parser to be abandoned near the timeout", elapsed)
+	}
+}
+
+// TestCommandParser_TimeoutDoesNotWaitForOrphan covers a child that keeps the
+// stdout pipe open past the deadline: WaitDelay must cut it loose.
+func TestCommandParser_TimeoutDoesNotWaitForOrphan(t *testing.T) {
+	parser := &CommandParser{}
+	old := ParserCommandTimeout
+	ParserCommandTimeout = 150 * time.Millisecond
+	defer func() { ParserCommandTimeout = old }()
+
+	start := time.Now()
+	_, err := parser.ParseCommands(t.TempDir(), ParserConfig{ParserCommand: "sleep 30 & echo build; wait"})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatalf("expected an error, got none")
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("took %s, want the orphaned child not to block the return", elapsed)
 	}
 }

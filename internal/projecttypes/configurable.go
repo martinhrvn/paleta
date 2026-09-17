@@ -88,3 +88,11 @@ func (c *ConfigurableProjectType) CanHandleDirectory(directory string) bool {
 func (c *ConfigurableProjectType) GetAllCommands(directory string) (map[string]string, error) {
 	return parsers.ParseAndFormatCommands(directory, c.parserConfig)
 }
+
+// DefersLoading reports whether this type's command list comes from running a
+// shell command (`./gradlew tasks --all`, a `make -qp` pipeline) rather than from
+// reading a file. Callers resolve these in the background instead of blocking a
+// config load on them.
+func (c *ConfigurableProjectType) DefersLoading() bool {
+	return c.parserConfig.ParserCommand != ""
+}
