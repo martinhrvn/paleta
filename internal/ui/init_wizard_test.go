@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -26,22 +27,42 @@ func configuredFirstItems() []WizardItem {
 	}
 }
 
-func TestWizard_PreselectsConfiguredOnly(t *testing.T) {
+// TestWizard_PreselectsEverything: the wizard opens with everything ticked, so a
+// first run is one keystroke and a repeat run reads as "add the new ones". The
+// interaction is unticking what you don't want.
+func TestWizard_PreselectsEverything(t *testing.T) {
 	m := NewWizardModel(wizardItems())
 	for i, it := range m.items {
-		if it.Configured && !m.selected[i] {
-			t.Errorf("configured item %d should be pre-selected", i)
-		}
-		if !it.Configured && m.selected[i] {
-			t.Errorf("non-configured item %d should not be pre-selected", i)
+		if !m.selected[i] {
+			t.Errorf("item %d (%s) should be pre-selected", i, it.Location.Location)
 		}
 	}
 }
 
-func TestWizard_CursorStartsAtFirstUnselected(t *testing.T) {
+func TestWizard_CursorStartsAtTop(t *testing.T) {
 	m := NewWizardModel(configuredFirstItems())
-	if m.cursor != 2 {
-		t.Errorf("expected cursor at first unselected item (2), got %d", m.cursor)
+	if m.cursor != 0 {
+		t.Errorf("expected cursor at the top, got %d", m.cursor)
+	}
+}
+
+// TestWizard_RowMarksNewItems: with everything preselected, the tick no longer
+// distinguishes a newly detected project from one already in the config, so the
+// row has to say which is which.
+func TestWizard_RowMarksNewItems(t *testing.T) {
+	m := NewWizardModel(configuredFirstItems())
+
+	configuredRow := m.formatRow(0) // packages/web, already configured
+	newRow := m.formatRow(2)        // packages/api, newly detected
+
+	if !strings.Contains(configuredRow, "configured") {
+		t.Errorf("configured row = %q, want it marked", configuredRow)
+	}
+	if strings.Contains(configuredRow, "new") {
+		t.Errorf("configured row = %q, should not be marked new", configuredRow)
+	}
+	if !strings.Contains(newRow, "new") {
+		t.Errorf("newly detected row = %q, want it marked new", newRow)
 	}
 }
 
@@ -71,26 +92,25 @@ func TestWizard_Toggle(t *testing.T) {
 
 func TestWizard_ToggleAll(t *testing.T) {
 	m := NewWizardModel(wizardItems())
-	// Not all start selected; Ctrl+A should select all.
-	m.toggleAll()
-	for i := range m.items {
-		if !m.selected[i] {
-			t.Errorf("item %d should be selected after toggleAll", i)
-		}
-	}
-	// Ctrl+A again should deselect all.
+	// Everything starts selected, so Ctrl+A clears.
 	m.toggleAll()
 	for i := range m.items {
 		if m.selected[i] {
-			t.Errorf("item %d should be deselected after second toggleAll", i)
+			t.Errorf("item %d should be deselected after toggleAll", i)
+		}
+	}
+	// Ctrl+A again should select all.
+	m.toggleAll()
+	for i := range m.items {
+		if !m.selected[i] {
+			t.Errorf("item %d should be selected after second toggleAll", i)
 		}
 	}
 }
 
 func TestWizard_SelectedLocationsAfterConfirm(t *testing.T) {
 	m := NewWizardModel(wizardItems())
-	m.toggle(0) // add the detected-only root
-	m.toggle(2) // drop the glob
+	m.toggle(2) // everything starts ticked; drop the glob
 	m.confirmed = true
 
 	locs := m.SelectedLocations()
@@ -192,40 +212,35 @@ func TestWizard_ClearSearch(t *testing.T) {
 	}
 }
 
-func TestWizard_TabSelectsAndAdvances(t *testing.T) {
-	// Cursor starts on the first unselected item (the "api" candidate at index 2).
+func TestWizard_TabTogglesAndAdvances(t *testing.T) {
+	// Everything starts ticked, so Tab on the cursor row unticks it.
 	m := NewWizardModel(configuredFirstItems())
-	if m.cursor != 2 {
-		t.Fatalf("precondition: expected cursor 2, got %d", m.cursor)
+	if m.cursor != 0 {
+		t.Fatalf("precondition: expected cursor 0, got %d", m.cursor)
 	}
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = updated.(WizardModel)
-	if !m.selected[2] {
-		t.Error("expected Tab to select the item under the cursor")
+	if m.selected[0] {
+		t.Error("expected Tab to untick the item under the cursor")
 	}
-	if m.cursor != 3 {
-		t.Errorf("expected Tab to advance cursor to 3, got %d", m.cursor)
+	if m.cursor != 1 {
+		t.Errorf("expected Tab to advance cursor to 1, got %d", m.cursor)
 	}
 }
 
 func TestWizard_SelectionPersistsAcrossFilter(t *testing.T) {
-	// Select the "api" candidate (index 2), then filter it out of view.
+	// Untick the "api" candidate (index 2), then filter it out of view.
 	m := NewWizardModel(configuredFirstItems())
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	m = updated.(WizardModel)
+	m.toggle(2)
 	m = typeRunes(m, "web")
 	if len(m.filtered) != 1 {
 		t.Fatalf("expected 'web' to narrow to 1 item, got %d", len(m.filtered))
 	}
 	m.confirmed = true
 	locs := m.SelectedLocations()
-	var found bool
 	for _, l := range locs {
 		if l.Location == "packages/api" {
-			found = true
+			t.Errorf("expected the filtered-out deselection to persist; got %+v", locs)
 		}
-	}
-	if !found {
-		t.Errorf("expected filtered-out selection to persist; got %+v", locs)
 	}
 }

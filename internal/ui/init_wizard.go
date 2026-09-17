@@ -44,22 +44,24 @@ type WizardModel struct {
 	quitting       bool
 }
 
-// NewWizardModel creates a wizard model with only the already-configured items
-// pre-selected, so re-running the wizard defaults to the current config rather
-// than sweeping in every newly detected project. The cursor starts on the first
-// unselected item — the first candidate the user might want to add — falling
-// back to the top when everything is already selected.
+// NewWizardModel creates a wizard model with every item pre-selected, so the
+// common cases are a single keystroke: Enter on a first run takes the whole
+// detected set, and Enter on a repeat run (Ctrl+N) keeps the current config and
+// adds what's new. Rows say which items were already configured and which are
+// newly detected, since the ticks no longer distinguish them.
 func NewWizardModel(items []WizardItem) WizardModel {
 	si := textinput.New()
 	si.Prompt = "> "
 	si.PromptStyle = searchPromptStyle
 	si.Focus()
 
+	// Everything starts ticked: on a first run Enter accepts the whole detected
+	// set, and on a repeat run (Ctrl+N) the already-configured locations stay put
+	// while the newly detected ones come along, so the wizard reads as "add the
+	// new projects". Unticking is how you leave something out.
 	selected := make(map[int]bool, len(items))
-	for i, it := range items {
-		if it.Configured {
-			selected[i] = true
-		}
+	for i := range items {
+		selected[i] = true
 	}
 
 	m := WizardModel{
@@ -68,7 +70,6 @@ func NewWizardModel(items []WizardItem) WizardModel {
 		searchInput: si,
 	}
 	m.applyFilter()
-	m.cursor = m.firstUnselectedPos()
 	m.adjustViewport()
 	return m
 }
@@ -92,17 +93,6 @@ func (m *WizardModel) applyFilter() {
 func itemSearchText(it WizardItem) string {
 	parts := append([]string{it.Location.Name, it.Location.Location}, it.Location.Types...)
 	return strings.Join(parts, " ")
-}
-
-// firstUnselectedPos returns the filtered position of the first unselected item,
-// or 0 when everything visible is already selected.
-func (m WizardModel) firstUnselectedPos() int {
-	for pos, orig := range m.filtered {
-		if !m.selected[orig] {
-			return pos
-		}
-	}
-	return 0
 }
 
 // toggle flips the selection state of the item at filtered position pos.
@@ -322,8 +312,11 @@ func (m WizardModel) formatRow(pos int) string {
 	if len(it.Location.Types) > 0 {
 		line += " " + listLocationStyle.Render("("+strings.Join(it.Location.Types, ", ")+")")
 	}
-	if it.Configured {
+	switch {
+	case it.Configured:
 		line += " " + statusGreenStyle.Render("(configured)")
+	case it.Detected:
+		line += " " + statusYellowStyle.Render("(new)")
 	}
 
 	if pos == m.cursor {
@@ -334,9 +327,9 @@ func (m WizardModel) formatRow(pos int) string {
 
 func (m WizardModel) helpLine() string {
 	parts := []struct{ key, desc string }{
-		{"tab", "select"},
+		{"tab", "toggle"},
 		{"enter", "confirm"},
-		{"^a", "all"},
+		{"^a", "all/none"},
 		{"^u", "clear"},
 		{"esc", "cancel"},
 	}
