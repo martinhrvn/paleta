@@ -99,11 +99,14 @@ The project types we should support intitally are:
 - [x] automatically detect type of a location based on presence of package.json/go.mod/etc.
   - [x] interactive `plt init` wizard: scans the tree (git-aware, skips gitignored/`node_modules`/etc.), multi-select detected projects, generates `.pltrc`
   - [x] repeatable: existing `.pltrc` loaded as starting state (configured locations pre-selected & tagged, merged on save)
+  - [x] everything starts ticked, so Enter accepts the detected set; rows are tagged `(configured)` / `(new)`
+  - [x] names are assigned across the whole set — the folder name when it's free, the relative path when two folders would both be called `web`
+  - [x] three or more sibling folders are written as a glob (`packages/*`, with unticked siblings in `exclude_locations`); `^g` toggles it off, and affected rows show `→ packages/*` before you confirm
   - [x] static template preserved behind `plt init --template`
   - [ ] (future) drill into a selected folder to include/exclude individual detected commands
 - [x] support multiple types per location (`type: [npm, docker]`); commands from all types are merged, and when a location has >1 type each command is labelled with its type in the selector (e.g. `svc: [npm] build` / `svc: [docker] build`)
   - [x] `plt init` auto-detects all matching types per folder and generates multi-type locations
-  - [ ] (future) per-type toggling within a folder in the wizard
+  - [x] per-type toggling within a folder in the wizard (`[x] pnpm` / `[ ] docker` rows under the location; a type detected since the location was written is offered unticked, since ticking it relabels that location's existing rows)
 - [x] history of executed commands
    - [x] store in a file (per project in ~/.paleta/history/)
    - [x] default sort by frecency of use (50/50 balance)

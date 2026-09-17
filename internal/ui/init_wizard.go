@@ -49,7 +49,10 @@ type WizardModel struct {
 	selected map[int]bool // keyed by original item index, so it survives filtering
 	// types holds each location's ticked project types, keyed by item index. Like
 	// selected, it is keyed by the original index so it survives filtering.
-	types  map[int]map[string]bool
+	types map[int]map[string]bool
+	// globs writes sibling folders as a glob (`packages/*`) rather than one entry
+	// each. On by default; ^g turns it off. See config.CollapseSiblingsToGlobs.
+	globs  bool
 	cursor int // position within rows
 	width  int
 	height int
@@ -95,6 +98,7 @@ func NewWizardModel(items []WizardItem) WizardModel {
 		items:       items,
 		selected:    selected,
 		types:       types,
+		globs:       true,
 		searchInput: si,
 	}
 	m.applyFilter()
@@ -219,13 +223,26 @@ func (m WizardModel) allFilteredSelected() bool {
 	return true
 }
 
-// SelectedLocations returns the locations the user kept, in list order. It
-// returns nil unless the selection was confirmed.
+// SelectedLocations returns the locations the user kept, in list order, with
+// sibling folders collapsed into globs unless ^g turned that off. It returns nil
+// unless the selection was confirmed.
 func (m WizardModel) SelectedLocations() []config.Location {
 	if !m.confirmed {
 		return nil
 	}
+	locs, _ := m.selection()
+	if !m.globs {
+		return locs
+	}
+	return config.CollapseSiblingsToGlobs(locs, m.deselection())
+}
+
+// selection returns the ticked locations with their ticked types applied, plus
+// the item index each one came from — the wizard maps a collapse plan back onto
+// its rows through that index.
+func (m WizardModel) selection() ([]config.Location, []int) {
 	var locs []config.Location
+	var from []int
 	for i, it := range m.items {
 		if !m.selected[i] {
 			continue
@@ -235,8 +252,37 @@ func (m WizardModel) SelectedLocations() []config.Location {
 			loc.Types = m.selectedTypes(i)
 		}
 		locs = append(locs, loc)
+		from = append(from, i)
+	}
+	return locs, from
+}
+
+// deselection returns the locations the user unticked, so a glob that would pull
+// one back in can name it in exclude_locations.
+func (m WizardModel) deselection() []config.Location {
+	var locs []config.Location
+	for i, it := range m.items {
+		if !m.selected[i] {
+			locs = append(locs, it.Location)
+		}
 	}
 	return locs
+}
+
+// globAnnotations maps an item index to the glob its row would be folded into,
+// so the rows a collapse absorbs can say so before Enter is pressed.
+func (m WizardModel) globAnnotations() map[int]string {
+	if !m.globs {
+		return nil
+	}
+	locs, from := m.selection()
+	out := make(map[int]string)
+	for _, group := range config.PlanGlobCollapse(locs, m.deselection()) {
+		for _, idx := range group.Members {
+			out[from[idx]] = group.Pattern
+		}
+	}
+	return out
 }
 
 func (m WizardModel) Init() tea.Cmd {
@@ -281,6 +327,9 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case tea.KeyCtrlA:
 			m.toggleAll()
+			return m, nil
+		case tea.KeyCtrlG:
+			m.globs = !m.globs
 			return m, nil
 		case tea.KeyCtrlL, tea.KeyCtrlU:
 			m.searchInput.SetValue("")
@@ -379,9 +428,10 @@ func (m WizardModel) renderList() string {
 		end = len(m.rows)
 	}
 
+	annotations := m.globAnnotations()
 	var lines []string
 	for pos := start; pos < end; pos++ {
-		lines = append(lines, m.formatRow(pos))
+		lines = append(lines, m.formatRowWith(pos, annotations))
 	}
 	for len(lines) < height {
 		lines = append(lines, "")
@@ -389,7 +439,13 @@ func (m WizardModel) renderList() string {
 	return strings.Join(lines, "\n")
 }
 
+// formatRow renders one row on its own. renderList uses formatRowWith instead so
+// the collapse plan is computed once per frame rather than once per row.
 func (m WizardModel) formatRow(pos int) string {
+	return m.formatRowWith(pos, m.globAnnotations())
+}
+
+func (m WizardModel) formatRowWith(pos int, globs map[int]string) string {
 	if pos < 0 || pos >= len(m.rows) {
 		return ""
 	}
@@ -408,6 +464,11 @@ func (m WizardModel) formatRow(pos int) string {
 			line += " " + statusGreenStyle.Render("(configured)")
 		case it.Detected:
 			line += " " + statusYellowStyle.Render("(new)")
+		}
+		// Say what this row will actually be written as, since the glob is not
+		// what was ticked.
+		if pattern := globs[row.item]; pattern != "" {
+			line += " " + helpStyle.Render("→ "+pattern)
 		}
 	} else {
 		line = fmt.Sprintf("   %s %s", checkMark(m.types[row.item][row.typ]), listCommandStyle.Render(row.typ))
@@ -442,10 +503,15 @@ func containsString(list []string, want string) bool {
 }
 
 func (m WizardModel) helpLine() string {
+	globs := "globs on"
+	if !m.globs {
+		globs = "globs off"
+	}
 	parts := []struct{ key, desc string }{
 		{"tab", "toggle"},
 		{"enter", "confirm"},
 		{"^a", "all/none"},
+		{"^g", globs},
 		{"^u", "clear"},
 		{"esc", "cancel"},
 	}
