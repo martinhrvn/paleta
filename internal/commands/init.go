@@ -30,20 +30,34 @@ var runWizard = func(items []ui.WizardItem) ([]config.Location, bool, error) {
 	return wizard.Run()
 }
 
-// RunInitWizard scans the current directory, lets the user pick which projects
-// to include, and writes the resulting .pltrc, preserving any existing config as
-// the starting state. It performs no stdout output, so it is safe to call from
-// within `plt select` (whose stdout carries the selection JSON). Callers decide
-// how to report the returned outcome.
-func RunInitWizard(configPath string) (InitOutcome, error) {
-	cands, err := scan.Scan(".")
+// RunInitWizard scans root, lets the user pick which projects to include, and
+// writes root's .pltrc, preserving any existing config there as the starting
+// state. Scanning and writing share one root on purpose: the paths in the file
+// are relative to it, so a wizard run from somewhere else would write locations
+// that point at the wrong folders. It performs no stdout output, so it is safe to
+// call from within `plt select` (whose stdout carries the selection JSON).
+// Callers decide how to report the returned outcome.
+//
+// An existing config that can't be parsed stops the run: the wizard's job is to
+// preserve what is already configured, and it can't do that from a file it can't
+// read. force ignores it and starts from the scan instead, replacing the file.
+func RunInitWizard(root string, force bool) (InitOutcome, error) {
+	if root == "" {
+		root = "."
+	}
+	configPath := filepath.Join(root, config.ConfigFileName)
+
+	cands, err := scan.Scan(root)
 	if err != nil {
 		return InitNoProjects, fmt.Errorf("scanning for projects: %w", err)
 	}
 
-	authored, err := LoadAuthoredConfig(configPath)
-	if err != nil {
-		return InitNoProjects, fmt.Errorf("reading existing config: %w", err)
+	var authored *config.Config
+	if !force {
+		authored, err = LoadAuthoredConfig(configPath)
+		if err != nil {
+			return InitNoProjects, err
+		}
 	}
 
 	items := BuildWizardItems(cands, authored)
@@ -73,21 +87,34 @@ func RunInitWizard(configPath string) (InitOutcome, error) {
 // resolution, glob expansion, or project-type processing that config.LoadConfig
 // applies. This preserves relative paths, globs, and hand-written commands so a
 // repeat run of the wizard can round-trip them. Returns (nil, nil) when the file
-// does not exist.
+// does not exist; a file that exists but can't be read or parsed comes back as a
+// config.InvalidConfigError, so callers can report it exactly as they report a
+// failed load — naming the file rather than a bare line number.
 func LoadAuthoredConfig(configPath string) (*config.Config, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, invalidConfig(configPath, err)
 	}
 
 	var cfg config.Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, invalidConfig(configPath, err)
 	}
 	return &cfg, nil
+}
+
+// invalidConfig names the offending file the way config.LoadConfig does, in
+// absolute terms — the wizard may be running from a directory the user did not
+// pick themselves (see Bootstrap).
+func invalidConfig(configPath string, err error) error {
+	path := configPath
+	if abs, aerr := filepath.Abs(configPath); aerr == nil {
+		path = abs
+	}
+	return &config.InvalidConfigError{Path: path, Err: err}
 }
 
 // BuildWizardItems unions scan candidates with the locations from an existing

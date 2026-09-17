@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -82,23 +83,32 @@ func handleInitCommand() {
 		return
 	}
 
-	runInitWizard(configPath)
+	// `plt init` is explicit about where it runs: it scans and writes here, unlike
+	// a bare `plt`, which anchors to the repository root (commands.Bootstrap).
+	runInitWizard(".", force)
 }
 
 // runInitWizard scans for projects, lets the user pick which to include, and
 // writes the resulting .pltrc. An existing config is loaded as the starting
-// state so a repeat run shows and preserves what is already configured. The
-// wizard logic is shared with the in-app "add projects" flow (Ctrl+N).
-func runInitWizard(configPath string) {
-	outcome, err := commands.RunInitWizard(configPath)
+// state so a repeat run shows and preserves what is already configured; --force
+// ignores one that can't be parsed and starts from the scan. The wizard logic is
+// shared with the in-app "add projects" flow (Ctrl+N).
+func runInitWizard(root string, force bool) {
+	outcome, err := commands.RunInitWizard(root, force)
 	if err != nil {
+		// A config that exists but can't be read gets the "here's the file, here's
+		// the way out" treatment; anything else is a plain failure.
+		var invalid *config.InvalidConfigError
+		if errors.As(err, &invalid) {
+			exitConfigError(err)
+		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
 	switch outcome {
 	case commands.InitWritten:
-		printInitSuccess(configPath)
+		printInitSuccess(filepath.Join(root, config.ConfigFileName))
 	case commands.InitNoProjects:
 		fmt.Println("No projects detected in this directory tree.")
 		fmt.Println("Run 'plt init --template' to start from a sample configuration.")
@@ -127,14 +137,21 @@ func handleEditCommand() {
 	}
 }
 
-// exitConfigError reports a config-load failure and exits. When no configuration
-// exists at all, it prints a friendly hint to run `plt init` instead of the raw
-// error.
+// exitConfigError reports a config-load failure and exits. The two cases worth
+// spelling out are "there is no config" (say how to make one) and "this file is
+// broken" (say which file, and how to get out of it) — discovery walks up from
+// the working directory, so the user may never have seen the file it picked.
 func exitConfigError(err error) {
-	if errors.Is(err, config.ErrConfigNotFound) {
+	var invalid *config.InvalidConfigError
+	switch {
+	case errors.Is(err, config.ErrConfigNotFound):
 		fmt.Fprintln(os.Stderr, "No paleta configuration found here.")
 		fmt.Fprintln(os.Stderr, "Run 'plt init' to scan this folder and create a .pltrc.")
-	} else {
+	case errors.As(err, &invalid):
+		fmt.Fprintf(os.Stderr, "Can't load %s:\n", invalid.Path)
+		fmt.Fprintf(os.Stderr, "  %v\n", invalid.Err)
+		fmt.Fprintln(os.Stderr, "Open it with 'plt edit', or run 'plt init --force' to replace it with a fresh scan.")
+	default:
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 	}
 	os.Exit(1)
@@ -348,8 +365,9 @@ func lintFix() {
 
 	fixes, err := commands.FixConfigFile(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error fixing config: %v\n", err)
-		os.Exit(1)
+		// A file too broken to parse can't be repaired by rewriting names;
+		// exitConfigError says which file it is and how to get out of it.
+		exitConfigError(err)
 	}
 
 	if len(fixes) == 0 {

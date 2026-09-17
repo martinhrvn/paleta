@@ -3,6 +3,7 @@ package commands
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/martinhrvn/paleta/internal/config"
@@ -88,6 +89,92 @@ func TestBootstrap_NoConfigRunsWizard(t *testing.T) {
 	}
 }
 
+// TestBootstrap_WritesAtRepositoryRoot: a config belongs to the repository, not
+// to whichever folder the user happened to be standing in. Running `plt` deep in
+// a tree writes the .pltrc at the repo root and scans from there, so the paths in
+// it are the ones the whole team would have written.
+func TestBootstrap_WritesAtRepositoryRoot(t *testing.T) {
+	root := chdirTemp(t)
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(root, "services", "api")
+	writePackage(t, sub, "api")
+	if err := os.Chdir(sub); err != nil {
+		t.Fatal(err)
+	}
+	stubWizard(t, true)
+
+	outcome, err := Bootstrap()
+	if err != nil {
+		t.Fatalf("Bootstrap() error = %v", err)
+	}
+	if outcome != BootstrapWritten {
+		t.Fatalf("outcome = %v, want BootstrapWritten", outcome)
+	}
+
+	written, err := os.ReadFile(filepath.Join(root, config.ConfigFileName))
+	if err != nil {
+		t.Fatalf("no .pltrc at the repository root: %v", err)
+	}
+	if !strings.Contains(string(written), "services/api") {
+		t.Errorf("config written at the root doesn't describe the tree:\n%s", written)
+	}
+	if _, err := os.Stat(filepath.Join(sub, config.ConfigFileName)); !os.IsNotExist(err) {
+		t.Error("a .pltrc was also written in the working directory")
+	}
+
+	// The caller reloads config and resolves tools relative to where the user
+	// actually is, so the working directory has to come back unchanged.
+	if wd, _ := os.Getwd(); wd != sub {
+		t.Errorf("working directory = %q, want it restored to %q", wd, sub)
+	}
+}
+
+// TestBootstrap_GitFileIsAlsoARoot: submodules and linked worktrees have a .git
+// file rather than a directory.
+func TestBootstrap_GitFileIsAlsoARoot(t *testing.T) {
+	root := chdirTemp(t)
+	if err := os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: ../.git/worktrees/x\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(root, "packages", "web")
+	writePackage(t, sub, "web")
+	if err := os.Chdir(sub); err != nil {
+		t.Fatal(err)
+	}
+	stubWizard(t, true)
+
+	if _, err := Bootstrap(); err != nil {
+		t.Fatalf("Bootstrap() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, config.ConfigFileName)); err != nil {
+		t.Errorf("no .pltrc at the worktree root: %v", err)
+	}
+}
+
+// TestBootstrap_NoRepositoryUsesWorkingDirectory: outside a repository there is
+// nothing better to go on than where the user is standing.
+func TestBootstrap_NoRepositoryUsesWorkingDirectory(t *testing.T) {
+	root := chdirTemp(t)
+	sub := filepath.Join(root, "services", "api")
+	writePackage(t, sub, "api")
+	if err := os.Chdir(sub); err != nil {
+		t.Fatal(err)
+	}
+	stubWizard(t, true)
+
+	if _, err := Bootstrap(); err != nil {
+		t.Fatalf("Bootstrap() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sub, config.ConfigFileName)); err != nil {
+		t.Errorf("no .pltrc in the working directory: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, config.ConfigFileName)); !os.IsNotExist(err) {
+		t.Error("wrote outside the working directory with no repository to anchor to")
+	}
+}
+
 // TestBootstrap_RefusesHomeAndRoot: `plt` in $HOME (or above it) must not start
 // walking the user's whole home directory. `plt init` has always scanned the cwd,
 // but only when asked for by name.
@@ -121,6 +208,30 @@ func TestBootstrap_RefusesHomeAndRoot(t *testing.T) {
 		}
 		if *called {
 			t.Error("wizard ran in a parent of $HOME")
+		}
+	})
+
+	t.Run("repository rooted at home", func(t *testing.T) {
+		// Dotfiles repos make $HOME a git root, and the guard applies to the
+		// directory that would be written to, not to where the user is standing.
+		dir := chdirTemp(t)
+		t.Setenv("HOME", dir)
+		if err := os.MkdirAll(filepath.Join(dir, ".git"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		sub := filepath.Join(dir, "proj", "app")
+		writePackage(t, sub, "app")
+		if err := os.Chdir(sub); err != nil {
+			t.Fatal(err)
+		}
+		called := stubWizard(t, true)
+
+		outcome, _ := Bootstrap()
+		if outcome != BootstrapSkipped {
+			t.Errorf("outcome = %v, want BootstrapSkipped", outcome)
+		}
+		if *called {
+			t.Error("wizard ran for a repository rooted at $HOME")
 		}
 	})
 

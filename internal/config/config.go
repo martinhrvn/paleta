@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -475,16 +476,56 @@ func (c *Config) AnyFocused() bool {
 	return false
 }
 
+// InvalidConfigError reports a configuration file that exists but could not be
+// loaded: a YAML syntax error, an invalid glob pattern, an unknown project type.
+// It carries the file's path because the user rarely named that file — discovery
+// walks up from the working directory — so a bare "yaml: line 4" leaves them
+// hunting for which .pltrc is broken.
+type InvalidConfigError struct {
+	Path string // absolute where it could be resolved
+	Err  error
+}
+
+func (e *InvalidConfigError) Error() string {
+	return fmt.Sprintf("%s: %v", e.Path, e.Err)
+}
+
+func (e *InvalidConfigError) Unwrap() error { return e.Err }
+
+// LoadConfig reads, parses and processes one configuration file. Every failure
+// past "the file isn't there" is an *InvalidConfigError naming the file, so
+// callers can point the user at it rather than at a line number with no file.
 func LoadConfig(configPath string) (*Config, error) {
+	cfg, err := loadConfig(configPath)
+	if err == nil {
+		return cfg, nil
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, err // a missing file is the caller's to interpret, not a broken one
+	}
+	return nil, &InvalidConfigError{Path: absOrSelf(configPath), Err: err}
+}
+
+// absOrSelf renders a config path for a human. Discovery has chdir'd into the
+// config's directory by the time it loads, so the relative path a user would see
+// otherwise (".pltrc") wouldn't say which directory it came from.
+func absOrSelf(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
+}
+
+func loadConfig(configPath string) (*Config, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, fmt.Errorf("reading the file: %w", err)
 	}
 
 	var config Config
 	err = yaml.Unmarshal(data, &config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, fmt.Errorf("parsing YAML: %w", err)
 	}
 
 	// Apply default frecency config if not specified

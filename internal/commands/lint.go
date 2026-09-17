@@ -53,12 +53,12 @@ func isAlnum(r rune) bool {
 func FixConfigFile(path string) ([]NameFix, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, invalidConfig(path, err)
 	}
 
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, invalidConfig(path, err)
 	}
 
 	fixes := sanitizeConfigNode(&root)

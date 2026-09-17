@@ -173,7 +173,7 @@ func RunFzfTUI(cfg *config.Config, configPath string) ([]SelectionResult, error)
 		model.SetSaveStore(saveStore(configPath))
 		results, reinit, err := model.Run()
 		if reinit {
-			if _, ierr := RunInitWizard(configPath); ierr != nil {
+			if _, ierr := RunInitWizard(filepath.Dir(configPath), false); ierr != nil {
 				return nil, ierr
 			}
 			if reloaded, rerr := config.LoadConfigFromDiscovery(); rerr == nil {
