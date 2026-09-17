@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/martinhrvn/paleta/internal/parsers"
-	"github.com/martinhrvn/paleta/internal/projecttypes"
 	"gopkg.in/yaml.v3"
 )
 
@@ -40,11 +39,20 @@ type Config struct {
 	// surface them (the selector banner, `plt lint`) rather than failing the load.
 	// Never serialized.
 	Warnings []Warning `yaml:"-"`
-	// pendingWarnings holds issues found before collectConfigWarnings runs —
-	// deprecated keys (found at decode time) and glob-expansion notices — which
-	// would otherwise be lost when it rebuilds Warnings. Unexported, so yaml never
-	// sees it.
-	pendingWarnings []Warning
+	// Path is the local .pltrc this config was loaded from, when discovery found
+	// one. Empty for a global project (which has no single file to rewrite) and
+	// for a config loaded directly by path. Never serialized.
+	Path string `yaml:"-"`
+	// loadOpts remembers how Load assembled this config so Reload can do it again.
+	loadOpts LoadOptions
+	// baseDir is the directory relative location paths and glob patterns resolve
+	// against: the config file's own directory, or Root for a global project.
+	baseDir string
+	// loadWarnings holds the notices the load stages produce before the final
+	// warning pass (deprecated keys, glob-expansion notices, parser degradation,
+	// unknown tools). collectConfigWarnings rebuilds Warnings from them plus the
+	// name/alias checks, so a rebuild never loses them.
+	loadWarnings []Warning
 }
 
 // FrecencyConfig configures frecency sorting behavior
@@ -506,14 +514,46 @@ func LoadConfig(configPath string) (*Config, error) {
 	return nil, &InvalidConfigError{Path: absOrSelf(configPath), Err: err}
 }
 
-// absOrSelf renders a config path for a human. Discovery has chdir'd into the
-// config's directory by the time it loads, so the relative path a user would see
-// otherwise (".pltrc") wouldn't say which directory it came from.
+// absOrSelf renders a config path for a human: absolute, so a relative path a
+// caller passed (".pltrc") still says which directory it came from.
 func absOrSelf(path string) string {
 	if abs, err := filepath.Abs(path); err == nil {
 		return abs
 	}
 	return path
+}
+
+// loadStages is the pipeline every parsed config goes through, in order. The
+// order is a contract — each stage relies on the ones before it:
+//
+//  1. frecency defaults
+//  2. deprecated-key warnings: on the authored locations, before expansion, so
+//     one authored key yields one warning
+//  3. empty paths become "."
+//  4. focus: keys are authored, relative paths, so resolve them before glob
+//     expansion (a focused pattern propagates to its children) and before
+//     absolutization
+//  5. glob expansion, against the config's base directory
+//  6. absolute paths, against the base directory
+//  7. project types: needs absolute paths; a parser that fails or times out
+//     degrades to its base commands with a warning, only an invalid type name
+//     is fatal
+//  8. aliases: needs Name/Type from project types and absolute paths for
+//     cd-wrapping; an unresolvable reference is recorded on the command
+//  9. warnings: reads Command.Error, so last; rebuilds Warnings from the
+//     notices above plus the name/alias checks
+//
+// ResolveAllPending re-runs 8 and 9 once deferred types arrive.
+var loadStages = []func(*Config) error{
+	func(c *Config) error { applyDefaultFrecencyConfig(c); return nil },
+	func(c *Config) error { collectDeprecatedKeyWarnings(c); return nil },
+	func(c *Config) error { normalizeEmptyPaths(c); return nil },
+	func(c *Config) error { resolveFocus(c); return nil },
+	expandGlobLocations,
+	makeLocationPathsAbsolute,
+	processProjectTypesStage,
+	func(c *Config) error { expandCommandAliases(c); return nil },
+	func(c *Config) error { collectConfigWarnings(c); return nil },
 }
 
 func loadConfig(configPath string) (*Config, error) {
@@ -523,60 +563,48 @@ func loadConfig(configPath string) (*Config, error) {
 	}
 
 	var config Config
-	err = yaml.Unmarshal(data, &config)
-	if err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("parsing YAML: %w", err)
 	}
+	config.baseDir = configBaseDir(configPath, config.Root)
 
-	// Apply default frecency config if not specified
-	applyDefaultFrecencyConfig(&config)
-
-	// Report deprecated key spellings folded in at decode time. Runs on the
-	// authored locations, before expansion, so one authored key yields one warning.
-	collectDeprecatedKeyWarnings(&config)
-
-	// Normalize empty paths to current directory
-	normalizeEmptyPaths(&config)
-
-	// Resolve the top-level focus list into per-location runtime flags before
-	// glob expansion, so a focused pattern propagates to its expanded children.
-	resolveFocus(&config)
-
-	// Expand glob patterns in locations
-	expandedLocations, globWarnings, err := ExpandGlobPatterns(config.Locations)
-	if err != nil {
-		return nil, fmt.Errorf("failed to expand glob patterns: %w", err)
+	for _, stage := range loadStages {
+		if err := stage(&config); err != nil {
+			return nil, err
+		}
 	}
-	config.Locations = expandedLocations
-	config.pendingWarnings = append(config.pendingWarnings, globWarnings...)
-
-	// Convert all location paths to absolute paths
-	// This must happen while we're still in the config directory
-	if err := makeLocationPathsAbsolute(&config); err != nil {
-		return nil, fmt.Errorf("failed to make location paths absolute: %w", err)
-	}
-
-	// Process project types and add their commands. A type whose parser fails or
-	// times out degrades to its base commands and reports a warning rather than
-	// failing the load; only an invalid type name is fatal.
-	typeWarnings, err := processProjectTypes(&config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process project types: %w", err)
-	}
-	config.pendingWarnings = append(config.pendingWarnings, typeWarnings...)
-
-	// Expand @project[type]:command references into resolved command strings. An
-	// unresolvable reference is recorded on the command (Command.Error) rather
-	// than failing the whole load, so one stale saved chain never blocks the rest
-	// of the config from loading and running.
-	expandCommandAliases(&config)
-
-	// Gather non-fatal config issues (out-of-charset names + unresolved alias
-	// references) for callers to surface rather than failing the load. Runs after
-	// expandCommandAliases so Command.Error is populated.
-	collectConfigWarnings(&config)
 
 	return &config, nil
+}
+
+// configBaseDir is the directory a config's relative paths resolve against: a
+// global project's declared root, otherwise the directory the file sits in.
+func configBaseDir(configPath, root string) string {
+	if root != "" {
+		return root
+	}
+	return filepath.Dir(absOrSelf(configPath))
+}
+
+// expandGlobLocations replaces glob locations with their matching folders.
+func expandGlobLocations(c *Config) error {
+	expanded, warnings, err := expandGlobPatterns(c.Locations, c.baseDir)
+	if err != nil {
+		return fmt.Errorf("failed to expand glob patterns: %w", err)
+	}
+	c.Locations = expanded
+	c.loadWarnings = append(c.loadWarnings, warnings...)
+	return nil
+}
+
+// processProjectTypesStage discovers each location's type commands.
+func processProjectTypesStage(c *Config) error {
+	warnings, err := processProjectTypes(c)
+	if err != nil {
+		return fmt.Errorf("failed to process project types: %w", err)
+	}
+	c.loadWarnings = append(c.loadWarnings, warnings...)
+	return nil
 }
 
 // applyDefaultFrecencyConfig applies default frecency settings if not configured
@@ -596,30 +624,24 @@ func normalizeEmptyPaths(config *Config) {
 	}
 }
 
-// makeLocationPathsAbsolute converts all relative location paths to absolute paths
-// For local configs: uses current working directory (should be config directory)
-// For global configs: uses config.Root as base directory
+// makeLocationPathsAbsolute resolves every relative location path against the
+// config's base directory (its own directory, or Root for a global project), so
+// nothing downstream depends on the process working directory. A config built in
+// memory has no base directory and falls back to the working directory.
 func makeLocationPathsAbsolute(config *Config) error {
 	for i := range config.Locations {
-		if config.Locations[i].Location == "" {
+		loc := config.Locations[i].Location
+		if loc == "" || filepath.IsAbs(loc) {
 			continue
 		}
-
-		var absPath string
-
-		// If config has a Root field (global projects), use that as base
-		if config.Root != "" {
-			// Join location with root directory
-			absPath = filepath.Join(config.Root, config.Locations[i].Location)
-		} else {
-			// Use current working directory (local .pltrc case)
-			var err error
-			absPath, err = filepath.Abs(config.Locations[i].Location)
-			if err != nil {
-				return fmt.Errorf("failed to get absolute path for location %q: %w", config.Locations[i].Location, err)
-			}
+		if config.baseDir != "" {
+			config.Locations[i].Location = filepath.Join(config.baseDir, loc)
+			continue
 		}
-
+		absPath, err := filepath.Abs(loc)
+		if err != nil {
+			return fmt.Errorf("failed to get absolute path for location %q: %w", loc, err)
+		}
 		config.Locations[i].Location = absPath
 	}
 	return nil
@@ -690,23 +712,6 @@ func filterCommands(commands []Command, include []string, exclude []string) []Co
 	return result
 }
 
-// CommandLabel returns the display label for a command within its location: the
-// command's name (falling back to the raw command string). When the location has
-// more than one type, type-derived commands are prefixed with "[type] " so
-// commands sharing a name across types (e.g. npm `build` vs docker `build`) stay
-// distinguishable. Single-type locations and manually authored commands render
-// exactly as before.
-func CommandLabel(loc Location, cmd Command) string {
-	name := cmd.Name
-	if name == "" {
-		name = cmd.Command
-	}
-	if len(loc.Types) > 1 && cmd.Type != "" {
-		return "[" + cmd.Type + "] " + name
-	}
-	return name
-}
-
 // processProjectTypes adds each location's type-discovered commands to its
 // authored ones (authored first), then applies the location's command filters to
 // the combined list. A location with no `type:` still gets filtered — it just has
@@ -719,7 +724,7 @@ func processProjectTypes(config *Config) ([]Warning, error) {
 		var discovered []Command
 		var pending []string
 		for _, typeName := range location.Types {
-			if projecttypes.DefersLoading(typeName) {
+			if defersLoading(typeName) {
 				pending = append(pending, typeName)
 				continue
 			}
@@ -728,7 +733,7 @@ func processProjectTypes(config *Config) ([]Warning, error) {
 				return nil, err
 			}
 			if degraded != nil {
-				degraded.Context = locationLabel(location)
+				degraded.Context = location.DisplayName()
 				warnings = append(warnings, *degraded)
 			}
 			discovered = append(discovered, cmds...)
@@ -772,15 +777,6 @@ func composeCommands(loc Location, late []Command) []Command {
 	return filterCommands(all, loc.Include, loc.Exclude)
 }
 
-// locationLabel is the human name for a location in warnings: its authored name,
-// falling back to its path.
-func locationLabel(loc Location) string {
-	if loc.Name != "" {
-		return loc.Name
-	}
-	return loc.Location
-}
-
 // commandsForType resolves a single project type in a directory and returns its
 // commands, each tagged with the type. A type whose detect file is absent
 // contributes nothing (the location may declare several types, only some of which
@@ -791,7 +787,7 @@ func locationLabel(loc Location) string {
 // rather than breaking the load. Only a genuinely invalid config — an unknown
 // type name — produces an error.
 func commandsForType(typeName, directory string) ([]Command, *Warning, error) {
-	projectType, err := projecttypes.GetProjectType(typeName)
+	projectType, err := lookupType(typeName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("location %s has invalid type: %w", directory, err)
 	}
@@ -800,58 +796,34 @@ func commandsForType(typeName, directory string) ([]Command, *Warning, error) {
 		return nil, nil, nil
 	}
 
-	// For configurable project types, get the full commands directly.
-	if configurableType, ok := projectType.(*projecttypes.ConfigurableProjectType); ok {
-		// A parser failure (broken Makefile, missing `mvn`, a command that timed
-		// out) still yields the type's base commands, so keep them and report the
-		// problem rather than losing the location — or the whole load.
-		commands, parseErr := configurableType.GetAllCommands(directory)
-
-		var commandList []Command
-		for name, cmd := range commands {
-			commandList = append(commandList, Command{
-				Name:    name,
-				Command: cmd,
-				Type:    typeName,
-			})
-		}
-
-		var warning *Warning
-		if parseErr != nil {
-			reason := parseErr.Error()
-			if errors.Is(parseErr, parsers.ErrParserTimeout) {
-				reason = fmt.Sprintf("%s parser timed out; only its base commands are available", typeName)
-			}
-			warning = &Warning{
-				Kind:   "parser",
-				Scope:  "location",
-				Name:   typeName,
-				Reason: reason,
-			}
-		}
-		return commandList, warning, nil
-	}
-
-	// Fallback to old behavior for backward compatibility.
-	configFile := filepath.Join(directory, projectType.DetectConfigFile())
-	projectCommands, err := projectType.ParseCommands(configFile)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse commands for location %s: %w", directory, err)
-	}
+	// A parser failure (broken Makefile, missing `mvn`, a command that timed
+	// out) still yields the type's base commands, so keep them and report the
+	// problem rather than losing the location — or the whole load.
+	commands, parseErr := projectType.Commands(directory)
 
 	var commandList []Command
-	for _, cmd := range projectCommands {
-		fullCmd := cmd
-		if projectType.GetCommandPrefix() != "" {
-			fullCmd = fmt.Sprintf("%s %s", projectType.GetCommandPrefix(), cmd)
-		}
+	for name, cmd := range commands {
 		commandList = append(commandList, Command{
-			Name:    "",
-			Command: fullCmd,
+			Name:    name,
+			Command: cmd,
 			Type:    typeName,
 		})
 	}
-	return commandList, nil, nil
+
+	var warning *Warning
+	if parseErr != nil {
+		reason := parseErr.Error()
+		if errors.Is(parseErr, parsers.ErrParserTimeout) {
+			reason = fmt.Sprintf("%s parser timed out; only its base commands are available", typeName)
+		}
+		warning = &Warning{
+			Kind:   "parser",
+			Scope:  "location",
+			Name:   typeName,
+			Reason: reason,
+		}
+	}
+	return commandList, warning, nil
 }
 
 // fileExists checks if a file exists
@@ -932,4 +904,24 @@ func LoadConfigWithGlobal(localConfigPath string) (*Config, error) {
 	localConfig.ToolDefs = globalConfig.Tools.Defs
 
 	return localConfig, nil
+}
+
+// lookupType resolves a declared type name through the parser registry.
+func lookupType(typeName string) (*parsers.Type, error) {
+	reg, err := parsers.DefaultRegistry()
+	if err != nil {
+		return nil, fmt.Errorf("loading project types: %w", err)
+	}
+	typ, ok := reg.Lookup(typeName)
+	if !ok {
+		return nil, fmt.Errorf("unknown project type: %s", typeName)
+	}
+	return typ, nil
+}
+
+// defersLoading reports whether a type resolves its commands by running a shell
+// command. An unknown type defers nothing — it fails the load elsewhere.
+func defersLoading(typeName string) bool {
+	typ, err := lookupType(typeName)
+	return err == nil && typ.DefersLoading()
 }

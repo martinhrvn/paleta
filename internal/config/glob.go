@@ -13,6 +13,13 @@ import (
 // returns the expanded list plus any non-fatal notices (keys that had no effect),
 // which the caller surfaces rather than failing the load.
 func ExpandGlobPatterns(locations []Location) ([]Location, []Warning, error) {
+	return expandGlobPatterns(locations, "")
+}
+
+// expandGlobPatterns is ExpandGlobPatterns with the patterns matched under
+// baseDir (empty means the process working directory). The expanded locations
+// keep the authored, relative form so later stages treat them like any other.
+func expandGlobPatterns(locations []Location, baseDir string) ([]Location, []Warning, error) {
 	var result []Location
 	var warnings []Warning
 
@@ -24,7 +31,7 @@ func ExpandGlobPatterns(locations []Location) ([]Location, []Warning, error) {
 				return nil, nil, err
 			}
 
-			expanded, expandWarnings, err := expandSingleGlob(loc)
+			expanded, expandWarnings, err := expandSingleGlob(loc, baseDir)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -45,10 +52,7 @@ func ExpandGlobPatterns(locations []Location) ([]Location, []Warning, error) {
 // location that isn't a glob pattern, where they have no effect.
 func nonGlobDirectiveWarnings(loc Location) []Warning {
 	var warnings []Warning
-	label := loc.Name
-	if label == "" {
-		label = loc.Location
-	}
+	label := loc.DisplayName()
 	if len(loc.ExcludeLocations) > 0 {
 		warnings = append(warnings, Warning{
 			Kind:    "ignored",
@@ -90,18 +94,30 @@ func validateGlobPattern(pattern string) error {
 	return nil
 }
 
-func expandSingleGlob(loc Location) ([]Location, []Warning, error) {
-	matches, err := filepath.Glob(loc.Location)
+func expandSingleGlob(loc Location, baseDir string) ([]Location, []Warning, error) {
+	// Match under baseDir, but hand back the authored (relative) form.
+	pattern := loc.Location
+	joined := baseDir != "" && !filepath.IsAbs(pattern)
+	if joined {
+		pattern = filepath.Join(baseDir, pattern)
+	}
+	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Filter to only include directories
+	// Keep only directories, in the same form the pattern was written in.
 	var dirMatches []string
 	for _, match := range matches {
-		if isDirectory(match) {
-			dirMatches = append(dirMatches, match)
+		if !isDirectory(match) {
+			continue
 		}
+		if joined {
+			if rel, rerr := filepath.Rel(baseDir, match); rerr == nil {
+				match = rel
+			}
+		}
+		dirMatches = append(dirMatches, match)
 	}
 
 	// Sort matches for consistent output
@@ -159,10 +175,7 @@ func expandSingleGlob(loc Location) ([]Location, []Warning, error) {
 
 	// An override key that matched nothing is usually a typo or a renamed folder.
 	var warnings []Warning
-	label := loc.Name
-	if label == "" {
-		label = loc.Location
-	}
+	label := loc.DisplayName()
 	for _, key := range sortedOverrideKeys(loc.Overrides) {
 		if usedOverrides[key] || excludedBases[key] {
 			continue

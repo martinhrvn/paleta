@@ -84,34 +84,58 @@ plt_open_in_mux() {
     fi
 }
 
-# Build the command line for a selection (single object or multi-select array)
-# and open it in a new tmux window / zellij tab. Records history just like a
-# normal run so pane launches still count toward frecency.
-plt_run_selection_in_pane() {
+# One "cd dir && cmd" segment for the selection object at jq path $2 ("" for a
+# single selection, ".[i]" for one element of a multi-select). The env is applied
+# in a subshell so $VAR in the command expands against it and nothing leaks into
+# later commands or the shell. Fails when the object can't be parsed.
+plt_segment() {
+    local selection_json="$1" path="$2"
+    local jq_cmd="${JQ_CMD:-jq}"
+    local dir cmd envprefix
+    dir=$(echo "$selection_json" | "$jq_cmd" -r "$path.directory")
+    cmd=$(echo "$selection_json" | "$jq_cmd" -r "$path.command")
+    if [ "$dir" = "null" ] || [ "$cmd" = "null" ]; then
+        return 1
+    fi
+    envprefix=$(echo "$selection_json" | "$jq_cmd" -r "$path.env // {} | to_entries | map(\"\(.key)=\" + (.value|@sh)) | join(\" \")")
+    if [ -n "$envprefix" ]; then
+        echo "cd '$dir' && ( export $envprefix; $cmd )"
+    else
+        echo "cd '$dir' && $cmd"
+    fi
+}
+
+# Record the selection object at jq path $2 ("" or ".[i]") in history — unless the user edited
+# the command (Ctrl+E): a one-off edit shouldn't count toward the original's
+# frecency. Uses the raw command, not the env-wrapped form, so the key is stable.
+plt_record() {
+    local selection_json="$1" path="$2"
+    local jq_cmd="${JQ_CMD:-jq}"
+    local action name cmd
+    action=$(echo "$selection_json" | "$jq_cmd" -r "$path.action // \"execute\"")
+    if [ "$action" = "edit" ]; then
+        return 0
+    fi
+    name=$(echo "$selection_json" | "$jq_cmd" -r "$path.display_name")
+    cmd=$(echo "$selection_json" | "$jq_cmd" -r "$path.command")
+    if [ -n "$name" ] && [ "$name" != "null" ]; then
+        "$PLT_BINARY" record "$name" "$cmd" 2>/dev/null || true
+    fi
+}
+
+# Turn a selection (single object or multi-select array) into one command line
+# that runs each command in its own directory, in order, recording each in
+# history. Prints the line; fails when the selection can't be parsed.
+plt_selection_runline() {
     local selection_json="$1" first_char="$2"
     local jq_cmd="${JQ_CMD:-jq}"
-    local runline=""
-
+    local runline="" segment
     if [ "$first_char" = "[" ]; then
         local count i=0
         count=$(echo "$selection_json" | "$jq_cmd" 'length')
         while [ "$i" -lt "$count" ]; do
-            local dir cmd name envprefix segment
-            dir=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].directory")
-            cmd=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].command")
-            name=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].display_name")
-
-            if [ -n "$name" ] && [ "$name" != "null" ]; then
-                "$PLT_BINARY" record "$name" "$cmd" 2>/dev/null || true
-            fi
-
-            envprefix=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].env // {} | to_entries | map(\"\(.key)=\" + (.value|@sh)) | join(\" \")")
-            if [ -n "$envprefix" ]; then
-                segment="cd '$dir' && ( export $envprefix; $cmd )"
-            else
-                segment="cd '$dir' && $cmd"
-            fi
-
+            segment=$(plt_segment "$selection_json" ".[$i]") || return 1
+            plt_record "$selection_json" ".[$i]"
             if [ -z "$runline" ]; then
                 runline="$segment"
             else
@@ -120,28 +144,22 @@ plt_run_selection_in_pane() {
             i=$((i + 1))
         done
     else
-        local dir cmd name envprefix
-        dir=$(echo "$selection_json" | "$jq_cmd" -r '.directory')
-        cmd=$(echo "$selection_json" | "$jq_cmd" -r '.command')
-        name=$(echo "$selection_json" | "$jq_cmd" -r '.display_name')
-
-        if [ "$dir" = "null" ] || [ "$cmd" = "null" ]; then
-            print_error "Failed to parse selection from plt output."
-            return 1
-        fi
-
-        if [ -n "$name" ] && [ "$name" != "null" ]; then
-            "$PLT_BINARY" record "$name" "$cmd" 2>/dev/null || true
-        fi
-
-        envprefix=$(echo "$selection_json" | "$jq_cmd" -r '.env // {} | to_entries | map("\(.key)=" + (.value|@sh)) | join(" ")')
-        if [ -n "$envprefix" ]; then
-            runline="cd '$dir' && ( export $envprefix; $cmd )"
-        else
-            runline="cd '$dir' && $cmd"
-        fi
+        runline=$(plt_segment "$selection_json" "") || return 1
+        plt_record "$selection_json" ""
     fi
+    echo "$runline"
+}
 
+# Build the command line for a selection and open it in a new tmux window /
+# zellij tab. Records history just like a normal run so pane launches still
+# count toward frecency.
+plt_run_selection_in_pane() {
+    local selection_json="$1" first_char="$2"
+    local runline
+    if ! runline=$(plt_selection_runline "$selection_json" "$first_char"); then
+        print_error "Failed to parse selection from plt output."
+        return 1
+    fi
     plt_open_in_mux "$PWD" "$runline"
 }
 
@@ -204,7 +222,7 @@ run_command() {
     fi
 
     if [ "$first_char" = "[" ]; then
-        # Multi-select: JSON array
+        # Multi-select: JSON array, run as one compound command in queue order.
         local count
         count=$(echo "$selection_json" | "$jq_cmd" 'length')
 
@@ -213,51 +231,20 @@ run_command() {
             exit 1
         fi
 
-        # Build compound command: cd dir1 && cmd1 && cd dir2 && cmd2 ...
-        local compound_cmd=""
-        local i=0
-        while [ "$i" -lt "$count" ]; do
-            local dir cmd name envprefix segment
-            dir=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].directory")
-            cmd=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].command")
-            name=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].display_name")
+        local compound_cmd
+        if ! compound_cmd=$(plt_selection_runline "$selection_json" "$first_char"); then
+            print_error "Failed to parse selection from plt output."
+            exit 1
+        fi
 
-            # Record each command (uses the raw command, not the env-wrapped form)
-            if [ -n "$name" ] && [ "$name" != "null" ]; then
-                "$PLT_BINARY" record "$name" "$cmd" 2>/dev/null || true
-            fi
-
-            # Build a safely-quoted "KEY='val' ..." prefix from the env object.
-            envprefix=$(echo "$selection_json" | "$jq_cmd" -r ".[$i].env // {} | to_entries | map(\"\(.key)=\" + (.value|@sh)) | join(\" \")")
-
-            # Apply env in a subshell so $VAR in the command expands against it
-            # and the variables don't leak into later commands or the shell.
-            if [ -n "$envprefix" ]; then
-                segment="cd '$dir' && ( export $envprefix; $cmd )"
-            else
-                segment="cd '$dir' && $cmd"
-            fi
-
-            # Build compound command
-            if [ -z "$compound_cmd" ]; then
-                compound_cmd="$segment"
-            else
-                compound_cmd="$compound_cmd && $segment"
-            fi
-
-            i=$((i + 1))
-        done
-
-        # Execute compound command
         print_info "Running $count command(s)..."
         echo
         eval "$compound_cmd"
     else
         # Single selection: JSON object
-        local dir cmd name
+        local dir cmd
         dir=$(echo "$selection_json" | "$jq_cmd" -r '.directory')
         cmd=$(echo "$selection_json" | "$jq_cmd" -r '.command')
-        name=$(echo "$selection_json" | "$jq_cmd" -r '.display_name')
 
         # Validate parsed values
         if [ "$dir" = "null" ] || [ "$cmd" = "null" ]; then
@@ -276,10 +263,8 @@ run_command() {
         print_info "In: $dir"
         echo
 
-        # Record this command execution in history
-        if [ -n "$name" ] && [ "$name" != "null" ]; then
-            "$PLT_BINARY" record "$name" "$cmd" 2>/dev/null || true
-        fi
+        # Record this command execution in history (skipped for an edited command)
+        plt_record "$selection_json" ""
 
         # Change to the directory and run the command
         cd "$dir"

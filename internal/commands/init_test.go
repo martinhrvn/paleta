@@ -12,7 +12,7 @@ func TestCreateDefaultConfig(t *testing.T) {
 	configPath := filepath.Join(tmpDir, ".pltrc")
 
 	// Test creating config in an empty directory
-	err := CreateDefaultConfig(configPath)
+	err := CreateDefaultConfigWithForce(configPath, false)
 	if err != nil {
 		t.Fatalf("CreateDefaultConfig failed: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestCreateDefaultConfigFileExists(t *testing.T) {
 	}
 
 	// Try to create config when file exists (with force=false)
-	err = CreateDefaultConfig(configPath)
+	err = CreateDefaultConfigWithForce(configPath, false)
 	if err == nil {
 		t.Error("Expected error when file exists, got nil")
 	}

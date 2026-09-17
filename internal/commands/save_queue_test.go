@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/martinhrvn/paleta/internal/config"
 )
 
 func writePltrc(t *testing.T, content string) string {
@@ -27,7 +29,7 @@ func TestAddCommandToLocation_AppendsToNamedLocation(t *testing.T) {
 		t.Fatalf("AddCommandToLocation failed: %v", err)
 	}
 
-	cfg, err := LoadAuthoredConfig(path)
+	cfg, err := config.LoadAuthored(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +72,7 @@ func TestAddCommandToLocation_SinglePartStaysScalar(t *testing.T) {
 		t.Errorf("expected a single command to stay scalar, got:\n%s", raw)
 	}
 
-	cfg, _ := LoadAuthoredConfig(path)
+	cfg, _ := config.LoadAuthored(path)
 	if cmds := cfg.Locations[0].Commands; len(cmds) != 1 || cmds[0].Command != "pnpm dev" {
 		t.Errorf("unexpected saved command: %+v", cfg.Locations[0].Commands)
 	}
@@ -86,7 +88,7 @@ func TestAddCommandToLocation_MatchesUnnamedByPath(t *testing.T) {
 		t.Fatalf("AddCommandToLocation failed: %v", err)
 	}
 
-	cfg, _ := LoadAuthoredConfig(path)
+	cfg, _ := config.LoadAuthored(path)
 	if len(cfg.Locations) != 1 {
 		t.Fatalf("expected the command to append to the existing location, got %d locations", len(cfg.Locations))
 	}
@@ -107,7 +109,7 @@ func TestAddCommandToLocation_PreservesExistingCommands(t *testing.T) {
 		t.Fatalf("AddCommandToLocation failed: %v", err)
 	}
 
-	cfg, _ := LoadAuthoredConfig(path)
+	cfg, _ := config.LoadAuthored(path)
 	cmds := cfg.Locations[0].Commands
 	if len(cmds) != 2 {
 		t.Fatalf("expected existing + new command (2), got %d", len(cmds))
@@ -132,7 +134,7 @@ func TestAddCommandToLocation_GlobFallbackCreatesLocation(t *testing.T) {
 		t.Fatalf("AddCommandToLocation failed: %v", err)
 	}
 
-	cfg, _ := LoadAuthoredConfig(path)
+	cfg, _ := config.LoadAuthored(path)
 	if len(cfg.Locations) != 2 {
 		t.Fatalf("expected a new location appended (2 total), got %d", len(cfg.Locations))
 	}
@@ -146,5 +148,19 @@ func TestAddCommandToLocation_MissingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".pltrc")
 	if err := AddCommandToLocation(path, "web", "packages/web", "x", []string{"a", "b"}); err == nil {
 		t.Error("expected an error when the config file does not exist")
+	}
+}
+
+// Saving a queue edits the file in place: comments elsewhere survive.
+func TestAddCommandToLocation_PreservesComments(t *testing.T) {
+	path := writePltrc(t, "# my palette\nlocations:\n  - name: web # frontend\n    location: packages/web\n    commands:\n      - pnpm dev # hot reload\n")
+	if err := AddCommandToLocation(path, "web", "packages/web", "ci", []string{"pnpm i", "pnpm test"}); err != nil {
+		t.Fatalf("AddCommandToLocation: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	for _, want := range []string{"# my palette", "# frontend", "# hot reload", "- pnpm i"} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("rewrite lost %q:\n%s", want, raw)
+		}
 	}
 }

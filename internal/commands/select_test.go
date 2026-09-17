@@ -1,23 +1,9 @@
-package main
+package commands
 
 import (
 	"encoding/json"
 	"testing"
-
-	"github.com/martinhrvn/paleta/internal/commands"
 )
-
-func TestVersionString(t *testing.T) {
-	old := version
-	defer func() { version = old }()
-
-	version = "1.2.3"
-	got := versionString()
-	want := "paleta version 1.2.3"
-	if got != want {
-		t.Errorf("versionString() = %q, want %q", got, want)
-	}
-}
 
 // decode unmarshals JSON output into a generic value for assertions.
 func decode(t *testing.T, data []byte, v interface{}) {
@@ -28,11 +14,11 @@ func decode(t *testing.T, data []byte, v interface{}) {
 }
 
 func TestMarshalSelectionSingle(t *testing.T) {
-	results := []commands.SelectionResult{
+	results := []SelectionResult{
 		{Directory: "/tmp/app", Command: "npm test", DisplayName: "app"},
 	}
 
-	data, err := marshalSelection(results)
+	data, err := MarshalSelection(results)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -58,11 +44,11 @@ func TestMarshalSelectionSingle(t *testing.T) {
 }
 
 func TestMarshalSelectionEditAction(t *testing.T) {
-	results := []commands.SelectionResult{
+	results := []SelectionResult{
 		{Directory: ".", Command: "edit", DisplayName: "config", Action: "edit"},
 	}
 
-	data, err := marshalSelection(results)
+	data, err := MarshalSelection(results)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -76,11 +62,11 @@ func TestMarshalSelectionEditAction(t *testing.T) {
 }
 
 func TestMarshalSelectionPaneAction(t *testing.T) {
-	results := []commands.SelectionResult{
+	results := []SelectionResult{
 		{Directory: "web", Command: "npm run dev", DisplayName: "web", Action: "pane"},
 	}
 
-	data, err := marshalSelection(results)
+	data, err := MarshalSelection(results)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -94,12 +80,12 @@ func TestMarshalSelectionPaneAction(t *testing.T) {
 }
 
 func TestMarshalSelectionMultiplePaneAction(t *testing.T) {
-	results := []commands.SelectionResult{
+	results := []SelectionResult{
 		{Directory: "/a", Command: "make build", DisplayName: "a", Action: "pane"},
 		{Directory: "/b", Command: "make test", DisplayName: "b", Action: "pane"},
 	}
 
-	data, err := marshalSelection(results)
+	data, err := MarshalSelection(results)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -118,12 +104,12 @@ func TestMarshalSelectionMultiplePaneAction(t *testing.T) {
 }
 
 func TestMarshalSelectionMultiple(t *testing.T) {
-	results := []commands.SelectionResult{
+	results := []SelectionResult{
 		{Directory: "/a", Command: "make build", DisplayName: "a"},
 		{Directory: "/b", Command: "make test", DisplayName: "b"},
 	}
 
-	data, err := marshalSelection(results)
+	data, err := MarshalSelection(results)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -141,7 +127,7 @@ func TestMarshalSelectionMultiple(t *testing.T) {
 }
 
 func TestMarshalSelectionWithEnv(t *testing.T) {
-	results := []commands.SelectionResult{
+	results := []SelectionResult{
 		{
 			Directory:   "/app",
 			Command:     "npm run dev",
@@ -150,7 +136,7 @@ func TestMarshalSelectionWithEnv(t *testing.T) {
 		},
 	}
 
-	data, err := marshalSelection(results)
+	data, err := MarshalSelection(results)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -173,11 +159,11 @@ func TestMarshalSelectionWithEnv(t *testing.T) {
 }
 
 func TestMarshalSelectionOmitsEmptyEnv(t *testing.T) {
-	results := []commands.SelectionResult{
+	results := []SelectionResult{
 		{Directory: "/app", Command: "npm test", DisplayName: "app"},
 	}
 
-	data, err := marshalSelection(results)
+	data, err := MarshalSelection(results)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -195,11 +181,11 @@ func TestMarshalSelectionOmitsEmptyEnv(t *testing.T) {
 // JSON for other control characters and unicode.
 func TestMarshalSelectionSpecialChars(t *testing.T) {
 	tricky := "say \"hi\"\tand\\or\r\nnew\bline \x01 ☃"
-	results := []commands.SelectionResult{
+	results := []SelectionResult{
 		{Directory: "/p", Command: tricky, DisplayName: "weird"},
 	}
 
-	data, err := marshalSelection(results)
+	data, err := MarshalSelection(results)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

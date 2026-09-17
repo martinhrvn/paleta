@@ -13,46 +13,6 @@ func touch(t *testing.T, dir, name string) {
 	}
 }
 
-func TestFindParserForDirectoryMatch(t *testing.T) {
-	dir := t.TempDir()
-	touch(t, dir, "package.json")
-
-	pf := &ParsersFile{Parsers: map[string]ParserConfig{
-		"npm": {DetectFiles: []string{"package.json"}},
-		"go":  {DetectFiles: []string{"go.mod"}},
-	}}
-
-	name, cfg, err := pf.FindParserForDirectory(dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if name != "npm" {
-		t.Errorf("matched parser = %q, want npm", name)
-	}
-	if len(cfg.DetectFiles) == 0 || cfg.DetectFiles[0] != "package.json" {
-		t.Errorf("returned config does not match npm: %+v", cfg)
-	}
-}
-
-func TestFindParserForDirectoryGlobMatch(t *testing.T) {
-	dir := t.TempDir()
-	// Only an env-specific override file is present, no plain docker-compose.yml.
-	touch(t, dir, "docker-compose.prod.yml")
-
-	pf := &ParsersFile{Parsers: map[string]ParserConfig{
-		"compose": {DetectFiles: []string{"docker-compose.yml", "docker-compose.*.yml"}},
-		"go":      {DetectFiles: []string{"go.mod"}},
-	}}
-
-	name, _, err := pf.FindParserForDirectory(dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if name != "compose" {
-		t.Errorf("matched parser = %q, want compose", name)
-	}
-}
-
 func TestEmbeddedDefaultsDockerAndCompose(t *testing.T) {
 	defaults, err := loadEmbeddedDefaults()
 	if err != nil {
@@ -96,19 +56,6 @@ func TestEmbeddedDefaultsDockerAndCompose(t *testing.T) {
 	}
 	if !foundGlob {
 		t.Errorf("compose detect_files = %v, want it to include 'docker-compose.*.yml'", compose.DetectFiles)
-	}
-}
-
-func TestFindParserForDirectoryNoMatch(t *testing.T) {
-	dir := t.TempDir() // empty directory
-
-	pf := &ParsersFile{Parsers: map[string]ParserConfig{
-		"npm": {DetectFiles: []string{"package.json"}},
-	}}
-
-	_, _, err := pf.FindParserForDirectory(dir)
-	if err == nil {
-		t.Fatal("expected error when no parser matches, got nil")
 	}
 }
 
@@ -163,47 +110,18 @@ func TestParseAndFormatCommandsNoTemplate(t *testing.T) {
 	}
 }
 
-func TestDetectAndParseCommandsEndToEnd(t *testing.T) {
+func TestDetectFilePresent(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "package.json"),
-		[]byte(`{"scripts":{"dev":"vite"}}`), 0644); err != nil {
-		t.Fatalf("failed to write package.json: %v", err)
+	// Only an env-specific override file is present, no plain docker-compose.yml.
+	touch(t, dir, "docker-compose.prod.yml")
+
+	if !DetectFilePresent(dir, "docker-compose.*.yml") {
+		t.Error("glob pattern should match docker-compose.prod.yml")
 	}
-
-	pf := &ParsersFile{Parsers: map[string]ParserConfig{
-		"npm": {
-			DetectFiles:     []string{"package.json"},
-			BaseCommands:    map[string]string{"install": "npm install"},
-			BuiltinParser:   "package_json_scripts",
-			CommandTemplate: "npm run {key}",
-		},
-	}}
-
-	commands, err := DetectAndParseCommands(dir, pf)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if DetectFilePresent(dir, "docker-compose.yml") {
+		t.Error("literal name must not match a differently named file")
 	}
-
-	if commands["dev"] != "npm run vite" && commands["dev"] != "npm run dev" {
-		t.Errorf("dev = %q, want 'npm run dev'", commands["dev"])
-	}
-	if commands["install"] != "npm install" {
-		t.Errorf("install = %q, want 'npm install'", commands["install"])
-	}
-}
-
-func TestDetectAndParseCommandsNoParserReturnsEmpty(t *testing.T) {
-	dir := t.TempDir() // nothing to detect
-
-	pf := &ParsersFile{Parsers: map[string]ParserConfig{
-		"npm": {DetectFiles: []string{"package.json"}},
-	}}
-
-	commands, err := DetectAndParseCommands(dir, pf)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(commands) != 0 {
-		t.Errorf("expected empty command map, got %v", commands)
+	if DetectFilePresent(t.TempDir(), "docker-compose.*.yml") {
+		t.Error("empty directory must not match")
 	}
 }

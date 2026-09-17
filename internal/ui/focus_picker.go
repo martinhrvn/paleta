@@ -15,43 +15,30 @@ type FocusEntry struct {
 	Focused bool
 }
 
-// FocusStore lets the selector read and persist the focus set without the ui
-// package depending on the commands package. It is nil when there is no writable
-// local .pltrc (e.g. a global-fallback config), in which case the picker is
-// disabled.
-type FocusStore struct {
-	List func() ([]FocusEntry, error)
-	Save func(focused map[string]bool) error
-}
-
 // enterFocusPicker loads the current focus set and switches into picker mode.
-// It is a no-op when no writable focus store is available.
+// It is a no-op when the backend offers no focus persistence.
 func (m *Model) enterFocusPicker() {
-	if m.focus == nil {
+	if m.backend.ListFocus == nil {
 		return
 	}
-	entries, err := m.focus.List()
+	entries, err := m.backend.ListFocus()
 	if err != nil || len(entries) == 0 {
 		return
 	}
 	m.focusItems = entries
 	m.focusCursor = 0
-	m.focusPicking = true
+	m.mode = modeFocusPick
 	m.searchInput.Blur()
 }
 
 func (m Model) updateFocusPickMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyUp, tea.KeyCtrlK:
-		if m.focusCursor > 0 {
-			m.focusCursor--
-		}
+		m.focusCursor = moveCursor(m.focusCursor, -1, len(m.focusItems))
 		return m, nil
 
 	case tea.KeyDown, tea.KeyCtrlJ:
-		if m.focusCursor < len(m.focusItems)-1 {
-			m.focusCursor++
-		}
+		m.focusCursor = moveCursor(m.focusCursor, 1, len(m.focusItems))
 		return m, nil
 
 	case tea.KeySpace, tea.KeyTab:
@@ -65,8 +52,7 @@ func (m Model) updateFocusPickMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyEnter:
-		m.confirmFocusPicker()
-		return m, nil
+		return m, m.confirmFocusPicker()
 
 	case tea.KeyEscape:
 		m.exitFocusPicker()
@@ -91,15 +77,17 @@ func (m *Model) toggleFocusAll() {
 }
 
 // confirmFocusPicker persists the chosen focus set, reloads the config so the
-// list reflects it, and leaves picker mode.
-func (m *Model) confirmFocusPicker() {
-	if m.focus != nil && m.focus.Save != nil {
+// list reflects it, and leaves picker mode. The returned command resumes any
+// background type resolution the reload deferred.
+func (m *Model) confirmFocusPicker() tea.Cmd {
+	var cmd tea.Cmd
+	if m.backend.SaveFocus != nil {
 		focused := make(map[string]bool, len(m.focusItems))
 		for _, it := range m.focusItems {
 			focused[it.Key] = it.Focused
 		}
-		if err := m.focus.Save(focused); err == nil {
-			m.reloadConfig()
+		if err := m.backend.SaveFocus(focused); err == nil {
+			cmd = m.reloadConfig()
 			// Make the effect visible immediately: show the focused view when
 			// anything is focused, otherwise fall back to showing everything.
 			m.focusActive = m.config.AnyFocused()
@@ -108,12 +96,12 @@ func (m *Model) confirmFocusPicker() {
 		}
 	}
 	m.exitFocusPicker()
+	return cmd
 }
 
 func (m *Model) exitFocusPicker() {
-	m.focusPicking = false
 	m.focusItems = nil
-	m.searchInput.Focus()
+	m.leaveMode()
 }
 
 func (m Model) renderFocusPicker() string {

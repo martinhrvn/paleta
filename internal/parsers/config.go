@@ -29,6 +29,11 @@ type ParserConfig struct {
 
 	// CommandTemplate is how to construct the final command (e.g., "npm run {key}")
 	CommandTemplate string `yaml:"command_template,omitempty"`
+
+	// Priority ranks this type against others detected in the same folder: lower
+	// comes first, so a Go service with a Dockerfile is a Go project first. Types
+	// without a priority sort after every type that has one, by name.
+	Priority int `yaml:"priority,omitempty"`
 }
 
 // ParsersFile represents the entire parsers.yaml configuration
@@ -102,18 +107,6 @@ func loadEmbeddedDefaults() (*ParsersFile, error) {
 func (p *ParsersFile) GetParser(name string) (ParserConfig, bool) {
 	parser, exists := p.Parsers[name]
 	return parser, exists
-}
-
-// FindParserForDirectory finds a parser that matches files in the given directory
-func (p *ParsersFile) FindParserForDirectory(directory string) (string, ParserConfig, error) {
-	for name, parser := range p.Parsers {
-		for _, detectFile := range parser.DetectFiles {
-			if DetectFilePresent(directory, detectFile) {
-				return name, parser, nil
-			}
-		}
-	}
-	return "", ParserConfig{}, fmt.Errorf("no parser found for directory: %s", directory)
 }
 
 // DetectFilePresent reports whether directory contains a file matching pattern.

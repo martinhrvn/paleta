@@ -15,17 +15,52 @@ import (
 // (`@packages/search:build`). The command charset includes `:` so npm-style names
 // such as `test:watch` resolve (the type is only ever inside `[...]`, so the
 // first `:` after the project/type starts the command).
-var aliasTokenRe = regexp.MustCompile(`(^|[\s&|;()])@([A-Za-z0-9._/-]+)(?:\[([A-Za-z0-9._-]+)\])?:([A-Za-z0-9][A-Za-z0-9._:-]*)`)
+// Name charsets. These are the characters each part of a reference may use,
+// shared by the token regexes, the validator and SanitizeName so they can never
+// drift apart.
+const (
+	projectNameChars = `A-Za-z0-9._/-`
+	typeNameChars    = `A-Za-z0-9._-`
+	commandNameChars = `A-Za-z0-9._:-`
+)
+
+var aliasTokenRe = regexp.MustCompile(`(^|[\s&|;()])@([` + projectNameChars + `]+)(?:\[([` + typeNameChars + `]+)\])?:([A-Za-z0-9][` + commandNameChars + `]*)`)
 
 // refCommandRe matches the full command-name charset a reference token allows
 // after ':'. A name outside it (e.g. one containing spaces like "test ui")
 // cannot be referenced and must fall back to its raw command string.
-var refCommandRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
+var refCommandRe = regexp.MustCompile(`^[A-Za-z0-9][` + commandNameChars + `]*$`)
 
 // refProjectRe matches the project-reference charset (before the optional
 // [type]); '/' is allowed so a clashing folder name can be disambiguated by a
 // path tail (`packages/search`).
-var refProjectRe = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+var refProjectRe = regexp.MustCompile(`^[` + projectNameChars + `]+$`)
+
+// projectNameCharRe and commandNameCharRe match one character of each charset.
+var (
+	projectNameCharRe = regexp.MustCompile(`^[` + projectNameChars + `]$`)
+	commandNameCharRe = regexp.MustCompile(`^[` + commandNameChars + `]$`)
+)
+
+// SanitizeName replaces every character outside the alias-safe charset with '_'
+// so the name can be used in an @project:command reference. It does not enforce
+// the command leading-character rule (must be alphanumeric): a name whose first
+// character was disallowed becomes a leading '_' and is still reported by lint.
+func SanitizeName(name string, isCommand bool) string {
+	charRe := projectNameCharRe
+	if isCommand {
+		charRe = commandNameCharRe
+	}
+	var b strings.Builder
+	for _, r := range name {
+		if charRe.MatchString(string(r)) {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteRune('_')
+	}
+	return b.String()
+}
 
 // indexedLoc holds a location together with a snapshot of its original commands,
 // so recursive expansion always reads authored source rather than partially

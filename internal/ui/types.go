@@ -5,7 +5,7 @@ type SelectionResult struct {
 	Directory   string            // The actual directory path where command should be executed
 	Command     string            // The command to run (raw, without env)
 	DisplayName string            // The display name shown in fzf (for reference)
-	Action      string            // "execute" (default, empty) or "edit"
+	Action      string            // "" (execute, the default), "edit", or "pane"
 	Env         map[string]string // Resolved environment variables to apply when running
 }
 
@@ -33,4 +33,7 @@ type CommandInfo struct {
 	// run a shell command to list its targets). It carries no command, and is
 	// neither queueable nor runnable.
 	Loading bool
+	// matched holds the byte offsets in Display the current query matched, set by
+	// fuzzyFilter so the renderer highlights without re-running the matcher.
+	matched []int
 }

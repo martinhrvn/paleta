@@ -160,8 +160,8 @@ The project types we should support intitally are:
 - [x] Organized folder structure (cmd/, internal/)
 - [x] Config parsing module (internal/config)
 - [x] Command execution module (internal/commands)
-- [x] FZF integration module (internal/commands)
-- [x] Project type system (internal/projecttypes)
+- [x] Selector TUI (internal/ui)
+- [x] Project type system (internal/parsers)
 - [x] Error handling throughout
 - [x] Unit tests for core functionality
 
@@ -307,8 +307,8 @@ Added a new fzf-like TUI interface with improved UX:
   - `plt tui`: Shell command for the new TUI
   - Ctrl+G (zsh): Keyboard shortcut for gpm TUI mode
 - **Implementation**:
-  - `internal/ui/fzf_tui_selector.go`: New TUI component
-  - `internal/ui/fzf_tui_selector_test.go`: Unit tests (TDD)
+  - `internal/ui/selector.go`: New TUI component
+  - `internal/ui/selector_test.go`: Unit tests (TDD)
   - Updated `plt-core.sh` with `gpm_run` function
   - Updated `plt-integration.zsh` with `__gpm_tui_select_widget`
 
@@ -317,7 +317,7 @@ Modernized the `plt select` TUI look. Truecolor already worked (forced via
 `lipgloss.SetColorProfile(termenv.TrueColor)` + rendering to `/dev/tty`); the
 flat look came from muted 256-palette colors with no effects.
 - **Catppuccin Mocha** truecolor theme (single palette block in
-  `internal/ui/fzf_tui_selector.go`, shared by the wizard/queue/focus views)
+  `internal/ui/selector.go`, shared by the wizard/queue/focus views)
 - Bold accents + faint secondary text
 - Lavender accent bar on the selected row (surface-filled, gap-free)
 - Live fuzzy-match highlighting via `fuzzySubsequenceIndices` + `highlightMatches`

@@ -28,13 +28,10 @@ type Warning struct {
 // thing charset-checked — a location *path* may legitimately contain '*' (a
 // glob) and is never flagged. Empty names are skipped.
 func collectConfigWarnings(cfg *Config) {
-	cfg.Warnings = append([]Warning(nil), cfg.pendingWarnings...)
+	cfg.Warnings = append([]Warning(nil), cfg.loadWarnings...)
 	for i := range cfg.Locations {
 		loc := &cfg.Locations[i]
-		locLabel := loc.Name
-		if locLabel == "" {
-			locLabel = loc.Location
-		}
+		locLabel := loc.DisplayName()
 
 		if loc.Name != "" && !refProjectRe.MatchString(loc.Name) {
 			reason := nameReason(loc.Name)
@@ -101,12 +98,9 @@ func nameReason(name string) string {
 func collectDeprecatedKeyWarnings(cfg *Config) {
 	for i := range cfg.Locations {
 		loc := &cfg.Locations[i]
-		label := loc.Name
-		if label == "" {
-			label = loc.Location
-		}
+		label := loc.DisplayName()
 		for _, key := range loc.LegacyKeys {
-			cfg.pendingWarnings = append(cfg.pendingWarnings, Warning{
+			cfg.loadWarnings = append(cfg.loadWarnings, Warning{
 				Kind:    "deprecated",
 				Scope:   "location",
 				Context: label,
@@ -125,5 +119,22 @@ func deprecatedKeyReason(key string) string {
 	if idx := strings.LastIndex(key, "."); idx >= 0 {
 		base = key[idx+1:]
 	}
-	return "\"" + base + ":\" is deprecated — use \"" + base + "_commands:\" (run 'plt lint --fix')"
+	replacement := base + "_commands"
+	for _, k := range deprecatedKeys {
+		if k.old == base {
+			replacement = k.new
+		}
+	}
+	return "\"" + base + ":\" is deprecated — use \"" + replacement + ":\" (run 'plt lint --fix')"
+}
+
+// withoutKind returns warnings minus those of the given kind.
+func withoutKind(warnings []Warning, kind string) []Warning {
+	kept := warnings[:0:0]
+	for _, w := range warnings {
+		if w.Kind != kind {
+			kept = append(kept, w)
+		}
+	}
+	return kept
 }

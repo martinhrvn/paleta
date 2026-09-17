@@ -101,10 +101,15 @@ func builtinTools() map[string]ToolDefinition {
 // each tool runs in (the user's current directory). Unknown or empty tools are
 // recorded as non-fatal warnings and skipped, so a bad name never blocks the rest.
 //
-// It is deliberately separate from LoadConfig: during load the process cwd is the
-// config directory, not the user's, so the caller resolves tools once cwd is known.
+// Load calls it with the user's working directory once discovery is done; it is
+// separate from loadConfig only because a config file doesn't know where the
+// user is. Attaching again replaces the previous result and its warnings.
 func AttachTools(cfg *Config, workdir string) {
 	cfg.ResolvedTools = nil
+	// Unknown-tool notices join the load notices so a later warning rebuild
+	// (ResolveAllPending) keeps them; rebuild now so they show immediately.
+	cfg.loadWarnings = withoutKind(cfg.loadWarnings, "tool")
+	defer collectConfigWarnings(cfg)
 	if len(cfg.Tools.Enabled) == 0 {
 		return
 	}
@@ -120,7 +125,7 @@ func AttachTools(cfg *Config, workdir string) {
 	for _, name := range cfg.Tools.Enabled {
 		def, ok := registry[name]
 		if !ok {
-			cfg.Warnings = append(cfg.Warnings, Warning{
+			cfg.loadWarnings = append(cfg.loadWarnings, Warning{
 				Kind:    "tool",
 				Scope:   "tool",
 				Context: name,

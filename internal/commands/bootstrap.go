@@ -44,8 +44,12 @@ func (o BootstrapOutcome) String() string {
 // Bootstrap turns "no paleta configuration found here" into the init wizard, so
 // the first `plt` in a repo goes straight from nothing to a working palette
 // instead of an error telling the user to run something else. It shows the same
-// wizard `plt init` and Ctrl+N use, scanning and writing at the repository root
-// when there is one (see bootstrapRoot) and in the working directory otherwise.
+// wizard `plt init` and Ctrl+N use, scanning and writing at the project root —
+// the nearest .git, see config.FindProjectRoot — and in the working directory
+// otherwise. A .pltrc describes a repository, not whichever folder someone
+// happened to be standing in when they first ran plt: writing it at the root is
+// what makes the file worth committing, and means it is found from anywhere in
+// the tree afterwards.
 // The working directory is left alone, so the caller still resolves tools and
 // reloads config relative to where the user actually is.
 //
@@ -56,7 +60,7 @@ func Bootstrap() (BootstrapOutcome, error) {
 	if err != nil {
 		return BootstrapSkipped, fmt.Errorf("getting working directory: %w", err)
 	}
-	root := bootstrapRoot(wd)
+	root := config.FindProjectRoot(wd)
 
 	home, _ := os.UserHomeDir() // an unset $HOME just means no home guard to apply
 	if !bootstrapAllowed(root, home) {
@@ -78,28 +82,6 @@ func Bootstrap() (BootstrapOutcome, error) {
 		return BootstrapCanceled, err
 	default:
 		return BootstrapNothingSelected, err
-	}
-}
-
-// bootstrapRoot picks the directory a bootstrap should scan and write to: the
-// nearest ancestor holding a .git (a directory for a normal clone, a file for a
-// submodule or linked worktree), falling back to dir itself.
-//
-// A .pltrc describes a repository, not whichever folder someone happened to be
-// standing in when they first ran plt — writing it at the root is what makes the
-// file worth committing, and it means the config is found from anywhere in the
-// tree afterwards.
-func bootstrapRoot(dir string) string {
-	current := resolve(dir)
-	for {
-		if _, err := os.Lstat(filepath.Join(current, ".git")); err == nil {
-			return current
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			return resolve(dir)
-		}
-		current = parent
 	}
 }
 

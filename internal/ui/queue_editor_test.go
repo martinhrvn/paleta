@@ -21,7 +21,7 @@ func queueTestModel(indices ...int) Model {
 func TestModel_EnterQueueEditor_NoopWhenEmpty(t *testing.T) {
 	m := createTestModel(createTestConfig())
 	m.enterQueueEditor()
-	if m.queueEditing {
+	if m.mode == modeQueueEdit {
 		t.Error("expected queue editor not to open with an empty queue")
 	}
 }
@@ -30,7 +30,7 @@ func TestModel_KeyCtrlQ_OpensEditorWhenQueued(t *testing.T) {
 	m := queueTestModel(0, 2)
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
 	um := updated.(Model)
-	if !um.queueEditing {
+	if um.mode != modeQueueEdit {
 		t.Error("expected Ctrl+Q to open the queue editor")
 	}
 	if um.queueCursor != 0 {
@@ -91,7 +91,7 @@ func TestModel_QueueEditor_RemoveLastExitsEditor(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDelete})
 	m = updated.(Model)
 
-	if m.queueEditing {
+	if m.mode == modeQueueEdit {
 		t.Error("expected editor to close when the last item is removed")
 	}
 	if len(m.queue) != 0 {
@@ -125,7 +125,7 @@ func TestModel_QueueEditor_EscReturnsToNormal(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
 	m = updated.(Model)
 
-	if m.queueEditing {
+	if m.mode == modeQueueEdit {
 		t.Error("expected Esc to leave the queue editor")
 	}
 	// Queue is preserved on the way out.
@@ -153,18 +153,18 @@ func TestModel_QueueSave_CallsStoreWithJoinedCommand(t *testing.T) {
 
 	var gotDisplay, gotDir, gotName, gotCmd string
 	called := false
-	m.saveCommand = &SaveStore{Save: func(displayName, directory, name string, parts []string) error {
+	m.backend.SaveQueue = func(displayName, directory, name string, parts []string) error {
 		called = true
 		gotDisplay, gotDir, gotName, gotCmd = displayName, directory, name, strings.Join(parts, " && ")
 		return nil
-	}}
+	}
 
 	m.enterQueueEditor()
 
 	// Press 's' to open the save prompt.
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 	m = updated.(Model)
-	if !m.queueSaving {
+	if m.mode != modeQueueSave {
 		t.Fatalf("expected save prompt to open; hint=%q", m.queueHint)
 	}
 
@@ -200,10 +200,10 @@ func saveQueueAndCapture(t *testing.T, cfg *config.Config, indices ...int) strin
 		m.toggleSelection(i)
 	}
 	var got string
-	m.saveCommand = &SaveStore{Save: func(_, _, _ string, parts []string) error {
+	m.backend.SaveQueue = func(_, _, _ string, parts []string) error {
 		got = strings.Join(parts, " && ")
 		return nil
-	}}
+	}
 	m.enterQueueEditor()
 
 	for _, msg := range []tea.KeyMsg{
@@ -278,19 +278,17 @@ func TestModel_QueueSave_CrossFolderSavesToRoot(t *testing.T) {
 	m.toggleSelection(1) // web: dev
 
 	var gotDisplay, gotDir, gotCmd string
-	m.saveCommand = &SaveStore{
-		RootDir: "/repo",
-		Save: func(displayName, directory, _ string, parts []string) error {
-			gotDisplay, gotDir, gotCmd = displayName, directory, strings.Join(parts, " && ")
-			return nil
-		},
+	m.backend.RootDir = "/repo"
+	m.backend.SaveQueue = func(displayName, directory, _ string, parts []string) error {
+		gotDisplay, gotDir, gotCmd = displayName, directory, strings.Join(parts, " && ")
+		return nil
 	}
 	m.enterQueueEditor()
 
 	// 's' opens the save prompt even though the queue spans folders.
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 	m = updated.(Model)
-	if !m.queueSaving {
+	if m.mode != modeQueueSave {
 		t.Fatalf("expected save prompt to open for a cross-folder queue; hint=%q", m.queueHint)
 	}
 	for _, msg := range []tea.KeyMsg{
@@ -327,10 +325,8 @@ func TestModel_QueueSave_CdWrapsNonAliasableCrossFolder(t *testing.T) {
 	m.toggleSelection(1) // web: "dev server" (space -> not aliasable)
 
 	var gotCmd string
-	m.saveCommand = &SaveStore{
-		RootDir: "/repo",
-		Save:    func(_, _, _ string, parts []string) error { gotCmd = strings.Join(parts, " && "); return nil },
-	}
+	m.backend.RootDir = "/repo"
+	m.backend.SaveQueue = func(_, _, _ string, parts []string) error { gotCmd = strings.Join(parts, " && "); return nil }
 	m.enterQueueEditor()
 	for _, msg := range []tea.KeyMsg{
 		{Type: tea.KeyRunes, Runes: []rune("s")},
@@ -353,7 +349,7 @@ func TestModel_QueueSave_UnavailableShowsHint(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
 	m = updated.(Model)
 
-	if m.queueSaving {
+	if m.mode == modeQueueSave {
 		t.Error("expected save to be unavailable without a save store")
 	}
 	if m.queueHint == "" {

@@ -48,14 +48,14 @@ func ResolvePendingTypes(loc Location) ([]Command, []Warning) {
 			warnings = append(warnings, Warning{
 				Kind:    "parser",
 				Scope:   "location",
-				Context: locationLabel(loc),
+				Context: loc.DisplayName(),
 				Name:    typeName,
 				Reason:  err.Error(),
 			})
 			continue
 		}
 		if degraded != nil {
-			degraded.Context = locationLabel(loc)
+			degraded.Context = loc.DisplayName()
 			warnings = append(warnings, *degraded)
 		}
 		late = append(late, cmds...)
@@ -79,7 +79,7 @@ func ResolveAllPending(cfg *Config) {
 			cfg.Locations[i].Commands = commands
 		}
 		cfg.Locations[i].PendingTypes = nil
-		cfg.pendingWarnings = append(cfg.pendingWarnings, warnings...)
+		cfg.loadWarnings = append(cfg.loadWarnings, warnings...)
 	}
 
 	// Aliases were expanded during the load, when the deferred commands didn't

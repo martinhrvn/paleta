@@ -2,67 +2,41 @@ package commands
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/martinhrvn/paleta/internal/config"
 )
 
-// ListCommands returns a slice of location:command pairs
+// ListCommands renders the palette as "location:command" lines, tools last.
 func ListCommands(cfg *config.Config) []string {
-	var commands []string
-
-	for _, location := range cfg.Locations {
-		// Use name if available, otherwise use location path
-		displayName := location.Name
-		if displayName == "" {
-			displayName = location.Location
-		}
-
-		// Add each command for this location
-		for _, command := range location.Commands {
-			cmdDisplay := config.CommandLabel(location, command)
-			entry := fmt.Sprintf("%s:%s", displayName, cmdDisplay)
+	var lines []string
+	for _, row := range cfg.Rows(false) {
+		switch {
+		case len(row.Pending) > 0:
+			continue
+		case row.IsTool:
+			lines = append(lines, row.Label())
+		default:
+			entry := row.DisplayName + ":" + row.CommandLabel()
 			// Surface an unresolved reference as an error entry rather than
 			// silently listing (or expanding) a command that won't run.
-			if command.Error != "" {
-				entry += "  ⚠ error: " + command.Error
+			if row.Error != "" {
+				entry += "  ⚠ error: " + row.Error
 			}
-			commands = append(commands, entry)
+			lines = append(lines, entry)
 		}
 	}
-
-	// Enabled tools render at the end of the list.
-	for _, tool := range cfg.ResolvedTools {
-		commands = append(commands, tool.Display)
-	}
-
-	return commands
+	return lines
 }
 
-// FormatForFzf returns a slice of commands formatted for fzf selection
-// Format: [location-or-name] command
+// FormatForFzf renders the palette as "[location] command" lines; tools are
+// grouped under their tool name like a location.
 func FormatForFzf(cfg *config.Config) []string {
-	var commands []string
-
-	for _, location := range cfg.Locations {
-		// Use name if available, otherwise use location path
-		displayName := location.Name
-		if displayName == "" {
-			displayName = location.Location
+	var lines []string
+	for _, row := range cfg.Rows(false) {
+		if len(row.Pending) > 0 {
+			continue
 		}
-
-		// Add each command for this location in fzf format
-		for _, command := range location.Commands {
-			cmdDisplay := config.CommandLabel(location, command)
-			commands = append(commands, fmt.Sprintf("[%s] %s", displayName, cmdDisplay))
-		}
+		lines = append(lines, fmt.Sprintf("[%s] %s", row.DisplayName, row.CommandLabel()))
 	}
-
-	// Enabled tools render at the end, grouped by tool name like a location.
-	for _, tool := range cfg.ResolvedTools {
-		label := strings.TrimPrefix(tool.Display, tool.Tool+": ")
-		commands = append(commands, fmt.Sprintf("[%s] %s", tool.Tool, label))
-	}
-
-	return commands
+	return lines
 }

@@ -1,8 +1,11 @@
 package commands
 
 import (
+	"errors"
+	"io/fs"
 	"sort"
 
+	"github.com/martinhrvn/paleta/internal/config"
 	"github.com/martinhrvn/paleta/internal/ui"
 )
 
@@ -10,12 +13,9 @@ import (
 // the focus picker, carrying each location's current focused state (membership
 // in the top-level focus list).
 func FocusEntries(configPath string) ([]ui.FocusEntry, error) {
-	authored, err := LoadAuthoredConfig(configPath)
-	if err != nil {
+	authored, err := config.LoadAuthored(configPath)
+	if err != nil || authored == nil {
 		return nil, err
-	}
-	if authored == nil {
-		return nil, nil
 	}
 
 	focused := make(map[string]bool, len(authored.Focused))
@@ -41,17 +41,19 @@ func FocusEntries(configPath string) ([]ui.FocusEntry, error) {
 
 // SetFocused persists the focus set to the authored .pltrc. focused maps each
 // location key (see Location.FocusKey) to its desired state; keys absent from
-// the map are left unchanged. The change is applied to the top-level focus list
-// (added when true, removed when false) and the authored config is round-tripped
-// through GenerateConfig so hand-written locations, commands, and frecency
-// settings are preserved to the same extent as `plt init`.
+// the map are left unchanged. Only the top-level focus list is edited (added
+// when true, removed when false); the rest of the file is left as written.
 func SetFocused(configPath string, focused map[string]bool) error {
-	authored, err := LoadAuthoredConfig(configPath)
+	file, err := config.OpenFile(configPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
-	if authored == nil {
-		return nil
+	authored, err := file.Authored()
+	if err != nil {
+		return err
 	}
 
 	set := make(map[string]bool, len(authored.Focused))
@@ -71,8 +73,9 @@ func SetFocused(configPath string, focused map[string]bool) error {
 		list = append(list, key)
 	}
 	sort.Strings(list)
-	authored.Focused = list
 
-	content := GenerateConfig(authored.Locations, authored)
-	return WriteConfig(configPath, content)
+	if err := file.SetFocused(list); err != nil {
+		return err
+	}
+	return file.Save()
 }

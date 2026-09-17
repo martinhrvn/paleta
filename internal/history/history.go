@@ -1,8 +1,6 @@
 package history
 
 import (
-	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -151,40 +149,5 @@ func (h *History) Prune(maxEntries int) {
 	h.Commands = make(map[string]CommandEntry, maxEntries)
 	for i := 0; i < maxEntries && i < len(entries); i++ {
 		h.Commands[entries[i].key] = entries[i].entry
-	}
-}
-
-// FindProjectRoot finds the project root directory by looking for .pltrc or .git
-func FindProjectRoot(startPath string) (string, error) {
-	currentPath, err := filepath.Abs(startPath)
-	if err != nil {
-		return "", err
-	}
-
-	// Walk up the directory tree
-	for {
-		// Check for .pltrc
-		pltrc := filepath.Join(currentPath, ".pltrc")
-		if _, err := os.Stat(pltrc); err == nil {
-			return currentPath, nil
-		}
-
-		// Check for .git directory
-		gitDir := filepath.Join(currentPath, ".git")
-		if info, err := os.Stat(gitDir); err == nil && info.IsDir() {
-			return currentPath, nil
-		}
-
-		// Move up one directory
-		parent := filepath.Dir(currentPath)
-		if parent == currentPath {
-			// Reached filesystem root, use current working directory
-			cwd, err := os.Getwd()
-			if err != nil {
-				return "", err
-			}
-			return cwd, nil
-		}
-		currentPath = parent
 	}
 }

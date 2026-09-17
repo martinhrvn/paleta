@@ -63,31 +63,6 @@ func TestTypes_MarshalYAML(t *testing.T) {
 	}
 }
 
-func TestCommandLabel(t *testing.T) {
-	single := Location{Types: Types{"npm"}}
-	multi := Location{Types: Types{"npm", "docker"}}
-
-	tests := []struct {
-		name string
-		loc  Location
-		cmd  Command
-		want string
-	}{
-		{"single type, named", single, Command{Name: "build", Type: "npm"}, "build"},
-		{"multi type, named", multi, Command{Name: "build", Type: "npm"}, "[npm] build"},
-		{"multi type, other", multi, Command{Name: "build", Type: "docker"}, "[docker] build"},
-		{"multi type, manual (no type)", multi, Command{Name: "deploy"}, "deploy"},
-		{"name falls back to command", multi, Command{Command: "./x.sh"}, "./x.sh"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := CommandLabel(tt.loc, tt.cmd); got != tt.want {
-				t.Errorf("CommandLabel = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 // findCmd returns the first command whose Name and Type match, or nil.
 func findCmd(cmds []Command, name, typ string) *Command {
 	for i := range cmds {

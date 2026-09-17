@@ -190,7 +190,7 @@ func TestCollectWarnings_PendingSurviveReset(t *testing.T) {
 		Name:     "bad name",
 		Location: "/abs/web",
 	}}}
-	cfg.pendingWarnings = []Warning{{Kind: "ignored", Scope: "location", Context: "web", Name: "overrides"}}
+	cfg.loadWarnings = []Warning{{Kind: "ignored", Scope: "location", Context: "web", Name: "overrides"}}
 
 	collectConfigWarnings(cfg)
 

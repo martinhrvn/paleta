@@ -1,6 +1,10 @@
+# Built-in project types. A user file at ~/.paleta/parsers.yaml adds to or
+# overrides these by name. `priority` orders the types found in one folder
+# (lower first); a type without one sorts after all that have one.
 parsers:
   npm:
     detect_files: ["package.json"]
+    priority: 30
     base_commands:
       install: "npm install"
       audit: "npm audit"
@@ -11,6 +15,7 @@ parsers:
     
   yarn:
     detect_files: ["package.json"]
+    priority: 31
     base_commands:
       install: "yarn install"
       audit: "yarn audit"
@@ -21,6 +26,7 @@ parsers:
     
   pnpm:
     detect_files: ["package.json"]
+    priority: 32
     base_commands:
       install: "pnpm install"
       audit: "pnpm audit"
@@ -31,6 +37,7 @@ parsers:
     
   go:
     detect_files: ["go.mod"]
+    priority: 10
     base_commands:
       build: "go build ./..."
       test: "go test ./..."
@@ -47,6 +54,7 @@ parsers:
     
   python:
     detect_files: ["pyproject.toml", "setup.py", "requirements.txt"]
+    priority: 40
     base_commands:
       install: "pip install -e ."
       test: "python -m pytest"
@@ -57,6 +65,7 @@ parsers:
     
   rust:
     detect_files: ["Cargo.toml"]
+    priority: 20
     base_commands:
       build: "cargo build"
       test: "cargo test"
@@ -70,17 +79,20 @@ parsers:
     
   make:
     detect_files: ["Makefile", "makefile"]
+    priority: 70
     parser_command: "make -qp 2>/dev/null | grep -E '^[a-zA-Z_][a-zA-Z0-9_-]*:' | cut -d: -f1 | grep -v '^\\.' | sort -u"
     command_template: "make {key}"
     
   docker:
     detect_files: ["Dockerfile"]
+    priority: 90
     base_commands:
       build: "docker build ."
       run: "docker run --rm <image>"
 
   compose:
     detect_files: ["docker-compose.yml", "docker-compose.yaml", "docker-compose.*.yml", "docker-compose.*.yaml", "compose.yml", "compose.yaml"]
+    priority: 80
     base_commands:
       up: "docker compose up"
       down: "docker compose down"
@@ -90,6 +102,7 @@ parsers:
 
   gradle:
     detect_files: ["build.gradle", "build.gradle.kts"]
+    priority: 60
     base_commands:
       build: "./gradlew build"
       test: "./gradlew test"
@@ -100,6 +113,7 @@ parsers:
     
   maven:
     detect_files: ["pom.xml"]
+    priority: 50
     base_commands:
       compile: "mvn compile"
       test: "mvn test"

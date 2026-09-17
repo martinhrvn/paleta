@@ -1,7 +1,6 @@
 package history
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -312,66 +311,6 @@ func TestLoadOrCreateHistorySetsProjectRoot(t *testing.T) {
 	}
 	if h.ProjectRoot != root {
 		t.Errorf("ProjectRoot = %q, want %q (SaveToDefaultLocation must target the right file)", h.ProjectRoot, root)
-	}
-}
-
-// TestProjectIdentification tests finding project root
-func TestProjectIdentification(t *testing.T) {
-	tempDir := t.TempDir()
-
-	// Create a mock project structure
-	projectRoot := filepath.Join(tempDir, "myproject")
-	subDir := filepath.Join(projectRoot, "src", "components")
-	err := os.MkdirAll(subDir, 0755)
-	if err != nil {
-		t.Fatalf("Failed to create directories: %v", err)
-	}
-
-	// Create .pltrc to mark project root
-	pltrc := filepath.Join(projectRoot, ".pltrc")
-	err = os.WriteFile(pltrc, []byte("{}"), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create .pltrc: %v", err)
-	}
-
-	// Find project root from subdirectory
-	root, err := FindProjectRoot(subDir)
-	if err != nil {
-		t.Fatalf("FindProjectRoot failed: %v", err)
-	}
-
-	if root != projectRoot {
-		t.Errorf("Expected project root %s, got %s", projectRoot, root)
-	}
-}
-
-// TestProjectIdentificationGitRoot tests finding git root
-func TestProjectIdentificationGitRoot(t *testing.T) {
-	tempDir := t.TempDir()
-
-	// Create a mock git project
-	projectRoot := filepath.Join(tempDir, "gitproject")
-	gitDir := filepath.Join(projectRoot, ".git")
-	subDir := filepath.Join(projectRoot, "internal", "commands")
-
-	err := os.MkdirAll(gitDir, 0755)
-	if err != nil {
-		t.Fatalf("Failed to create .git directory: %v", err)
-	}
-
-	err = os.MkdirAll(subDir, 0755)
-	if err != nil {
-		t.Fatalf("Failed to create subdirectories: %v", err)
-	}
-
-	// Find project root from subdirectory
-	root, err := FindProjectRoot(subDir)
-	if err != nil {
-		t.Fatalf("FindProjectRoot failed: %v", err)
-	}
-
-	if root != projectRoot {
-		t.Errorf("Expected project root %s, got %s", projectRoot, root)
 	}
 }
 

@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -28,7 +30,7 @@ func focusTestConfig() *config.Config {
 
 func TestModel_FocusFilter(t *testing.T) {
 	cfg := focusTestConfig()
-	m := NewModel(cfg, nil)
+	m := NewModel(cfg, Backend{})
 
 	// With a focused location present, the selector defaults to focused-only.
 	if !m.focusActive {
@@ -56,14 +58,14 @@ func TestModel_FocusPickerSaves(t *testing.T) {
 	cfg := focusTestConfig()
 
 	var saved map[string]bool
-	store := &FocusStore{
-		List: func() ([]FocusEntry, error) {
+	store := Backend{
+		ListFocus: func() ([]FocusEntry, error) {
 			return []FocusEntry{
 				{Key: "frontend", Label: "frontend", Focused: true},
 				{Key: "backend", Label: "backend", Focused: false},
 			}, nil
 		},
-		Save: func(focused map[string]bool) error {
+		SaveFocus: func(focused map[string]bool) error {
 			saved = focused
 			return nil
 		},
@@ -75,7 +77,7 @@ func TestModel_FocusPickerSaves(t *testing.T) {
 	// Ctrl+P opens the picker populated from the store.
 	updated, _ := m.updateNormalMode(tea.KeyMsg{Type: tea.KeyCtrlP})
 	m = updated.(Model)
-	if !m.focusPicking {
+	if m.mode != modeFocusPick {
 		t.Fatal("expected focusPicking to be true after Ctrl+P")
 	}
 	if len(m.focusItems) != 2 {
@@ -91,7 +93,7 @@ func TestModel_FocusPickerSaves(t *testing.T) {
 	// Enter confirms and persists via the store.
 	updated, _ = m.updateFocusPickMode(tea.KeyMsg{Type: tea.KeyEnter})
 	m = updated.(Model)
-	if m.focusPicking {
+	if m.mode == modeFocusPick {
 		t.Error("expected picker to close after Enter")
 	}
 	if saved == nil {
@@ -103,7 +105,7 @@ func TestModel_FocusPickerSaves(t *testing.T) {
 }
 
 func TestModel_FocusPickerToggleAll(t *testing.T) {
-	m := NewModel(focusTestConfig(), nil)
+	m := NewModel(focusTestConfig(), Backend{})
 	m.focusItems = []FocusEntry{
 		{Key: "a", Focused: false},
 		{Key: "b", Focused: false},
@@ -122,7 +124,7 @@ func TestModel_FocusPickerToggleAll(t *testing.T) {
 }
 
 func TestModel_ReinitOnCtrlN(t *testing.T) {
-	m := NewModel(focusTestConfig(), nil)
+	m := NewModel(focusTestConfig(), Backend{})
 	updated, _ := m.updateNormalMode(tea.KeyMsg{Type: tea.KeyCtrlN})
 	m = updated.(Model)
 	if !m.reinit {
@@ -130,5 +132,59 @@ func TestModel_ReinitOnCtrlN(t *testing.T) {
 	}
 	if !m.quitting {
 		t.Error("expected quitting to be set after Ctrl+N")
+	}
+}
+
+// A focus save reloads the config from disk. The reload must be as complete as
+// the initial load: tool rows stay in the list and the config keeps its path.
+func TestModel_FocusPickerSaveKeepsToolRows(t *testing.T) {
+	dir := t.TempDir()
+	pltrc := filepath.Join(dir, config.ConfigFileName)
+	src := "locations:\n  - name: app\n    location: .\n    commands: [\"echo hi\"]\ntools:\n  - lazygit\n"
+	if err := os.WriteFile(pltrc, []byte(src), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(config.LoadOptions{Workdir: dir, Defer: true})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	store := Backend{
+		Reload: cfg.Reload,
+		ListFocus: func() ([]FocusEntry, error) {
+			return []FocusEntry{{Key: "app", Label: "app"}}, nil
+		},
+		SaveFocus: func(map[string]bool) error {
+			return os.WriteFile(pltrc, []byte("focused: [app]\n"+src), 0644)
+		},
+	}
+	hasToolRow := func(rows []CommandInfo) bool {
+		for _, r := range rows {
+			if r.IsTool {
+				return true
+			}
+		}
+		return false
+	}
+
+	m := NewModel(cfg, store)
+	m.loadCommands()
+	if !hasToolRow(m.commands) {
+		t.Fatal("precondition: expected a tool row before the save")
+	}
+
+	updated, _ := m.updateNormalMode(tea.KeyMsg{Type: tea.KeyCtrlP})
+	m = updated.(Model)
+	updated, _ = m.updateFocusPickMode(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(Model)
+
+	if !hasToolRow(m.commands) {
+		t.Error("tool rows disappeared after the focus save reloaded the config")
+	}
+	if m.config.Path != pltrc {
+		t.Errorf("config path after reload = %q, want %q", m.config.Path, pltrc)
+	}
+	if !m.config.AnyFocused() {
+		t.Error("expected the reloaded config to carry the saved focus")
 	}
 }

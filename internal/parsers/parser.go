@@ -75,21 +75,3 @@ func ParseAndFormatCommands(directory string, config ParserConfig) (map[string]s
 
 	return commands, nil
 }
-
-// DetectAndParseCommands detects the project type and parses commands
-func DetectAndParseCommands(directory string, parsersConfig *ParsersFile) (map[string]string, error) {
-	// Find the appropriate parser for this directory
-	parserName, parserConfig, err := parsersConfig.FindParserForDirectory(directory)
-	if err != nil {
-		// No parser found, return empty
-		return map[string]string{}, nil
-	}
-
-	// Parse and format commands
-	commands, err := ParseAndFormatCommands(directory, parserConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse commands for %s: %w", parserName, err)
-	}
-
-	return commands, nil
-}

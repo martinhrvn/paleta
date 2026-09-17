@@ -236,15 +236,37 @@ func TestScan_SortedRootFirst(t *testing.T) {
 	}
 }
 
-func TestDetectTypeMap_FromParsers(t *testing.T) {
-	m, err := detectTypeMap()
+func TestDetectMatcher_LiteralsFromParsers(t *testing.T) {
+	matcher, err := buildDetectMatcher()
 	if err != nil {
-		t.Fatalf("detectTypeMap failed: %v", err)
+		t.Fatalf("buildDetectMatcher failed: %v", err)
 	}
-	if m["go.mod"] != "go" {
-		t.Errorf("expected go.mod -> go, got %q", m["go.mod"])
+	if matcher.literals["go.mod"] != "go" {
+		t.Errorf("expected go.mod -> go, got %q", matcher.literals["go.mod"])
 	}
-	if m["Cargo.toml"] != "rust" {
-		t.Errorf("expected Cargo.toml -> rust, got %q", m["Cargo.toml"])
+	if matcher.literals["Cargo.toml"] != "rust" {
+		t.Errorf("expected Cargo.toml -> rust, got %q", matcher.literals["Cargo.toml"])
+	}
+}
+
+// The scan ranks a folder's types the same way the registry does, so a wizard
+// candidate and a loaded location agree on the primary type.
+func TestChooseTypes_UsesRegistryPriority(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"go.mod", "Dockerfile", "docker-compose.yml"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte(""), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cands, err := Scan(dir)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(cands) != 1 {
+		t.Fatalf("candidates = %+v, want the root only", cands)
+	}
+	want := []string{"go", "compose", "docker"}
+	if got := cands[0].Types; len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Errorf("types = %v, want %v", got, want)
 	}
 }

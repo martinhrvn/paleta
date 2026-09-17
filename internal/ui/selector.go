@@ -19,63 +19,6 @@ import (
 	"github.com/martinhrvn/paleta/internal/mux"
 )
 
-// Catppuccin Mocha palette (truecolor). Forced on via
-// lipgloss.SetColorProfile(termenv.TrueColor) in Run(), so these hex colors
-// render even though the shell wrapper captures stdout as a pipe.
-const (
-	ccBase     = "#1e1e2e"
-	ccSurface0 = "#313244"
-	ccOverlay0 = "#6c7086"
-	ccText     = "#cdd6f4"
-	ccLavender = "#b4befe"
-	ccBlue     = "#89b4fa"
-	ccGreen    = "#a6e3a1"
-	ccYellow   = "#f9e2af"
-	ccPeach    = "#fab387"
-)
-
-var (
-	searchPromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Bold(true)
-	selectedMarkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccGreen)).Bold(true)
-	// cursorLineStyle is the selected-row highlight shared by the focus picker,
-	// queue editor, and init wizard: a plain surface fill (no inner styling, so
-	// the background never gets punched out by ANSI resets).
-	cursorLineStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color(ccSurface0)).
-			Foreground(lipgloss.Color(ccText)).
-			Bold(true)
-	// Selected-row segments for the main palette list, which supports the
-	// lavender accent bar and per-character fuzzy-match highlighting. Every
-	// segment carries the surface background so no gaps appear between them.
-	selBarStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Background(lipgloss.Color(ccBase))
-	selBaseStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(ccText)).Background(lipgloss.Color(ccSurface0)).Bold(true)
-	selHlStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Background(lipgloss.Color(ccSurface0)).Bold(true)
-	selBadgeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccGreen)).Background(lipgloss.Color(ccSurface0)).Bold(true)
-	// Checked (queued) rows that are not under the cursor: a subtle surface fill
-	// with lavender accent text and a green position badge, so checked commands
-	// stand out from the list without competing with the cursor row's accent bar.
-	// Matches highlight in bright text so they still pop against the lavender base.
-	queuedBaseStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Background(lipgloss.Color(ccSurface0))
-	queuedHlStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color(ccText)).Background(lipgloss.Color(ccSurface0)).Bold(true)
-	queuedBadgeStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(ccGreen)).Background(lipgloss.Color(ccSurface0)).Bold(true)
-	previewBorderStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color(ccOverlay0))
-	previewLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccBlue))
-	previewValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccText))
-	statusStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color(ccOverlay0)).Faint(true)
-	statusGreenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(ccGreen)).Bold(true)
-	statusYellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccYellow)).Bold(true)
-	helpStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color(ccOverlay0)).Faint(true)
-	helpKeyStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Bold(true)
-	editPromptStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color(ccPeach)).Bold(true)
-	listLocationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccOverlay0)).Faint(true)
-	listCommandStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color(ccText))
-	previewTitleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Bold(true)
-	// matchStyle highlights fuzzy-matched characters in list rows.
-	matchStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(ccLavender)).Bold(true)
-)
-
 // Model is the bubbletea model for the fzf-style TUI selector
 type Model struct {
 	config           *config.Config
@@ -92,30 +35,29 @@ type Model struct {
 	// new multiplexer tab/window.
 	mux mux.Multiplexer
 
-	// Focus
-	focus       *FocusStore // nil when focus persistence is unavailable
-	focusActive bool        // session toggle: show only focused locations
+	// backend is the selector's seam to the rest of the program (see Backend).
+	backend Backend
+
+	focusActive bool // session toggle: show only focused locations
+
+	// mode is the sub-mode the selector is in; see selectorMode. Exactly one at a
+	// time, so the key, message and view dispatch all switch on it (handler).
+	mode selectorMode
 
 	// Focus picker mode (Ctrl+P)
-	focusPicking bool
-	focusItems   []FocusEntry
-	focusCursor  int
+	focusItems  []FocusEntry
+	focusCursor int
 
 	// Queue editor mode (Ctrl+Q): reorder/remove/save the queued commands.
-	queueEditing bool
-	queueCursor  int
-	// Save-to-.pltrc sub-mode within the queue editor.
-	queueSaving bool
-	saveInput   textinput.Model
-	queueHint   string     // transient message shown in the editor (e.g. save constraints)
-	saveCommand *SaveStore // nil when saving to .pltrc is unavailable
+	queueCursor int
+	saveInput   textinput.Model // the "Save as" prompt of the save sub-mode
+	queueHint   string          // transient message shown in the editor (e.g. save constraints)
 
 	// reinit is set when the user requests adding projects (Ctrl+N). The
 	// selector quits and the caller runs the init wizard before re-entering.
 	reinit bool
 
 	// Edit mode
-	editing         bool
 	editCommand     string
 	editDirectory   string
 	editDisplayName string
@@ -135,17 +77,92 @@ type Model struct {
 	// spinner animates the placeholder rows of locations still being resolved.
 	spinner spinner.Model
 
-	// resolvePending resolves a location's deferred project types in the
-	// background. nil means config.ResolvePendingTypes; tests substitute their own.
-	resolvePending func(config.Location) ([]config.Command, []config.Warning)
-
 	// State
 	quitting bool
 }
 
-// NewModel creates a new bubbletea Model for the TUI selector. focus may be nil
-// when there is no writable local config to persist focus changes to.
-func NewModel(cfg *config.Config, focus *FocusStore) Model {
+// selectorMode is the sub-mode the selector is in. The palette (modeNormal)
+// hands the keyboard to one sub-mode at a time; each sub-mode returns to the
+// palette on Esc.
+type selectorMode int
+
+const (
+	modeNormal    selectorMode = iota // the palette: search, cursor, queue
+	modeEdit                          // Ctrl+E: edit the command under the cursor before running
+	modeFocusPick                     // Ctrl+P: choose which locations are focused
+	modeQueueEdit                     // Ctrl+Q: reorder, remove or save the queued commands
+	modeQueueSave                     // "s" in the queue editor: name the command to save
+)
+
+func (s selectorMode) String() string {
+	switch s {
+	case modeNormal:
+		return "normal"
+	case modeEdit:
+		return "edit"
+	case modeFocusPick:
+		return "focus-pick"
+	case modeQueueEdit:
+		return "queue-edit"
+	case modeQueueSave:
+		return "queue-save"
+	}
+	return fmt.Sprintf("selectorMode(%d)", int(s))
+}
+
+// modeHandler is what a sub-mode contributes: its key handler, the text input
+// that owns non-key messages (cursor blink) if it has one, and its view (nil
+// means the palette view). handler is the one place a mode is dispatched, so
+// adding a sub-mode is one new case there plus one entry in the enum.
+type modeHandler struct {
+	key   func(Model, tea.KeyMsg) (tea.Model, tea.Cmd)
+	input func(*Model) *textinput.Model
+	view  func(Model) string
+}
+
+func (m Model) handler() modeHandler {
+	switch m.mode {
+	case modeEdit:
+		return modeHandler{
+			key:   Model.updateEditMode,
+			input: func(m *Model) *textinput.Model { return &m.editInput },
+		}
+	case modeFocusPick:
+		return modeHandler{
+			key:  Model.updateFocusPickMode,
+			view: Model.renderFocusPicker,
+		}
+	case modeQueueEdit:
+		return modeHandler{
+			key:  Model.updateQueueEditMode,
+			view: Model.renderQueueEditor,
+		}
+	case modeQueueSave:
+		return modeHandler{
+			key:   Model.updateQueueSaveMode,
+			input: func(m *Model) *textinput.Model { return &m.saveInput },
+			view:  Model.renderQueueEditor,
+		}
+	default:
+		return modeHandler{
+			key:   Model.updateNormalMode,
+			input: func(m *Model) *textinput.Model { return &m.searchInput },
+		}
+	}
+}
+
+// leaveMode returns to the palette from any sub-mode and gives the search box
+// the keyboard back.
+func (m *Model) leaveMode() {
+	m.mode = modeNormal
+	m.editInput.Blur()
+	m.saveInput.Blur()
+	m.searchInput.Focus()
+}
+
+// NewModel creates the selector for cfg. be supplies everything outside the
+// terminal; see Backend for what each nil field disables.
+func NewModel(cfg *config.Config, be Backend) Model {
 	si := textinput.New()
 	si.Prompt = searchPromptGlyph()
 	si.Focus()
@@ -166,22 +183,14 @@ func NewModel(cfg *config.Config, focus *FocusStore) Model {
 	m := Model{
 		config:          cfg,
 		frecencyEnabled: cfg.Frecency.Enabled,
-		focus:           focus,
+		backend:         be,
+		history:         be.History,
 		focusActive:     cfg.AnyFocused(),
 		searchInput:     si,
 		editInput:       ei,
 		saveInput:       sv,
 		spinner:         sp,
 		mux:             mux.DetectEnv(),
-	}
-
-	// Load history regardless of frecency: frecencyEnabled only controls sorting,
-	// but the preview pane shows run/recency stats in either mode.
-	if projectRoot, err := history.FindProjectRoot("."); err == nil {
-		m.history, _ = history.LoadOrCreateHistory(projectRoot)
-		if m.history != nil {
-			m.history.SetWeights(history.NewWeights(cfg.Frecency.FrequencyWeight, cfg.Frecency.RecencyWeight))
-		}
 	}
 
 	return m
@@ -220,37 +229,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyMsg:
-		if m.queueEditing {
-			return m.updateQueueEditMode(msg)
-		}
-		if m.focusPicking {
-			return m.updateFocusPickMode(msg)
-		}
-		if m.editing {
-			return m.updateEditMode(msg)
-		}
-		return m.updateNormalMode(msg)
+		return m.handler().key(m, msg)
 	}
 
-	// Pass other messages to the active input
-	var cmd tea.Cmd
-	if m.focusPicking {
+	// Anything else (cursor blink) goes to the mode's text input, if it has one.
+	h := m.handler()
+	if h.input == nil {
 		return m, nil
 	}
-	if m.queueEditing {
-		if m.queueSaving {
-			m.saveInput, cmd = m.saveInput.Update(msg)
-		}
-		return m, cmd
-	}
-	if m.editing {
-		m.editInput, cmd = m.editInput.Update(msg)
-	} else {
-		prevValue := m.searchInput.Value()
-		m.searchInput, cmd = m.searchInput.Update(msg)
-		if m.searchInput.Value() != prevValue {
-			m.updateFilteredCommands()
-		}
+	in := h.input(&m)
+	prev := in.Value()
+	var cmd tea.Cmd
+	*in, cmd = in.Update(msg)
+	if m.mode == modeNormal && in.Value() != prev {
+		m.updateFilteredCommands()
 	}
 	return m, cmd
 }
@@ -372,18 +364,14 @@ func (m Model) View() string {
 		return ""
 	}
 
-	if m.queueEditing {
-		return m.renderQueueEditor()
-	}
-
-	if m.focusPicking {
-		return m.renderFocusPicker()
+	if view := m.handler().view; view != nil {
+		return view(m)
 	}
 
 	var sections []string
 
 	// Search / edit input
-	if m.editing {
+	if m.mode == modeEdit {
 		sections = append(sections, m.editInput.View())
 	} else {
 		sections = append(sections, m.searchInput.View())
@@ -401,7 +389,7 @@ func (m Model) View() string {
 	sections = append(sections, m.renderMainContent())
 
 	// Help line
-	if m.editing {
+	if m.mode == modeEdit {
 		sections = append(sections, m.renderHelp([][2]string{
 			{"Enter", "confirm"},
 			{"Esc", "cancel"},
@@ -492,17 +480,23 @@ func (m Model) renderHelp(items [][2]string) string {
 	return "  " + strings.Join(parts, helpStyle.Render(" · "))
 }
 
-func (m Model) renderMainContent() string {
-	// Calculate available height for the list (total height minus chrome: search +
-	// status + help = 3 lines, plus the warning banner line when shown).
+// listHeight is the number of list rows the palette can draw: the terminal
+// height minus the chrome (search line, status line, help line, and the warning
+// banner when shown). The viewport and the renderer both use it, so the cursor
+// can never scroll onto a row that isn't drawn.
+func (m Model) listHeight() int {
 	chrome := 3
 	if len(m.config.Warnings) > 0 {
 		chrome++
 	}
-	listHeight := m.height - chrome
-	if listHeight < 1 {
-		listHeight = 10 // sensible default
+	if h := m.height - chrome; h >= 1 {
+		return h
 	}
+	return 10 // no size yet: a sensible default
+}
+
+func (m Model) renderMainContent() string {
+	listHeight := m.listHeight()
 
 	// Calculate widths for list and preview
 	listWidth := m.width * 7 / 10
@@ -528,20 +522,12 @@ func (m Model) renderCommandList(width, height int) string {
 		return lipgloss.NewStyle().Width(width).Height(height).Render("  No matches")
 	}
 
-	// Calculate visible range
-	visibleCount := height
-	start := m.viewportOffset
-	end := start + visibleCount
-	if end > len(m.filteredCommands) {
-		end = len(m.filteredCommands)
-	}
-
-	query := strings.ToLower(m.searchInput.Value())
+	start, end := visibleWindow(m.viewportOffset, height, len(m.filteredCommands))
 
 	var lines []string
 	for i := start; i < end; i++ {
 		pos := m.queuePosAt(i)
-		matched := matchedSet(m.filteredCommands[i].Display, query)
+		matched := matchedFrom(m.filteredCommands[i].matched)
 
 		var line string
 		switch {
@@ -559,12 +545,7 @@ func (m Model) renderCommandList(width, height int) string {
 		lines = append(lines, line)
 	}
 
-	// Pad remaining lines if list is shorter than available height
-	for len(lines) < height {
-		lines = append(lines, "")
-	}
-
-	return strings.Join(lines, "\n")
+	return strings.Join(padLines(lines, height), "\n")
 }
 
 func (m Model) renderPreview(width, height int) string {
@@ -583,133 +564,84 @@ func (m Model) renderPreview(width, height int) string {
 func (m *Model) loadCommands() {
 	m.commands = []CommandInfo{}
 
-	// When the focus filter is active and any location is focused, hide the
-	// non-focused ones. The AnyFocused guard means toggling focus on while
-	// nothing is focused never blanks the list.
-	filterFocus := m.focusActive && m.config.AnyFocused()
-
-	for _, location := range m.config.Locations {
-		if filterFocus && !location.Focused {
-			continue
+	for _, row := range m.config.Rows(m.focusActive) {
+		info := CommandInfo{
+			// The row shows the plain label; the project type is rendered separately
+			// as a trailing badge (see rowContent), which is what keeps same-named
+			// commands across types apart.
+			Display:       row.Label(),
+			Directory:     row.Directory,
+			Command:       row.Command,
+			DisplayName:   row.DisplayName,
+			Type:          row.Type,
+			Env:           row.Env,
+			Invalid:       row.Invalid != "",
+			InvalidReason: row.Invalid,
+			IsTool:        row.IsTool,
 		}
-
-		displayName := location.Name
-		if displayName == "" {
-			displayName = location.Location
-		}
-
-		for _, command := range location.Commands {
-			// The row shows the bare name; the project type is rendered separately
-			// as a trailing badge (see rowContent), so we don't fold it into the
-			// label here — that also disambiguates same-named commands across types
-			// the way CommandLabel's "[type]" prefix used to.
-			cmdDisplay := command.Name
-			if cmdDisplay == "" {
-				cmdDisplay = command.Command
-			}
-
-			var score float64
+		switch {
+		case len(row.Pending) > 0:
+			// A location whose types are still resolving gets a placeholder so the
+			// palette shows that something is on its way rather than looking empty.
+			// The marker is swapped for the live spinner frame at render time.
+			info.Display = fmt.Sprintf("%s: %s %s…", row.DisplayName, loadingRowMarker,
+				strings.Join(row.Pending, ", "))
+			info.Loading = true
+		case row.IsTool:
+			// A tool row keeps no command name: tools can't be referenced as
+			// @project:command aliases, so a saved queue stores them verbatim.
+		default:
+			info.Name = row.Name
 			if m.history != nil && m.frecencyEnabled {
-				score = m.history.GetScore(displayName, command.Command)
+				info.FrecencyScore = m.history.GetScore(row.DisplayName, row.Command)
 			}
-
-			// Flag the row when its name is un-aliasable (space, '*', …) or its
-			// @project:command reference couldn't be resolved. Prefer the command's
-			// name reason, then its unresolved-alias error, then the location's.
-			invalidReason := command.NameError
-			if invalidReason == "" {
-				invalidReason = command.Error
-			}
-			if invalidReason == "" {
-				invalidReason = location.NameError
-			}
-
-			info := CommandInfo{
-				Display:       fmt.Sprintf("%s: %s", displayName, cmdDisplay),
-				Directory:     location.Location,
-				Command:       command.Command,
-				DisplayName:   displayName,
-				Name:          command.Name,
-				Type:          command.Type,
-				Env:           config.EffectiveEnv(location, command),
-				FrecencyScore: score,
-				Invalid:       invalidReason != "",
-				InvalidReason: invalidReason,
-			}
-			m.commands = append(m.commands, info)
 		}
-
-		// A location whose types are still resolving gets a placeholder so the
-		// palette shows that something is on its way rather than looking empty.
-		// The marker is swapped for the live spinner frame at render time.
-		if len(location.PendingTypes) > 0 {
-			m.commands = append(m.commands, CommandInfo{
-				Display: fmt.Sprintf("%s: %s %s…", displayName, loadingRowMarker,
-					strings.Join(location.PendingTypes, ", ")),
-				Directory:   location.Location,
-				DisplayName: displayName,
-				Loading:     true,
-			})
-		}
-	}
-
-	// Append enabled tools at the end of the list. They are project-global (not
-	// tied to a location) and run in the user's current directory, so they are
-	// shown regardless of the focus filter.
-	for _, tool := range m.config.ResolvedTools {
-		m.commands = append(m.commands, CommandInfo{
-			Display:     tool.Display,
-			Directory:   tool.Directory,
-			Command:     tool.Command,
-			DisplayName: tool.Tool,
-			Env:         tool.Env,
-			IsTool:      true,
-		})
+		m.commands = append(m.commands, info)
 	}
 }
 
-// reloadConfig re-reads the discovered config from disk so focus changes written
-// by the picker are reflected in the list. On failure the existing config is
-// kept.
-func (m *Model) reloadConfig() {
-	if cfg, err := config.LoadConfigFromDiscovery(); err == nil {
-		m.config = cfg
+// reloadConfig re-reads the config through the backend after a save so the list
+// reflects it; the types the reload defers are resolved again in the background
+// by the returned command. Without a Reload, or on failure, the existing config
+// is kept.
+func (m *Model) reloadConfig() tea.Cmd {
+	if m.backend.Reload == nil {
+		return nil
 	}
+	cfg, err := m.backend.Reload()
+	if err != nil {
+		return nil
+	}
+	m.config = cfg
+	cmds := m.resolvePendingCmds()
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(append(cmds, m.spinner.Tick)...)
 }
 
+// updateFilteredCommands rebuilds the visible list from the loaded rows: ordered
+// by frecency when that is on (tool rows pinned last), then narrowed and ranked
+// by the query. The loaded rows themselves are never reordered, so the base
+// order is always there to fall back to. The cursor returns to the top.
 func (m *Model) updateFilteredCommands() {
-	// Recalculate frecency scores if enabled, then pre-sort the base list by
-	// frecency. fuzzyFilter's sort is stable, so among equally good textual
-	// matches the more frequently used command stays first — giving "match
-	// quality first, frecency as tiebreak" without threading scores through.
+	ordered := append([]CommandInfo(nil), m.commands...)
 	if m.frecencyEnabled && m.history != nil {
-		for i := range m.commands {
-			m.commands[i].FrecencyScore = m.history.GetScore(
-				m.commands[i].DisplayName,
-				m.commands[i].Command,
-			)
+		for i := range ordered {
+			ordered[i].FrecencyScore = m.history.GetScore(ordered[i].DisplayName, ordered[i].Command)
 		}
-		sort.SliceStable(m.commands, func(i, j int) bool {
-			// Tool rows are pinned to the end of the default view; frecency orders
-			// within the location rows and within the tool rows separately.
-			if m.commands[i].IsTool != m.commands[j].IsTool {
-				return !m.commands[i].IsTool
+		// fuzzyFilter's ranking is stable, so among equally good textual matches
+		// the more frequently used command stays first: match quality first,
+		// frecency as the tiebreak.
+		sort.SliceStable(ordered, func(i, j int) bool {
+			if ordered[i].IsTool != ordered[j].IsTool {
+				return !ordered[i].IsTool
 			}
-			return m.commands[i].FrecencyScore > m.commands[j].FrecencyScore
+			return ordered[i].FrecencyScore > ordered[j].FrecencyScore
 		})
 	}
 
-	// Apply fuzzy filter. With no query the pre-sorted base order is kept as-is;
-	// with a query, results are ordered best-match-first by fuzzyFilter.
-	query := m.searchInput.Value()
-	if query == "" {
-		m.filteredCommands = make([]CommandInfo, len(m.commands))
-		copy(m.filteredCommands, m.commands)
-	} else {
-		m.filteredCommands = m.fuzzyFilter(m.commands, query)
-	}
-
-	// Reset cursor and viewport
+	m.filteredCommands = m.fuzzyFilter(ordered, m.searchInput.Value())
 	m.currentIndex = 0
 	m.viewportOffset = 0
 }
@@ -864,7 +796,10 @@ func (m Model) fuzzyFilter(commands []CommandInfo, query string) []CommandInfo {
 	}
 	var matches []scoredCommand
 	for _, cmd := range commands {
-		if score, _, ok := fuzzyScore(strings.ToLower(cmd.Display), query); ok {
+		// Display is ASCII apart from the loading marker, so offsets into the
+		// lowercased text index the original too.
+		if score, positions, ok := fuzzyScore(strings.ToLower(cmd.Display), query); ok {
+			cmd.matched = positions
 			matches = append(matches, scoredCommand{cmd: cmd, score: score})
 		}
 	}
@@ -1025,13 +960,9 @@ func fuzzySubsequenceIndices(text, query string) []int {
 	return positions
 }
 
-// matchedSet returns the set of byte offsets in display matched by query
-// (already lowercased), or nil when there is no active query or no match.
-func matchedSet(display, query string) map[int]bool {
-	if query == "" {
-		return nil
-	}
-	idx := fuzzySubsequenceIndices(display, query)
+// matchedFrom turns cached match offsets into the set the renderer highlights,
+// or nil when the row has none.
+func matchedFrom(idx []int) map[int]bool {
 	if len(idx) == 0 {
 		return nil
 	}
@@ -1214,7 +1145,7 @@ func (m *Model) enterEditMode() {
 	}
 
 	cmd := m.filteredCommands[m.currentIndex]
-	m.editing = true
+	m.mode = modeEdit
 	m.editCommand = cmd.Command
 	m.editDirectory = cmd.Directory
 	m.editDisplayName = cmd.DisplayName
@@ -1238,51 +1169,37 @@ func (m *Model) confirmEdit() {
 }
 
 func (m *Model) cancelEdit() {
-	m.editing = false
 	m.editCommand = ""
 	m.editDirectory = ""
 	m.editDisplayName = ""
 	m.editEnv = nil
-
-	m.editInput.Blur()
-	m.searchInput.Focus()
+	m.leaveMode()
 }
 
 func (m *Model) moveCursorDown() {
-	if len(m.filteredCommands) == 0 {
-		return
-	}
-	m.currentIndex++
-	if m.currentIndex >= len(m.filteredCommands) {
-		m.currentIndex = len(m.filteredCommands) - 1
-	}
+	m.currentIndex = moveCursor(m.currentIndex, 1, len(m.filteredCommands))
 	m.adjustViewport()
 }
 
 func (m *Model) moveCursorUp() {
-	if len(m.filteredCommands) == 0 {
-		return
-	}
-	m.currentIndex--
-	if m.currentIndex < 0 {
-		m.currentIndex = 0
-	}
+	m.currentIndex = moveCursor(m.currentIndex, -1, len(m.filteredCommands))
 	m.adjustViewport()
 }
 
+// adjustViewport scrolls the list so the cursor row is drawn.
 func (m *Model) adjustViewport() {
-	visibleRows := m.height - 3
-	if visibleRows < 1 {
-		visibleRows = 10
-	}
+	m.viewportOffset = scrollToCursor(m.currentIndex, m.viewportOffset, m.listHeight())
+}
 
-	// Scroll down if cursor is below viewport
-	if m.currentIndex >= m.viewportOffset+visibleRows {
-		m.viewportOffset = m.currentIndex - visibleRows + 1
-	}
-	// Scroll up if cursor is above viewport
-	if m.currentIndex < m.viewportOffset {
-		m.viewportOffset = m.currentIndex
+// placeCursorOn moves the cursor to the row with the given queue key, if it is
+// still in the list, and scrolls to it.
+func (m *Model) placeCursorOn(key string) {
+	for i := range m.filteredCommands {
+		if queueKey(m.filteredCommands[i]) == key {
+			m.currentIndex = i
+			m.adjustViewport()
+			return
+		}
 	}
 }
 
@@ -1392,9 +1309,9 @@ type pendingResolvedMsg struct {
 // finishes, so a slow `./gradlew tasks --all` never delays the palette opening —
 // its rows just appear a moment later.
 func (m Model) resolvePendingCmds() []tea.Cmd {
-	resolve := m.resolvePending
+	resolve := m.backend.ResolvePending
 	if resolve == nil {
-		resolve = config.ResolvePendingTypes
+		return nil
 	}
 
 	var cmds []tea.Cmd
@@ -1413,10 +1330,14 @@ func (m Model) resolvePendingCmds() []tea.Cmd {
 }
 
 // applyPendingResolved merges a resolved location's commands into the config and
-// rebuilds the list, preserving the row the cursor is on.
+// rebuilds the list, keeping the cursor on the row it was on.
 func (m *Model) applyPendingResolved(msg pendingResolvedMsg) {
 	if msg.index < 0 || msg.index >= len(m.config.Locations) {
 		return
+	}
+	var current string
+	if m.currentIndex >= 0 && m.currentIndex < len(m.filteredCommands) {
+		current = queueKey(m.filteredCommands[m.currentIndex])
 	}
 
 	if msg.commands != nil {
@@ -1427,12 +1348,9 @@ func (m *Model) applyPendingResolved(msg pendingResolvedMsg) {
 
 	m.loadCommands()
 	m.updateFilteredCommands()
-}
-
-// SetPendingResolver overrides how deferred project types are resolved. Used by
-// tests; production uses config.ResolvePendingTypes.
-func (m *Model) SetPendingResolver(resolve func(config.Location) ([]config.Command, []config.Warning)) {
-	m.resolvePending = resolve
+	if current != "" {
+		m.placeCursorOn(current)
+	}
 }
 
 // rowDisplay is the text for a list row. A placeholder for a location whose

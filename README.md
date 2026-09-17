@@ -520,21 +520,25 @@ commands still load and run.
 
 ### Custom Parsers
 
-Create `~/.paleta/parsers.yaml` to define custom command parsers:
+Create `~/.paleta/parsers.yaml` to define project types of your own, or to
+override a built-in one by name. A type says which files mark a folder, which
+commands are always available, and how to discover the rest:
 
 ```yaml
 parsers:
-  custom_parser:
-    detect_files:
-      - "custom.json"
+  just:
+    detect_files: ["justfile", "Justfile"]   # any present marks the folder as this type
+    priority: 65                            # ranks it among other types found in one folder (lower first)
     base_commands:
-      - "custom build"
-      - "custom test"
-    command_parser:
-      type: "command"
-      command: "jq -r '.scripts | keys[]' {file}"
-      template: "npm run {key}"
+      list: "just --list"
+    parser_command: "just --summary | tr ' ' '\n'"   # one command name per line
+    command_template: "just {key}"          # how each discovered name becomes a command
 ```
+
+`builtin_parser: package_json_scripts` (or `go_standard`) reads names from a file
+instead of running a command. A type with a `parser_command` is resolved in the
+background so a slow tool never delays the palette. Types without a `priority`
+sort after every type that has one.
 
 ### Global Project Configuration
 
@@ -878,14 +882,18 @@ go test -cover ./...
 ├── cmd/
 │   └── plt/           # Main application entry point
 ├── internal/
-│   ├── config/         # Configuration parsing and discovery
-│   ├── commands/       # Command execution and formatting
-│   ├── projecttypes/   # Project type parsers
-│   └── ui/            # TUI components
-├── examples/          # Example configurations
-├── packaging/plt    # Shell wrapper script (installed as `plt`)
-├── install.sh        # Installation script
-└── flake.nix         # Nix flake configuration
+│   ├── commands/       # CLI: subcommand dispatch and orchestration
+│   ├── config/         # .pltrc model: loading, in-place rewriting, palette rows
+│   ├── ui/             # TUI: selector and init wizard
+│   ├── parsers/        # project types: detection, command discovery, priority
+│   ├── scan/           # `plt init` tree scan
+│   ├── history/        # command history and frecency
+│   └── mux/            # tmux / zellij detection
+├── plt-core.sh        # wrapper logic (runs the selection the binary returns)
+├── plt-integration.zsh # zsh Ctrl+P widget
+├── packaging/plt      # Shell wrapper script (installed as `plt`)
+├── install.sh         # Installation script
+└── flake.nix          # Nix flake configuration
 ```
 
 ## Troubleshooting

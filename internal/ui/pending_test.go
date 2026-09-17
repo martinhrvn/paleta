@@ -38,7 +38,7 @@ func rowDisplays(m Model) []string {
 }
 
 func TestSelector_ShowsLoadingRowForPendingLocation(t *testing.T) {
-	m := NewModel(pendingTestConfig(), nil)
+	m := NewModel(pendingTestConfig(), Backend{})
 	m.loadCommands()
 
 	var loading *CommandInfo
@@ -59,7 +59,7 @@ func TestSelector_ShowsLoadingRowForPendingLocation(t *testing.T) {
 }
 
 func TestSelector_MergesResolvedCommandsInPlace(t *testing.T) {
-	m := NewModel(pendingTestConfig(), nil)
+	m := NewModel(pendingTestConfig(), Backend{})
 	m.loadCommands()
 
 	updated, _ := m.Update(pendingResolvedMsg{
@@ -86,7 +86,7 @@ func TestSelector_MergesResolvedCommandsInPlace(t *testing.T) {
 // TestSelector_LoadingRowIsNotRunnable: a placeholder must never be queued or
 // executed — it has no command to run.
 func TestSelector_LoadingRowIsNotRunnable(t *testing.T) {
-	m := NewModel(pendingTestConfig(), nil)
+	m := NewModel(pendingTestConfig(), Backend{})
 	m.loadCommands()
 	m.updateFilteredCommands()
 
@@ -113,7 +113,7 @@ func TestSelector_LoadingRowIsNotRunnable(t *testing.T) {
 }
 
 func TestSelector_ResolveWarningsReachTheBanner(t *testing.T) {
-	m := NewModel(pendingTestConfig(), nil)
+	m := NewModel(pendingTestConfig(), Backend{})
 	m.loadCommands()
 
 	updated, _ := m.Update(pendingResolvedMsg{

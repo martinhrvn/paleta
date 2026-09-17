@@ -36,7 +36,7 @@ type wizardRow struct {
 }
 
 // WizardModel is the bubbletea model for the interactive `plt init` wizard. It
-// mirrors the command palette (fzf_tui_selector.go): a fuzzy search box on top,
+// mirrors the command palette (selector.go): a fuzzy search box on top,
 // a scrolling checkbox list, and the same keys (Tab toggle, Ctrl+A all, Ctrl+U
 // clear, Enter confirm). Selection is keyed by the item's index in the full
 // items slice so it survives filtering, while filtered holds the indices of the
@@ -354,16 +354,7 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *WizardModel) moveCursor(delta int) {
-	if len(m.rows) == 0 {
-		return
-	}
-	m.cursor += delta
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.cursor >= len(m.rows) {
-		m.cursor = len(m.rows) - 1
-	}
+	m.cursor = moveCursor(m.cursor, delta, len(m.rows))
 	m.adjustViewport()
 }
 
@@ -378,16 +369,7 @@ func (m WizardModel) listHeight() int {
 }
 
 func (m *WizardModel) adjustViewport() {
-	rows := m.listHeight()
-	if m.cursor >= m.viewportOffset+rows {
-		m.viewportOffset = m.cursor - rows + 1
-	}
-	if m.cursor < m.viewportOffset {
-		m.viewportOffset = m.cursor
-	}
-	if m.viewportOffset < 0 {
-		m.viewportOffset = 0
-	}
+	m.viewportOffset = scrollToCursor(m.cursor, m.viewportOffset, m.listHeight())
 }
 
 func (m WizardModel) View() string {
@@ -422,21 +404,14 @@ func (m WizardModel) renderList() string {
 	}
 
 	height := m.listHeight()
-	start := m.viewportOffset
-	end := start + height
-	if end > len(m.rows) {
-		end = len(m.rows)
-	}
+	start, end := visibleWindow(m.viewportOffset, height, len(m.rows))
 
 	annotations := m.globAnnotations()
 	var lines []string
 	for pos := start; pos < end; pos++ {
 		lines = append(lines, m.formatRowWith(pos, annotations))
 	}
-	for len(lines) < height {
-		lines = append(lines, "")
-	}
-	return strings.Join(lines, "\n")
+	return strings.Join(padLines(lines, height), "\n")
 }
 
 // formatRow renders one row on its own. renderList uses formatRowWith instead so

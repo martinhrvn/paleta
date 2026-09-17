@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/martinhrvn/paleta/internal/projecttypes"
+	"github.com/martinhrvn/paleta/internal/parsers"
 )
 
 // withMakeParserCommand points the `make` parser at a given shell command for the
@@ -24,8 +24,8 @@ func withMakeParserCommand(t *testing.T, parserCommand string) {
 	if err := os.WriteFile(filepath.Join(dir, "parsers.yaml"), []byte(override), 0644); err != nil {
 		t.Fatalf("write parsers.yaml: %v", err)
 	}
-	projecttypes.ReloadRegistry()
-	t.Cleanup(projecttypes.ReloadRegistry)
+	parsers.ReloadRegistry()
+	t.Cleanup(parsers.ReloadRegistry)
 }
 
 // TestProcessProjectTypes_ParserFailureDegradesToWarning: a broken parser command

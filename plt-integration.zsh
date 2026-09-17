@@ -62,33 +62,49 @@ __plt_open_in_mux() {
     fi
 }
 
-# Build the command line for a selection (single object or multi-select array)
-# and open it in a new tmux window / zellij tab, recording history like a normal
-# run.
-__plt_run_selection_in_pane() {
-    local plt_binary="$1" jq_cmd="$2" selection_json="$3" first_char="$4"
-    local runline=""
+# One "cd dir && cmd" segment for the selection object at jq path $3 ("" for a
+# single selection, ".[i]" for one element of a multi-select), with the env
+# applied in a subshell. Fails when the object can't be parsed.
+__plt_segment() {
+    local jq_cmd="$1" selection_json="$2" path="$3"
+    local dir=$("$jq_cmd" -r "$path.directory" <<< "$selection_json")
+    local cmd=$("$jq_cmd" -r "$path.command" <<< "$selection_json")
+    if [[ "$dir" = "null" || "$cmd" = "null" ]]; then
+        return 1
+    fi
+    local envprefix=$("$jq_cmd" -r "$path.env // {} | to_entries | map(\"\(.key)=\" + (.value|@sh)) | join(\" \")" <<< "$selection_json")
+    if [[ -n "$envprefix" ]]; then
+        echo "cd '$dir' && ( export $envprefix; $cmd )"
+    else
+        echo "cd '$dir' && $cmd"
+    fi
+}
 
+# Record the selection object at jq path $4 ("" or ".[i]") in history — unless the user edited
+# the command (Ctrl+E), which shouldn't count toward the original's frecency.
+__plt_record() {
+    local plt_binary="$1" jq_cmd="$2" selection_json="$3" path="$4"
+    local action=$("$jq_cmd" -r "$path.action // \"execute\"" <<< "$selection_json")
+    [[ "$action" = "edit" ]] && return 0
+    local name=$("$jq_cmd" -r "$path.display_name" <<< "$selection_json")
+    local cmd=$("$jq_cmd" -r "$path.command" <<< "$selection_json")
+    if [[ -n "$name" && "$name" != "null" ]]; then
+        "$plt_binary" record "$name" "$cmd" 2>/dev/null || true
+    fi
+}
+
+# Turn a selection (single object or multi-select array) into one command line
+# that runs each command in its own directory, in order, recording each in
+# history. Prints the line; fails when the selection can't be parsed.
+__plt_selection_runline() {
+    local plt_binary="$1" jq_cmd="$2" selection_json="$3" first_char="$4"
+    local runline="" segment
     if [[ "$first_char" = "[" ]]; then
         local count=$("$jq_cmd" 'length' <<< "$selection_json")
         local i=0
         while [[ "$i" -lt "$count" ]]; do
-            local dir=$("$jq_cmd" -r ".[$i].directory" <<< "$selection_json")
-            local cmd=$("$jq_cmd" -r ".[$i].command" <<< "$selection_json")
-            local name=$("$jq_cmd" -r ".[$i].display_name" <<< "$selection_json")
-            local envprefix=$("$jq_cmd" -r ".[$i].env // {} | to_entries | map(\"\(.key)=\" + (.value|@sh)) | join(\" \")" <<< "$selection_json")
-
-            if [[ -n "$name" && "$name" != "null" ]]; then
-                "$plt_binary" record "$name" "$cmd" 2>/dev/null || true
-            fi
-
-            local segment
-            if [[ -n "$envprefix" ]]; then
-                segment="cd '$dir' && ( export $envprefix; $cmd )"
-            else
-                segment="cd '$dir' && $cmd"
-            fi
-
+            segment=$(__plt_segment "$jq_cmd" "$selection_json" ".[$i]") || return 1
+            __plt_record "$plt_binary" "$jq_cmd" "$selection_json" ".[$i]"
             if [[ -z "$runline" ]]; then
                 runline="$segment"
             else
@@ -97,27 +113,21 @@ __plt_run_selection_in_pane() {
             ((i++))
         done
     else
-        local dir=$("$jq_cmd" -r '.directory' <<< "$selection_json")
-        local cmd=$("$jq_cmd" -r '.command' <<< "$selection_json")
-        local name=$("$jq_cmd" -r '.display_name' <<< "$selection_json")
-        local envprefix=$("$jq_cmd" -r '.env // {} | to_entries | map("\(.key)=" + (.value|@sh)) | join(" ")' <<< "$selection_json")
-
-        if [[ "$dir" = "null" || "$cmd" = "null" ]]; then
-            echo "\nFailed to parse selection from plt output." >&2
-            return 1
-        fi
-
-        if [[ -n "$name" && "$name" != "null" ]]; then
-            "$plt_binary" record "$name" "$cmd" 2>/dev/null || true
-        fi
-
-        if [[ -n "$envprefix" ]]; then
-            runline="cd '$dir' && ( export $envprefix; $cmd )"
-        else
-            runline="cd '$dir' && $cmd"
-        fi
+        runline=$(__plt_segment "$jq_cmd" "$selection_json" "") || return 1
+        __plt_record "$plt_binary" "$jq_cmd" "$selection_json" ""
     fi
+    echo "$runline"
+}
 
+# Build the command line for a selection and open it in a new tmux window /
+# zellij tab, recording history like a normal run.
+__plt_run_selection_in_pane() {
+    local plt_binary="$1" jq_cmd="$2" selection_json="$3" first_char="$4"
+    local runline
+    if ! runline=$(__plt_selection_runline "$plt_binary" "$jq_cmd" "$selection_json" "$first_char"); then
+        echo "\nFailed to parse selection from plt output." >&2
+        return 1
+    fi
     __plt_open_in_mux "$runline"
 }
 
@@ -149,22 +159,24 @@ __plt_select_widget() {
         # Check if result is array (multi-select) or single object
         local first_char="${selection_json:0:1}"
 
-        # The "pane" action opens the selection in a new tmux window / zellij tab
-        # rather than running it in the current shell.
-        local pane_action
+        # The action comes from the object, or the first array element. "pane"
+        # opens the selection in a new tmux window / zellij tab rather than
+        # running it in the current shell; "edit" leaves it on the line to edit.
+        local action
         if [[ "$first_char" = "[" ]]; then
-            pane_action=$("$jq_cmd" -r '.[0].action // "execute"' <<< "$selection_json")
+            action=$("$jq_cmd" -r '.[0].action // "execute"' <<< "$selection_json")
         else
-            pane_action=$("$jq_cmd" -r '.action // "execute"' <<< "$selection_json")
+            action=$("$jq_cmd" -r '.action // "execute"' <<< "$selection_json")
         fi
-        if [[ "$pane_action" = "pane" ]]; then
+        if [[ "$action" = "pane" ]]; then
             __plt_run_selection_in_pane "$plt_binary" "$jq_cmd" "$selection_json" "$first_char"
             zle reset-prompt
             return 0
         fi
 
         if [[ "$first_char" = "[" ]]; then
-            # Multi-select: JSON array - build compound command
+            # Multi-select: JSON array - one compound command, env included, exactly
+            # as the single and pane paths build it.
             local count=$("$jq_cmd" 'length' <<< "$selection_json")
 
             if [[ "$count" -eq 0 ]]; then
@@ -172,30 +184,12 @@ __plt_select_widget() {
                 return 0
             fi
 
-            # Check action from first element
-            local action=$("$jq_cmd" -r '.[0].action // "execute"' <<< "$selection_json")
-
-            local compound_cmd=""
-            local i=0
-            while [[ "$i" -lt "$count" ]]; do
-                local dir=$("$jq_cmd" -r ".[$i].directory" <<< "$selection_json")
-                local cmd=$("$jq_cmd" -r ".[$i].command" <<< "$selection_json")
-                local name=$("$jq_cmd" -r ".[$i].display_name" <<< "$selection_json")
-
-                # Record each command (only for execute mode)
-                if [[ "$action" != "edit" && -n "$name" && "$name" != "null" ]]; then
-                    "$plt_binary" record "$name" "$cmd" 2>/dev/null || true
-                fi
-
-                # Build compound command
-                if [[ -z "$compound_cmd" ]]; then
-                    compound_cmd="cd '$dir' && $cmd"
-                else
-                    compound_cmd="$compound_cmd && cd '$dir' && $cmd"
-                fi
-
-                ((i++))
-            done
+            local compound_cmd
+            if ! compound_cmd=$(__plt_selection_runline "$plt_binary" "$jq_cmd" "$selection_json" "$first_char"); then
+                echo "\nFailed to parse selection from plt output." >&2
+                zle reset-prompt
+                return 1
+            fi
 
             # Put compound command in buffer
             BUFFER="$compound_cmd"
@@ -208,14 +202,10 @@ __plt_select_widget() {
             # Single selection: JSON object
             local directory=$("$jq_cmd" -r '.directory' <<< "$selection_json")
             local command=$("$jq_cmd" -r '.command' <<< "$selection_json")
-            local display_name=$("$jq_cmd" -r '.display_name' <<< "$selection_json")
-            local action=$("$jq_cmd" -r '.action // "execute"' <<< "$selection_json")
 
             if [[ "$directory" != "null" && "$command" != "null" && -d "$directory" ]]; then
-                # Record to history (only for execute mode)
-                if [[ "$action" != "edit" && -n "$display_name" && "$display_name" != "null" ]]; then
-                    "$plt_binary" record "$display_name" "$command" 2>/dev/null || true
-                fi
+                # Record to history (skipped for an edited command)
+                __plt_record "$plt_binary" "$jq_cmd" "$selection_json" ""
 
                 # Change to directory
                 cd "$directory"

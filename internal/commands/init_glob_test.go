@@ -50,12 +50,9 @@ func TestInitWizardChain_CollapsedGlobRoundTrips(t *testing.T) {
 		selected = append(selected, it.Location)
 	}
 
-	content := GenerateConfig(config.CollapseSiblingsToGlobs(selected, deselected), nil)
+	content := writeGenerated(t, ".pltrc", config.CollapseSiblingsToGlobs(selected, deselected))
 	if !strings.Contains(content, "packages/*") {
 		t.Fatalf("generated config has no glob:\n%s", content)
-	}
-	if err := WriteConfig(".pltrc", content); err != nil {
-		t.Fatalf("WriteConfig failed: %v", err)
 	}
 
 	loaded, err := config.LoadConfig(".pltrc")

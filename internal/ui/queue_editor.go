@@ -7,53 +7,24 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// SaveStore lets the selector persist a queued chain of commands into .pltrc
-// without the ui package depending on the commands package. It is nil when there
-// is no writable local .pltrc (e.g. a global-fallback config), in which case
-// saving is disabled. Save receives the target project's display name and
-// directory, the new command's name, and the command's parts (one segment per
-// queued command; a single-item slice saves as a scalar, several as a && chain /
-// YAML list).
-type SaveStore struct {
-	Save func(displayName, directory, name string, parts []string) error
-	// RootDir is the absolute directory of the config's root location (where the
-	// .pltrc lives). A queue that spans folders is saved there so its per-project
-	// parts can cd-wrap; empty falls back to the first queued command's project.
-	RootDir string
-}
-
-// SetSaveStore wires the .pltrc save hook. Called by the commands layer after
-// constructing the model.
-func (m *Model) SetSaveStore(s *SaveStore) {
-	m.saveCommand = s
-}
-
 // enterQueueEditor switches into the queue editor. It is a no-op when the queue
 // is empty (nothing to edit).
 func (m *Model) enterQueueEditor() {
 	if len(m.queue) == 0 {
 		return
 	}
-	m.queueEditing = true
-	m.queueSaving = false
+	m.mode = modeQueueEdit
 	m.queueCursor = 0
 	m.queueHint = ""
 	m.searchInput.Blur()
 }
 
 func (m *Model) exitQueueEditor() {
-	m.queueEditing = false
-	m.queueSaving = false
 	m.queueHint = ""
-	m.saveInput.Blur()
-	m.searchInput.Focus()
+	m.leaveMode()
 }
 
 func (m Model) updateQueueEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.queueSaving {
-		return m.updateQueueSaveMode(msg)
-	}
-
 	switch msg.Type {
 	case tea.KeyUp, tea.KeyCtrlK:
 		m.moveQueueCursor(-1)
@@ -102,16 +73,7 @@ func (m Model) updateQueueEditMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) moveQueueCursor(delta int) {
-	if len(m.queue) == 0 {
-		return
-	}
-	m.queueCursor += delta
-	if m.queueCursor < 0 {
-		m.queueCursor = 0
-	}
-	if m.queueCursor >= len(m.queue) {
-		m.queueCursor = len(m.queue) - 1
-	}
+	m.queueCursor = moveCursor(m.queueCursor, delta, len(m.queue))
 }
 
 // moveQueueItem swaps the item under the cursor with its neighbor, keeping the
@@ -147,8 +109,7 @@ func (m *Model) removeQueueItem() {
 func (m Model) updateQueueSaveMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEnter:
-		m.confirmQueueSave()
-		return m, nil
+		return m, m.confirmQueueSave()
 	case tea.KeyEscape:
 		m.cancelQueueSave()
 		return m, nil
@@ -162,54 +123,56 @@ func (m Model) updateQueueSaveMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // spanning folders is allowed: each part is referenced by alias (which cd-wraps
 // cross-project commands) or, when it can't be, cd-wrapped raw.
 func (m *Model) startQueueSave() {
-	if m.saveCommand == nil || m.saveCommand.Save == nil {
+	if m.backend.SaveQueue == nil {
 		m.queueHint = "saving to .pltrc is unavailable here"
 		return
 	}
-	m.queueSaving = true
+	m.mode = modeQueueSave
 	m.queueHint = ""
 	m.saveInput.SetValue("")
 	m.saveInput.Focus()
 }
 
 func (m *Model) cancelQueueSave() {
-	m.queueSaving = false
+	m.mode = modeQueueEdit
 	m.saveInput.Blur()
 }
 
 // confirmQueueSave joins the queued commands and persists them under the save
 // target project, then reloads so the new command appears. If the saved chain
 // won't re-expand cleanly it still saves, but the editor stays open with a
-// warning rather than blocking.
-func (m *Model) confirmQueueSave() {
+// warning rather than blocking. The returned command resumes any background
+// type resolution the reload deferred.
+func (m *Model) confirmQueueSave() tea.Cmd {
 	name := strings.TrimSpace(m.saveInput.Value())
 	if name == "" {
 		m.queueHint = "enter a name for the command"
-		return
+		return nil
 	}
 	displayName, directory := m.saveTarget()
 	parts := m.buildQueueParts(directory)
 	joined := strings.Join(parts, " && ")
 
-	if err := m.saveCommand.Save(displayName, directory, name, parts); err != nil {
+	if err := m.backend.SaveQueue(displayName, directory, name, parts); err != nil {
 		m.queueHint = "save failed: " + err.Error()
-		m.queueSaving = false
-		return
+		m.cancelQueueSave()
+		return nil
 	}
 
 	// Reflect the new command in the list immediately.
-	m.reloadConfig()
+	cmd := m.reloadConfig()
 	m.loadCommands()
 	m.updateFilteredCommands()
 
 	// Warn (without blocking) if the saved chain won't run cleanly, e.g. a raw
 	// fallback is ambiguous or a referenced command has since changed.
 	if err := m.config.ExpandCheck(joined, directory); err != nil {
-		m.queueSaving = false
+		m.cancelQueueSave()
 		m.queueHint = "saved, but may not run: " + err.Error()
-		return
+		return cmd
 	}
 	m.exitQueueEditor()
+	return cmd
 }
 
 // saveTarget picks where a saved queue is stored and the directory used as the
@@ -220,17 +183,13 @@ func (m Model) saveTarget() (displayName, directory string) {
 	if name, ok := m.queueProject(); ok {
 		return name, m.queue[0].Directory
 	}
-	if m.saveCommand != nil && m.saveCommand.RootDir != "" {
+	if m.backend.RootDir != "" {
 		for i := range m.config.Locations {
 			loc := &m.config.Locations[i]
-			if loc.Location != m.saveCommand.RootDir {
+			if loc.Location != m.backend.RootDir {
 				continue
 			}
-			name := loc.Name
-			if name == "" {
-				name = loc.Location
-			}
-			return name, loc.Location
+			return loc.DisplayName(), loc.Location
 		}
 	}
 	return m.queue[0].DisplayName, m.queue[0].Directory
@@ -303,7 +262,7 @@ func (m Model) renderQueueEditor() string {
 	}
 
 	lines = append(lines, "")
-	if m.queueSaving {
+	if m.mode == modeQueueSave {
 		lines = append(lines, m.saveInput.View())
 		lines = append(lines, m.renderHelp([][2]string{
 			{"Enter", "save"},

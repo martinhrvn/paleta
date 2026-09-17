@@ -49,10 +49,7 @@ func TestInitWizardChain(t *testing.T) {
 		locations[i] = it.Location
 	}
 
-	content := GenerateConfig(locations, nil)
-	if err := WriteConfig(".pltrc", content); err != nil {
-		t.Fatalf("WriteConfig failed: %v", err)
-	}
+	content := writeGenerated(t, ".pltrc", locations)
 
 	loaded, err := config.LoadConfig(".pltrc")
 	if err != nil {

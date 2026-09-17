@@ -43,7 +43,7 @@ func createTestConfig() *config.Config {
 
 // Helper to create a Model with test config (without starting program)
 func createTestModel(cfg *config.Config) Model {
-	m := NewModel(cfg, nil)
+	m := NewModel(cfg, Backend{})
 	m.loadCommands()
 	m.filteredCommands = make([]CommandInfo, len(m.commands))
 	copy(m.filteredCommands, m.commands)
@@ -386,7 +386,7 @@ func TestModel_RenderQueuedRow(t *testing.T) {
 
 func TestModel_LoadCommands(t *testing.T) {
 	cfg := createTestConfig()
-	m := NewModel(cfg, nil)
+	m := NewModel(cfg, Backend{})
 	m.loadCommands()
 
 	// Should have 5 commands total (3 from frontend, 2 from backend)
@@ -409,7 +409,7 @@ func TestModel_LoadCommands_ToolsAppendedLast(t *testing.T) {
 	cfg.ResolvedTools = []config.ResolvedTool{
 		{Tool: "lazygit", Display: "lazygit", Command: "lazygit", Directory: "/w"},
 	}
-	m := NewModel(cfg, nil)
+	m := NewModel(cfg, Backend{})
 	m.loadCommands()
 
 	// 5 location commands + 1 tool row.
@@ -430,7 +430,7 @@ func TestModel_ToolsStayLastDespiteFrecency(t *testing.T) {
 	cfg.ResolvedTools = []config.ResolvedTool{
 		{Tool: "lazygit", Display: "lazygit", Command: "lazygit", Directory: "/w"},
 	}
-	m := NewModel(cfg, nil)
+	m := NewModel(cfg, Backend{})
 
 	// Give the tool a high frecency; the location commands have none.
 	hist, err := history.NewHistory(t.TempDir())
@@ -465,7 +465,7 @@ func TestModel_LoadCommands_MarksInvalidNames(t *testing.T) {
 			},
 		}},
 	}
-	m := NewModel(cfg, nil)
+	m := NewModel(cfg, Backend{})
 	m.loadCommands()
 
 	if !m.commands[0].Invalid {
@@ -508,7 +508,7 @@ func TestModel_LoadCommands_MarksUnresolvedAlias(t *testing.T) {
 			},
 		}},
 	}
-	m := NewModel(cfg, nil)
+	m := NewModel(cfg, Backend{})
 	m.loadCommands()
 
 	if !m.commands[0].Invalid {
@@ -612,7 +612,7 @@ func TestModel_EnterEditMode_SetsEditingState(t *testing.T) {
 	m.currentIndex = 0
 
 	// Should not be in edit mode initially
-	if m.editing {
+	if m.mode == modeEdit {
 		t.Error("expected editing to be false initially")
 	}
 
@@ -620,7 +620,7 @@ func TestModel_EnterEditMode_SetsEditingState(t *testing.T) {
 	m.enterEditMode()
 
 	// Should now be in edit mode
-	if !m.editing {
+	if m.mode != modeEdit {
 		t.Error("expected editing to be true after enterEditMode")
 	}
 
@@ -669,7 +669,7 @@ func TestModel_CancelEdit_ReturnsToNormalMode(t *testing.T) {
 
 	// Enter edit mode
 	m.enterEditMode()
-	if !m.editing {
+	if m.mode != modeEdit {
 		t.Fatal("expected editing to be true")
 	}
 
@@ -677,7 +677,7 @@ func TestModel_CancelEdit_ReturnsToNormalMode(t *testing.T) {
 	m.cancelEdit()
 
 	// Should be back to normal mode with no results
-	if m.editing {
+	if m.mode == modeEdit {
 		t.Error("expected editing to be false after cancelEdit")
 	}
 	if len(m.results) != 0 {
@@ -926,7 +926,7 @@ func TestModel_EnterEditMode_EmptyList(t *testing.T) {
 	// Should not panic on empty list
 	m.enterEditMode()
 
-	if m.editing {
+	if m.mode == modeEdit {
 		t.Error("should not enter edit mode with empty list")
 	}
 }
