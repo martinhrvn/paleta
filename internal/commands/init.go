@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/martinhrvn/paleta/internal/config"
 	"github.com/martinhrvn/paleta/internal/scan"
@@ -105,13 +106,21 @@ func BuildWizardItems(cands []scan.Candidate, authored *config.Config) []ui.Wiza
 		}
 	}
 
+	var fresh []string
+	for _, c := range cands {
+		if !matched[c.RelPath] {
+			fresh = append(fresh, c.RelPath)
+		}
+	}
+	names := assignWizardNames(fresh, authored)
+
 	for _, c := range cands {
 		if matched[c.RelPath] {
 			continue
 		}
 		items = append(items, ui.WizardItem{
 			Location: config.Location{
-				Name:     locationName(c.RelPath),
+				Name:     names[c.RelPath],
 				Location: c.RelPath,
 				Types:    c.Types,
 			},
@@ -120,6 +129,43 @@ func BuildWizardItems(cands []scan.Candidate, authored *config.Config) []ui.Wiza
 	}
 
 	return items
+}
+
+// assignWizardNames picks a display name for each newly detected path: the
+// folder's own name when nothing else claims it, otherwise the relative path.
+//
+// Two folders called "web" would otherwise produce two locations named "web",
+// which makes an @web:build reference ambiguous (internal/config/alias.go) and
+// merges their frecency history, which is keyed by display name. A path is a
+// legal name — the alias charset allows '/' and references resolve by path tail.
+func assignWizardNames(relPaths []string, authored *config.Config) map[string]string {
+	// Names already spoken for: an authored location's name, and its folder name,
+	// which alias resolution indexes whether or not the location is named.
+	taken := make(map[string]int)
+	if authored != nil {
+		for _, loc := range authored.Locations {
+			if loc.Name != "" {
+				taken[loc.Name]++
+			}
+			if !strings.Contains(loc.Location, "*") {
+				taken[locationName(filepath.Clean(loc.Location))]++
+			}
+		}
+	}
+	for _, rel := range relPaths {
+		taken[locationName(rel)]++
+	}
+
+	names := make(map[string]string, len(relPaths))
+	for _, rel := range relPaths {
+		base := locationName(rel)
+		if taken[base] > 1 {
+			names[rel] = rel // the path always identifies exactly one folder
+			continue
+		}
+		names[rel] = base
+	}
+	return names
 }
 
 // locationName derives a display name from a relative path. The scan root (".")

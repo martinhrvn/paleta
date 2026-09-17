@@ -1,0 +1,97 @@
+package commands
+
+import (
+	"reflect"
+	"testing"
+
+	"github.com/martinhrvn/paleta/internal/config"
+	"github.com/martinhrvn/paleta/internal/scan"
+)
+
+// namesFromCandidates maps each newly detected path to the name the wizard would
+// write it under.
+func namesFromCandidates(t *testing.T, cands []scan.Candidate, authored *config.Config) map[string]string {
+	t.Helper()
+	items := BuildWizardItems(cands, authored)
+	out := make(map[string]string, len(items))
+	for _, it := range items {
+		if it.Configured {
+			continue
+		}
+		out[it.Location.Location] = it.Location.Name
+	}
+	return out
+}
+
+func TestAssignWizardNames_BaseWhenUnique(t *testing.T) {
+	got := namesFromCandidates(t, []scan.Candidate{
+		{RelPath: ".", Types: []string{"go"}},
+		{RelPath: "services/api", Types: []string{"go"}},
+		{RelPath: "packages/web", Types: []string{"npm"}},
+	}, nil)
+
+	want := map[string]string{
+		".":            "root",
+		"services/api": "api",
+		"packages/web": "web",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("names = %v, want %v", got, want)
+	}
+}
+
+// TestAssignWizardNames_PathOnCollision: two folders sharing a base name would
+// both be called "web", which makes @web:build ambiguous and merges their
+// frecency history. Both fall back to their path instead.
+func TestAssignWizardNames_PathOnCollision(t *testing.T) {
+	got := namesFromCandidates(t, []scan.Candidate{
+		{RelPath: "apps/web", Types: []string{"npm"}},
+		{RelPath: "packages/web", Types: []string{"npm"}},
+		{RelPath: "services/api", Types: []string{"go"}},
+	}, nil)
+
+	want := map[string]string{
+		"apps/web":     "apps/web",
+		"packages/web": "packages/web",
+		"services/api": "api",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("names = %v, want %v", got, want)
+	}
+}
+
+// TestAssignWizardNames_NeverShadowsAuthoredName: an authored location keeps its
+// name; a newly detected folder that would claim the same one takes its path.
+func TestAssignWizardNames_NeverShadowsAuthoredName(t *testing.T) {
+	authored := &config.Config{Locations: []config.Location{
+		{Name: "web", Location: "apps/web", Types: config.Types{"npm"}},
+	}}
+
+	got := namesFromCandidates(t, []scan.Candidate{
+		{RelPath: "apps/web", Types: []string{"npm"}},
+		{RelPath: "packages/web", Types: []string{"npm"}},
+	}, authored)
+
+	want := map[string]string{"packages/web": "packages/web"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("names = %v, want %v (apps/web is already authored)", got, want)
+	}
+}
+
+// TestAssignWizardNames_CollidesWithUnnamedAuthoredFolder: alias resolution
+// indexes folder base names even when a location has no name, so a candidate
+// whose base matches an authored folder's base still has to back off.
+func TestAssignWizardNames_CollidesWithUnnamedAuthoredFolder(t *testing.T) {
+	authored := &config.Config{Locations: []config.Location{
+		{Location: "apps/web", Types: config.Types{"npm"}},
+	}}
+
+	got := namesFromCandidates(t, []scan.Candidate{
+		{RelPath: "packages/web", Types: []string{"npm"}},
+	}, authored)
+
+	want := map[string]string{"packages/web": "packages/web"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("names = %v, want %v", got, want)
+	}
+}
