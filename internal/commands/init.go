@@ -22,6 +22,14 @@ const (
 	InitNothingSelected                    // wizard confirmed with no locations
 )
 
+// runWizard is the interactive step of RunInitWizard: it takes over the terminal
+// and returns what the user confirmed. It is a variable so the decision logic
+// around it (see bootstrap.go) can be exercised without a tty.
+var runWizard = func(items []ui.WizardItem) ([]config.Location, bool, error) {
+	wizard := ui.NewWizardModel(items)
+	return wizard.Run()
+}
+
 // RunInitWizard scans the current directory, lets the user pick which projects
 // to include, and writes the resulting .pltrc, preserving any existing config as
 // the starting state. It performs no stdout output, so it is safe to call from
@@ -43,8 +51,7 @@ func RunInitWizard(configPath string) (InitOutcome, error) {
 		return InitNoProjects, nil
 	}
 
-	wizard := ui.NewWizardModel(items)
-	locations, confirmed, err := wizard.Run()
+	locations, confirmed, err := runWizard(items)
 	if err != nil {
 		return InitCanceled, fmt.Errorf("running wizard: %w", err)
 	}

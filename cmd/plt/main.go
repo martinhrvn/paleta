@@ -140,6 +140,49 @@ func exitConfigError(err error) {
 	os.Exit(1)
 }
 
+// bootstrapConfig handles a failed config load for `plt select`: when there is no
+// configuration at all, it offers the init wizard right there and returns the
+// config it wrote, so a first run goes from nothing to a working palette without
+// a detour through `plt init`. Every other failure, and every case where the
+// wizard didn't produce a config, exits — reporting on stderr, since stdout
+// carries the selection JSON. It never returns nil.
+func bootstrapConfig(loadErr error) *config.Config {
+	if !errors.Is(loadErr, config.ErrConfigNotFound) {
+		exitConfigError(loadErr)
+	}
+
+	outcome, err := commands.Bootstrap()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	switch outcome {
+	case commands.BootstrapWritten:
+		cfg, err := config.LoadConfigFromDiscovery()
+		if err != nil {
+			exitConfigError(err)
+		}
+		fmt.Fprintf(os.Stderr, "Wrote %s.\n", config.ConfigFileName)
+		return cfg
+	case commands.BootstrapCanceled:
+		// Nothing to say: the user backed out of a wizard they just saw.
+		os.Exit(1)
+	case commands.BootstrapNothingSelected:
+		fmt.Fprintf(os.Stderr, "No locations selected; %s was not written.\n", config.ConfigFileName)
+		os.Exit(1)
+	case commands.BootstrapNoProjects:
+		// We already scanned, so pointing at 'plt init' would just repeat it.
+		fmt.Fprintln(os.Stderr, "No paleta configuration found, and no projects detected in this directory tree.")
+		fmt.Fprintln(os.Stderr, "Run 'plt init --template' to start from a sample configuration.")
+		os.Exit(1)
+	}
+
+	// Nowhere to scan ($HOME, above it, or the root): the plain hint.
+	exitConfigError(loadErr)
+	return nil
+}
+
 // attachTools resolves the config's enabled tools into rows the selector and
 // `plt list` render at the end of the command list. It runs the tools in the
 // user's current directory: discovery restores the original cwd before returning,
@@ -239,7 +282,7 @@ func handleSelectCommand() {
 	// Load config from discovery
 	cfg, err := config.LoadConfigFromDiscovery()
 	if err != nil {
-		exitConfigError(err)
+		cfg = bootstrapConfig(err)
 	}
 	attachTools(cfg)
 

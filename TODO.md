@@ -101,6 +101,7 @@ The project types we should support intitally are:
   - [x] repeatable: existing `.pltrc` loaded as starting state (configured locations pre-selected & tagged, merged on save)
   - [x] everything starts ticked, so Enter accepts the detected set; rows are tagged `(configured)` / `(new)`
   - [x] names are assigned across the whole set — the folder name when it's free, the relative path when two folders would both be called `web`
+  - [x] running `plt` in a repo with no `.pltrc` opens the wizard instead of erroring out; refused in `$HOME`, above it, and at `/`, where `plt list`/`plt lint` keep printing the plain hint
   - [x] three or more sibling folders are written as a glob (`packages/*`, with unticked siblings in `exclude_locations`); `^g` toggles it off, and affected rows show `→ packages/*` before you confirm
   - [x] static template preserved behind `plt init --template`
   - [ ] (future) drill into a selected folder to include/exclude individual detected commands
