@@ -95,3 +95,56 @@ func TestAssignWizardNames_CollidesWithUnnamedAuthoredFolder(t *testing.T) {
 		t.Errorf("names = %v, want %v", got, want)
 	}
 }
+
+// TestBuildWizardItems_OffersNewlyDetectedTypes: a location already in the config
+// that has since grown a second project type gets it as an opt-in option, with
+// its authored types still the ones ticked.
+func TestBuildWizardItems_OffersNewlyDetectedTypes(t *testing.T) {
+	authored := &config.Config{Locations: []config.Location{
+		{Name: "api", Location: "services/api", Types: config.Types{"npm"}},
+	}}
+	cands := []scan.Candidate{{RelPath: "services/api", Types: []string{"npm", "docker"}}}
+
+	items := BuildWizardItems(cands, authored)
+	if len(items) != 1 {
+		t.Fatalf("items = %+v, want one", items)
+	}
+	if !reflect.DeepEqual(items[0].TypeOptions, []string{"npm", "docker"}) {
+		t.Errorf("TypeOptions = %v, want the authored type plus the detected one", items[0].TypeOptions)
+	}
+	if !reflect.DeepEqual(items[0].Location.Types, config.Types{"npm"}) {
+		t.Errorf("Types = %v, want only the authored type ticked", items[0].Location.Types)
+	}
+}
+
+// TestBuildWizardItems_NewLocationOffersAllDetectedTypes: nothing is authored, so
+// every detected type is both offered and ticked.
+func TestBuildWizardItems_NewLocationOffersAllDetectedTypes(t *testing.T) {
+	items := BuildWizardItems([]scan.Candidate{
+		{RelPath: "services/api", Types: []string{"pnpm", "docker"}},
+	}, nil)
+
+	if !reflect.DeepEqual(items[0].TypeOptions, []string{"pnpm", "docker"}) {
+		t.Errorf("TypeOptions = %v", items[0].TypeOptions)
+	}
+	if !reflect.DeepEqual(items[0].Location.Types, config.Types{"pnpm", "docker"}) {
+		t.Errorf("Types = %v, want all detected types ticked", items[0].Location.Types)
+	}
+}
+
+// TestBuildWizardItems_AuthoredTypeNotDetectedIsKept: a hand-written type whose
+// detect file is gone (or that plt can't see) must not vanish from the config.
+func TestBuildWizardItems_AuthoredTypeNotDetectedIsKept(t *testing.T) {
+	authored := &config.Config{Locations: []config.Location{
+		{Name: "api", Location: "services/api", Types: config.Types{"make"}},
+	}}
+	cands := []scan.Candidate{{RelPath: "services/api", Types: []string{"npm"}}}
+
+	items := BuildWizardItems(cands, authored)
+	if !reflect.DeepEqual(items[0].TypeOptions, []string{"make", "npm"}) {
+		t.Errorf("TypeOptions = %v, want the authored type kept alongside the detected one", items[0].TypeOptions)
+	}
+	if !reflect.DeepEqual(items[0].Location.Types, config.Types{"make"}) {
+		t.Errorf("Types = %v, want the authored type still ticked", items[0].Location.Types)
+	}
+}

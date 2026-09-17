@@ -93,11 +93,15 @@ func BuildWizardItems(cands []scan.Candidate, authored *config.Config) []ui.Wiza
 
 	if authored != nil {
 		for _, loc := range authored.Locations {
-			item := ui.WizardItem{Location: loc, Configured: true}
+			item := ui.WizardItem{Location: loc, Configured: true, TypeOptions: loc.Types}
 			cleaned := filepath.Clean(loc.Location)
 			for _, c := range cands {
 				if c.RelPath == cleaned {
 					item.Detected = true
+					// Offer types detected in the folder since the location was
+					// written. They stay unticked: adding one changes how this
+					// location's existing commands are labelled.
+					item.TypeOptions = unionTypes(loc.Types, c.Types)
 					matched[c.RelPath] = true
 					break
 				}
@@ -124,11 +128,33 @@ func BuildWizardItems(cands []scan.Candidate, authored *config.Config) []ui.Wiza
 				Location: c.RelPath,
 				Types:    c.Types,
 			},
-			Detected: true,
+			TypeOptions: c.Types,
+			Detected:    true,
 		})
 	}
 
 	return items
+}
+
+// unionTypes merges detected types into an authored list, keeping the authored
+// order first (a hand-written type whose detect file is missing stays offered)
+// and appending anything newly detected.
+func unionTypes(authored config.Types, detected []string) []string {
+	out := make([]string, 0, len(authored)+len(detected))
+	seen := make(map[string]bool, len(authored)+len(detected))
+	for _, t := range authored {
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	for _, t := range detected {
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // assignWizardNames picks a display name for each newly detected path: the
