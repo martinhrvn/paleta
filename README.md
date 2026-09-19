@@ -214,8 +214,11 @@ locations:
 - **go**: Discovers standard Go commands (planned)
 - **docker**: Detects a `Dockerfile` and offers `docker build` / `docker run`
 - **compose**: Detects `docker-compose.yml`, `compose.yml`, and env-specific
-  overrides matching `docker-compose.*.yml`; offers `docker compose up` / `down`
-  / `build` / `logs` / `ps`
+  variants matching `docker-compose.*.yml` or `compose.*.yml`; offers
+  `docker compose up` / `down` / `build` / `logs` / `ps`. Each variant file
+  also gets its own set, named after the variant and run with `-f`: a
+  `docker-compose.dev.yaml` adds `dev:up` → `docker compose -f docker-compose.dev.yaml up`,
+  `dev:down`, `dev:build`, `dev:logs`, `dev:ps`
 
 ### Glob Patterns
 

@@ -91,7 +91,7 @@ parsers:
       run: "docker run --rm <image>"
 
   compose:
-    detect_files: ["docker-compose.yml", "docker-compose.yaml", "docker-compose.*.yml", "docker-compose.*.yaml", "compose.yml", "compose.yaml"]
+    detect_files: ["docker-compose.yml", "docker-compose.yaml", "docker-compose.*.yml", "docker-compose.*.yaml", "compose.yml", "compose.yaml", "compose.*.yml", "compose.*.yaml"]
     priority: 80
     base_commands:
       up: "docker compose up"
@@ -99,6 +99,9 @@ parsers:
       build: "docker compose build"
       logs: "docker compose logs -f"
       ps: "docker compose ps"
+    # Each env-specific file (docker-compose.dev.yaml, compose.prod.yml) also gets
+    # the base commands as `dev:up`, `dev:down`, ... run with `-f <file>`.
+    builtin_parser: "compose_files"
 
   gradle:
     detect_files: ["build.gradle", "build.gradle.kts"]

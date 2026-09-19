@@ -59,6 +59,7 @@ The project types we should support intitally are:
 - [x] npm - should find package.json and run npm commands
   - [x] should allow to set the package manager to use, eg. npm, yarn, pnpm
 - [ ] go - should find go.mod and run go commands
+- [x] compose - per-file `docker compose -f` commands (`dev:up`, `dev:down`, ...) for `docker-compose.*.yml` / `compose.*.yml` variants
 
 
 ## Nice-to-Have Features

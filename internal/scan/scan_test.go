@@ -128,6 +128,23 @@ func TestScan_ComposeGlobOverrideFile(t *testing.T) {
 	wantTypes(t, infra, "compose")
 }
 
+func TestScan_ComposeVariantFile(t *testing.T) {
+	root := t.TempDir()
+	// Only a compose.*.yaml variant, no plain compose.yaml.
+	writeFile(t, filepath.Join(root, "infra", "compose.prod.yaml"))
+
+	cands, err := Scan(root)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	infra := findCandidate(cands, "infra")
+	if infra == nil {
+		t.Fatal("expected a candidate for infra")
+	}
+	wantTypes(t, infra, "compose")
+}
+
 func TestScan_DockerfileAndCompose(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "app", "Dockerfile"))

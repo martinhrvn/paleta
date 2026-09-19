@@ -20,6 +20,14 @@ func TestGetParser(t *testing.T) {
 			shouldError:  false,
 		},
 		{
+			name: "compose files parser",
+			config: ParserConfig{
+				BuiltinParser: "compose_files",
+			},
+			expectedType: "*parsers.ComposeFilesParser",
+			shouldError:  false,
+		},
+		{
 			name: "command parser",
 			config: ParserConfig{
 				ParserCommand: "echo 'test'",

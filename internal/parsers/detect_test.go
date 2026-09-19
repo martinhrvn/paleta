@@ -47,15 +47,21 @@ func TestEmbeddedDefaultsDockerAndCompose(t *testing.T) {
 	if compose.BaseCommands["build"] != "docker compose build" {
 		t.Errorf("compose build = %q, want 'docker compose build'", compose.BaseCommands["build"])
 	}
-	// compose must detect glob override files.
-	foundGlob := false
-	for _, f := range compose.DetectFiles {
-		if f == "docker-compose.*.yml" {
-			foundGlob = true
+	// compose must detect glob override files, for both filename styles.
+	for _, want := range []string{"docker-compose.*.yml", "compose.*.yml", "compose.*.yaml"} {
+		found := false
+		for _, f := range compose.DetectFiles {
+			if f == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("compose detect_files = %v, want it to include %q", compose.DetectFiles, want)
 		}
 	}
-	if !foundGlob {
-		t.Errorf("compose detect_files = %v, want it to include 'docker-compose.*.yml'", compose.DetectFiles)
+	// compose lists its variant files through the built-in parser.
+	if compose.BuiltinParser != "compose_files" {
+		t.Errorf("compose builtin_parser = %q, want 'compose_files'", compose.BuiltinParser)
 	}
 }
 

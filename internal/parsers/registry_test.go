@@ -111,6 +111,15 @@ func TestRegistry_DetectTypes(t *testing.T) {
 	if got := reg.DetectTypes(t.TempDir()); len(got) != 0 {
 		t.Errorf("DetectTypes(empty) = %v, want none", got)
 	}
+
+	// A compose.*.yaml variant on its own is a compose project too.
+	variantDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(variantDir, "compose.prod.yaml"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := reg.DetectTypes(variantDir); len(got) != 1 || got[0] != "compose" {
+		t.Errorf("DetectTypes(compose.prod.yaml) = %v, want [compose]", got)
+	}
 }
 
 func TestType_DefersLoading(t *testing.T) {

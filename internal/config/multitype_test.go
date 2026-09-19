@@ -131,3 +131,39 @@ func TestProcessProjectTypes_ComposeGlobOnly(t *testing.T) {
 		t.Errorf("expected compose 'up' -> 'docker compose up', got %+v", c)
 	}
 }
+
+func TestProcessProjectTypes_ComposeVariantFiles(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"docker-compose.yml", "docker-compose.dev.yaml"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte("services: {}"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg := &Config{Locations: []Location{{
+		Location: dir,
+		Types:    Types{"compose"},
+	}}}
+	if _, err := processProjectTypes(cfg); err != nil {
+		t.Fatalf("processProjectTypes: %v", err)
+	}
+
+	cmds := cfg.Locations[0].Commands
+	if c := findCmd(cmds, "up", "compose"); c == nil || c.Command != "docker compose up" {
+		t.Errorf("expected compose 'up' -> 'docker compose up', got %+v", c)
+	}
+	if c := findCmd(cmds, "dev:up", "compose"); c == nil || c.Command != "docker compose -f docker-compose.dev.yaml up" {
+		t.Errorf("expected compose 'dev:up' -> 'docker compose -f docker-compose.dev.yaml up', got %+v", c)
+	}
+	if c := findCmd(cmds, "dev:logs", "compose"); c == nil || c.Command != "docker compose -f docker-compose.dev.yaml logs -f" {
+		t.Errorf("expected compose 'dev:logs' -> 'docker compose -f docker-compose.dev.yaml logs -f', got %+v", c)
+	}
+
+	// Variant names must be alias-safe so @project:dev:up can reference them.
+	collectConfigWarnings(cfg)
+	for _, w := range cfg.Warnings {
+		if w.Kind == "name" {
+			t.Errorf("unexpected name warning for %q: %s", w.Name, w.Reason)
+		}
+	}
+}

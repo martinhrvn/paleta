@@ -3,7 +3,8 @@ package config
 // Deferred project types.
 //
 // Most project types report their commands for free: npm reads package.json, go
-// returns a fixed list, docker and compose have base commands only. A few —
+// returns a fixed list, docker has base commands only, compose adds a set per
+// variant file from a directory listing. A few —
 // make, python, gradle, maven, and any user-defined type with a `parser_command`
 // — have to run a shell command in the project directory to find out, and
 // `./gradlew tasks --all` can take seconds. Doing that for every location while

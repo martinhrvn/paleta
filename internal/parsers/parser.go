@@ -11,6 +11,13 @@ type Parser interface {
 	ParseCommands(directory string, config ParserConfig) ([]string, error)
 }
 
+// commandBuilder is implemented by parsers whose commands are not a key run
+// through the command template but a complete command per name (the compose
+// parser's `docker compose -f <file> up`).
+type commandBuilder interface {
+	BuildCommands(directory string, config ParserConfig) (map[string]string, error)
+}
+
 // GetParser returns the appropriate parser based on the configuration
 func GetParser(config ParserConfig) (Parser, error) {
 	// If a built-in parser is specified, use it
@@ -20,6 +27,8 @@ func GetParser(config ParserConfig) (Parser, error) {
 			return &PackageJsonParser{}, nil
 		case "go_standard":
 			return &GoStandardParser{}, nil
+		case "compose_files":
+			return &ComposeFilesParser{}, nil
 		default:
 			return nil, fmt.Errorf("unknown built-in parser: %s", config.BuiltinParser)
 		}
@@ -52,6 +61,17 @@ func ParseAndFormatCommands(directory string, config ParserConfig) (map[string]s
 	commands := make(map[string]string)
 	for key, cmd := range config.BaseCommands {
 		commands[key] = cmd
+	}
+
+	// Some parsers build complete commands rather than keys for the template.
+	if builder, ok := parser.(commandBuilder); ok {
+		built, err := builder.BuildCommands(directory, config)
+		if err != nil {
+			return commands, err
+		}
+		for name, cmd := range built {
+			commands[name] = cmd
+		}
 	}
 
 	// Parse additional commands. A parser failure (a broken Makefile, a missing
