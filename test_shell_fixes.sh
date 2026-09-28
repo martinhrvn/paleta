@@ -148,6 +148,24 @@ else
 fi
 
 echo ""
+echo "=== Testing plt-integration.zsh (behaviour) ==="
+
+# Test 11: a multi-select runline carries each directory and command. A local
+# named `path` would shadow zsh's special $path (tied to $PATH), hiding jq and
+# turning every segment into "cd '' && ".
+echo "Test 11: zsh multi-select runline keeps directories and commands"
+if command -v zsh >/dev/null 2>&1; then
+    output=$(zsh -f -c "source '$SCRIPT_DIR/plt-integration.zsh' && __plt_selection_runline true jq '$multi_json' '['" 2>&1) || true
+    if [[ "$output" == "cd 'a' && make build && cd 'b' && make test" ]]; then
+        pass "multi-select runline is built from the selection"
+    else
+        fail "expected \"cd 'a' && make build && cd 'b' && make test\", got: $output"
+    fi
+else
+    echo "  SKIP: zsh not installed"
+fi
+
+echo ""
 echo "=== Results ==="
 echo "Passed: $PASS"
 echo "Failed: $FAIL"

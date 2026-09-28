@@ -66,13 +66,13 @@ __plt_open_in_mux() {
 # single selection, ".[i]" for one element of a multi-select), with the env
 # applied in a subshell. Fails when the object can't be parsed.
 __plt_segment() {
-    local jq_cmd="$1" selection_json="$2" path="$3"
-    local dir=$("$jq_cmd" -r "$path.directory" <<< "$selection_json")
-    local cmd=$("$jq_cmd" -r "$path.command" <<< "$selection_json")
+    local jq_cmd="$1" selection_json="$2" jq_path="$3"
+    local dir=$("$jq_cmd" -r "$jq_path.directory" <<< "$selection_json")
+    local cmd=$("$jq_cmd" -r "$jq_path.command" <<< "$selection_json")
     if [[ "$dir" = "null" || "$cmd" = "null" ]]; then
         return 1
     fi
-    local envprefix=$("$jq_cmd" -r "$path.env // {} | to_entries | map(\"\(.key)=\" + (.value|@sh)) | join(\" \")" <<< "$selection_json")
+    local envprefix=$("$jq_cmd" -r "$jq_path.env // {} | to_entries | map(\"\(.key)=\" + (.value|@sh)) | join(\" \")" <<< "$selection_json")
     if [[ -n "$envprefix" ]]; then
         echo "cd '$dir' && ( export $envprefix; $cmd )"
     else
@@ -83,11 +83,11 @@ __plt_segment() {
 # Record the selection object at jq path $4 ("" or ".[i]") in history — unless the user edited
 # the command (Ctrl+E), which shouldn't count toward the original's frecency.
 __plt_record() {
-    local plt_binary="$1" jq_cmd="$2" selection_json="$3" path="$4"
-    local action=$("$jq_cmd" -r "$path.action // \"execute\"" <<< "$selection_json")
+    local plt_binary="$1" jq_cmd="$2" selection_json="$3" jq_path="$4"
+    local action=$("$jq_cmd" -r "$jq_path.action // \"execute\"" <<< "$selection_json")
     [[ "$action" = "edit" ]] && return 0
-    local name=$("$jq_cmd" -r "$path.display_name" <<< "$selection_json")
-    local cmd=$("$jq_cmd" -r "$path.command" <<< "$selection_json")
+    local name=$("$jq_cmd" -r "$jq_path.display_name" <<< "$selection_json")
+    local cmd=$("$jq_cmd" -r "$jq_path.command" <<< "$selection_json")
     if [[ -n "$name" && "$name" != "null" ]]; then
         "$plt_binary" record "$name" "$cmd" 2>/dev/null || true
     fi
