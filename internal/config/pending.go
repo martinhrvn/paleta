@@ -1,5 +1,7 @@
 package config
 
+import "slices"
+
 // Deferred project types.
 //
 // Most project types report their commands for free: npm reads package.json, go
@@ -26,6 +28,33 @@ func (c *Config) HasPendingTypes() bool {
 	return false
 }
 
+// RefreshingTypes lists, once each and sorted, the types being re-run in the
+// background behind a cached result anywhere in the config.
+func (c *Config) RefreshingTypes() []string {
+	var types []string
+	for i := range c.Locations {
+		for _, typeName := range c.Locations[i].Refreshing {
+			if !slices.Contains(types, typeName) {
+				types = append(types, typeName)
+			}
+		}
+	}
+	slices.Sort(types)
+	return types
+}
+
+// LoadingTypes lists the location's pending types that have nothing to show yet
+// — no cached result — and so need a placeholder row.
+func (l Location) LoadingTypes() []string {
+	var loading []string
+	for _, typeName := range l.PendingTypes {
+		if !slices.Contains(l.Refreshing, typeName) {
+			loading = append(loading, typeName)
+		}
+	}
+	return loading
+}
+
 // ResolvePendingTypes runs the deferred types for one location and returns the
 // command list that location should now have, plus any non-fatal warnings. The
 // location itself is not modified — the caller applies the result, which lets the
@@ -34,7 +63,18 @@ func (c *Config) HasPendingTypes() bool {
 //
 // It reads only the location value it is given and uses absolute paths, so
 // several locations can be resolved concurrently.
+//
+// It always runs the types' parsers, even when a cached result looks fresh: the
+// selector calls it to refresh in the background, and a cache keyed on the
+// detect files can't see every change (a new gradle plugin, an included
+// makefile).
 func ResolvePendingTypes(loc Location) ([]Command, []Warning) {
+	return resolvePending(loc, false)
+}
+
+// resolvePending resolves a location's deferred types. With trustCache, a cached
+// result whose detect files are unchanged is used instead of running the parser.
+func resolvePending(loc Location, trustCache bool) ([]Command, []Warning) {
 	if len(loc.PendingTypes) == 0 {
 		return nil, nil
 	}
@@ -42,6 +82,12 @@ func ResolvePendingTypes(loc Location) ([]Command, []Warning) {
 	var late []Command
 	var warnings []Warning
 	for _, typeName := range loc.PendingTypes {
+		if trustCache {
+			if cmds, fresh, ok := cachedCommandsForType(typeName, loc.Location); ok && fresh {
+				late = append(late, cmds...)
+				continue
+			}
+		}
 		cmds, degraded, err := commandsForType(typeName, loc.Location)
 		if err != nil {
 			// An invalid type name is a load-time error, and the load already
@@ -65,7 +111,8 @@ func ResolvePendingTypes(loc Location) ([]Command, []Warning) {
 	return composeCommands(loc, late), warnings
 }
 
-// ResolveAllPending resolves every location's deferred types in place, then
+// ResolveAllPending resolves every location's deferred types in place — trusting
+// a cached result whose detect files are unchanged (see typecache.go) — then
 // re-expands command aliases and rebuilds the warning list so references to a
 // late-arriving command (e.g. `@infra[make]:test`) resolve. Use it before any
 // non-interactive output, where a complete list matters more than a fast start.
@@ -75,11 +122,12 @@ func ResolveAllPending(cfg *Config) {
 	}
 
 	for i := range cfg.Locations {
-		commands, warnings := ResolvePendingTypes(cfg.Locations[i])
+		commands, warnings := resolvePending(cfg.Locations[i], true)
 		if commands != nil {
 			cfg.Locations[i].Commands = commands
 		}
 		cfg.Locations[i].PendingTypes = nil
+		cfg.Locations[i].Refreshing = nil
 		cfg.loadWarnings = append(cfg.loadWarnings, warnings...)
 	}
 

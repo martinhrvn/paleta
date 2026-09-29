@@ -22,7 +22,7 @@ type Row struct {
 	Command     string // the shell command; "" for a placeholder
 	Directory   string // where the command runs
 	Type        string // the project type that produced the command, "" otherwise
-	// MultiType is set when the location declares several types, so Type is
+	// MultiType is set when the location has several types (declared or detected), so Type is
 	// needed to tell same-named commands apart.
 	MultiType bool
 	Env       map[string]string
@@ -52,7 +52,7 @@ func (c *Config) Rows(focusedOnly bool) []Row {
 			continue
 		}
 		display := loc.DisplayName()
-		multi := len(loc.Types) > 1
+		multi := len(loc.ActiveTypes()) > 1
 
 		for _, cmd := range loc.Commands {
 			invalid := cmd.NameError
@@ -75,11 +75,12 @@ func (c *Config) Rows(focusedOnly bool) []Row {
 			})
 		}
 
-		if len(loc.PendingTypes) > 0 {
+		// A type refreshing from a cached result already has its rows above.
+		if loading := loc.LoadingTypes(); len(loading) > 0 {
 			rows = append(rows, Row{
 				DisplayName: display,
 				Directory:   loc.Location,
-				Pending:     append([]string(nil), loc.PendingTypes...),
+				Pending:     loading,
 			})
 		}
 	}

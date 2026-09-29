@@ -60,6 +60,12 @@ The project types we should support intitally are:
   - [x] should allow to set the package manager to use, eg. npm, yarn, pnpm
 - [ ] go - should find go.mod and run go commands
 - [x] compose - per-file `docker compose -f` commands (`dev:up`, `dev:down`, ...) for `docker-compose.*.yml` / `compose.*.yml` variants
+- [x] Cache shell-backed type results (make, gradle, maven, python, custom `parser_command`) in `~/.paleta/cache/types/`
+  - [x] the selector shows cached commands immediately and refreshes them in the background (`⠋ refreshing gradle…` in the help line); only uncached types get a spinner placeholder row
+  - [x] `plt list` trusts a cached result while the type's detect files are unchanged (name/size/mtime), otherwise re-runs the parser
+  - [x] a failed or timed-out refresh keeps the cached commands (with a warning) instead of dropping to base commands; failures are never cached
+- [x] Omitting `type:` auto-detects types from the folder's files via `Registry.DetectTypes` (as `plt init` does), per folder for globs; detected types are runtime-only (`Location.DetectedTypes`), never written to `.pltrc`
+  - [x] `type: none` opts a location out of detection
 
 
 ## Nice-to-Have Features

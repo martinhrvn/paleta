@@ -288,6 +288,15 @@ type Location struct {
 	// resolves them in the background and `plt list` resolves them up front. See
 	// pending.go. Never serialized.
 	PendingTypes []string `yaml:"-"`
+	// DetectedTypes are the types found from the folder's files (go.mod,
+	// package.json, Makefile, ...) when the location declares no `type:`. They are
+	// used exactly like declared ones but, being derived, never serialized — so a
+	// rewritten .pltrc still says nothing. See ActiveTypes.
+	DetectedTypes []string `yaml:"-"`
+	// Refreshing is the subset of PendingTypes whose last result was found in the
+	// type cache (typecache.go) and is already in Commands: the location shows
+	// real rows rather than a placeholder while the type re-runs. Never serialized.
+	Refreshing []string `yaml:"-"`
 	// authoredCommands and cheapCommands retain the two halves of Commands as they
 	// were at load — what the user wrote, and what the non-deferred types produced
 	// — so resolving a pending type can rebuild the list exactly as a blocking load
@@ -712,20 +721,61 @@ func filterCommands(commands []Command, include []string, exclude []string) []Co
 	return result
 }
 
+// NoType is the `type:` value that turns off detection for a location, leaving
+// it with only its authored commands.
+const NoType = "none"
+
+// ActiveTypes are the types whose commands the location gets: the declared ones
+// when it has a `type:` (none at all for `type: none`), otherwise the ones
+// detected from its folder.
+func (l Location) ActiveTypes() []string {
+	if len(l.Types) == 0 {
+		return l.DetectedTypes
+	}
+	var active []string
+	for _, typeName := range l.Types {
+		if typeName != NoType {
+			active = append(active, typeName)
+		}
+	}
+	return active
+}
+
+// detectTypes lists the types a folder's files point to, as `plt init` would
+// offer them. A registry that fails to load detects nothing; the declared-type
+// path reports that error.
+func detectTypes(directory string) []string {
+	reg, err := parsers.DefaultRegistry()
+	if err != nil {
+		return nil
+	}
+	return reg.DetectTypes(directory)
+}
+
 // processProjectTypes adds each location's type-discovered commands to its
 // authored ones (authored first), then applies the location's command filters to
-// the combined list. A location with no `type:` still gets filtered — it just has
-// nothing to discover.
+// the combined list. A location with no `type:` detects its types from its
+// folder's files first; `type: none` opts out.
 func processProjectTypes(config *Config) ([]Warning, error) {
 	var warnings []Warning
 	for i, location := range config.Locations {
-		// Accumulate discovered commands across every type the location declares,
-		// deferring the ones that would have to run a shell command to find out.
-		var discovered []Command
-		var pending []string
-		for _, typeName := range location.Types {
+		if len(location.Types) == 0 {
+			location.DetectedTypes = detectTypes(location.Location)
+			config.Locations[i].DetectedTypes = location.DetectedTypes
+		}
+
+		// Accumulate discovered commands across every active type, deferring the
+		// ones that would have to run a shell command to find out.
+		var discovered, cached []Command
+		var pending, refreshing []string
+		for _, typeName := range location.ActiveTypes() {
 			if defersLoading(typeName) {
+				// Still resolved later, but a cached result stands in until then.
 				pending = append(pending, typeName)
+				if cmds, _, ok := cachedCommandsForType(typeName, location.Location); ok {
+					cached = append(cached, cmds...)
+					refreshing = append(refreshing, typeName)
+				}
 				continue
 			}
 			cmds, degraded, err := commandsForType(typeName, location.Location)
@@ -740,6 +790,7 @@ func processProjectTypes(config *Config) ([]Warning, error) {
 		}
 
 		config.Locations[i].PendingTypes = pending
+		config.Locations[i].Refreshing = refreshing
 
 		if len(discovered) == 0 && len(pending) == 0 &&
 			len(location.Include) == 0 && len(location.Exclude) == 0 {
@@ -748,7 +799,7 @@ func processProjectTypes(config *Config) ([]Warning, error) {
 
 		config.Locations[i].authoredCommands = location.Commands
 		config.Locations[i].cheapCommands = sortDiscovered(discovered)
-		config.Locations[i].Commands = composeCommands(config.Locations[i], nil)
+		config.Locations[i].Commands = composeCommands(config.Locations[i], cached)
 	}
 
 	return warnings, nil
@@ -798,22 +849,27 @@ func commandsForType(typeName, directory string) ([]Command, *Warning, error) {
 
 	// A parser failure (broken Makefile, missing `mvn`, a command that timed
 	// out) still yields the type's base commands, so keep them and report the
-	// problem rather than losing the location — or the whole load.
+	// problem rather than losing the location — or the whole load. A deferred
+	// type does better when it has a cached result: that is the fuller list.
 	commands, parseErr := projectType.Commands(directory)
 
-	var commandList []Command
-	for name, cmd := range commands {
-		commandList = append(commandList, Command{
-			Name:    name,
-			Command: cmd,
-			Type:    typeName,
-		})
+	usedCache := false
+	if projectType.DefersLoading() {
+		if parseErr == nil {
+			storeTypeCache(projectType, directory, commands)
+		} else if cached, _, ok := loadTypeCache(projectType, directory); ok {
+			commands = cached
+			usedCache = true
+		}
 	}
 
 	var warning *Warning
 	if parseErr != nil {
 		reason := parseErr.Error()
-		if errors.Is(parseErr, parsers.ErrParserTimeout) {
+		switch {
+		case usedCache:
+			reason = fmt.Sprintf("%s; showing its cached commands", reason)
+		case errors.Is(parseErr, parsers.ErrParserTimeout):
 			reason = fmt.Sprintf("%s parser timed out; only its base commands are available", typeName)
 		}
 		warning = &Warning{
@@ -823,7 +879,35 @@ func commandsForType(typeName, directory string) ([]Command, *Warning, error) {
 			Reason: reason,
 		}
 	}
-	return commandList, warning, nil
+	return typeCommands(typeName, commands), warning, nil
+}
+
+// cachedCommandsForType returns the cached result for a deferred type in a
+// directory without running anything. fresh reports whether the type's detect
+// files are unchanged since it was stored.
+func cachedCommandsForType(typeName, directory string) (cmds []Command, fresh bool, ok bool) {
+	projectType, err := lookupType(typeName)
+	if err != nil || !projectType.DefersLoading() || !projectType.CanHandleDirectory(directory) {
+		return nil, false, false
+	}
+	commands, fresh, ok := loadTypeCache(projectType, directory)
+	if !ok {
+		return nil, false, false
+	}
+	return typeCommands(typeName, commands), fresh, true
+}
+
+// typeCommands turns a type's name→command map into commands tagged with the type.
+func typeCommands(typeName string, commands map[string]string) []Command {
+	var commandList []Command
+	for name, cmd := range commands {
+		commandList = append(commandList, Command{
+			Name:    name,
+			Command: cmd,
+			Type:    typeName,
+		})
+	}
+	return commandList
 }
 
 // fileExists checks if a file exists

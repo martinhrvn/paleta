@@ -415,6 +415,11 @@ func (m Model) View() string {
 			helpItem("^N", "add"),
 			helpItem("Esc", "cancel"),
 		)
+		// Cached rows are on screen while their types re-run; say so, so a
+		// command that is about to appear (or vanish) doesn't surprise anyone.
+		if refreshing := m.config.RefreshingTypes(); len(refreshing) > 0 {
+			parts = append(parts, helpStyle.Render(m.spinner.View()+" refreshing "+strings.Join(refreshing, ", ")+"…"))
+		}
 		sections = append(sections, "  "+strings.Join(parts, helpStyle.Render(" · ")))
 	}
 
@@ -1344,6 +1349,7 @@ func (m *Model) applyPendingResolved(msg pendingResolvedMsg) {
 		m.config.Locations[msg.index].Commands = msg.commands
 	}
 	m.config.Locations[msg.index].PendingTypes = nil
+	m.config.Locations[msg.index].Refreshing = nil
 	m.config.Warnings = append(m.config.Warnings, msg.warnings...)
 
 	m.loadCommands()

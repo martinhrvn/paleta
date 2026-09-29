@@ -129,3 +129,63 @@ func TestSelector_ResolveWarningsReachTheBanner(t *testing.T) {
 		t.Errorf("warning banner empty after a resolve warning")
 	}
 }
+
+// refreshingTestConfig has a location whose deferred type is showing its cached
+// commands while it re-runs in the background.
+func refreshingTestConfig() *config.Config {
+	return &config.Config{
+		Locations: []config.Location{
+			{
+				Name:         "infra",
+				Location:     "/repo/infra",
+				Types:        config.Types{"gradle"},
+				Commands:     []config.Command{{Name: "build", Command: "./gradlew build", Type: "gradle"}},
+				PendingTypes: []string{"gradle"},
+				Refreshing:   []string{"gradle"},
+			},
+		},
+		Frecency: config.DefaultFrecencyConfig(),
+	}
+}
+
+// Cached rows are real rows — runnable straight away — with no placeholder.
+func TestSelector_CachedRowsAreRunnableWhileRefreshing(t *testing.T) {
+	m := NewModel(refreshingTestConfig(), Backend{})
+	m.loadCommands()
+	m.updateFilteredCommands()
+
+	if got := rowDisplays(m); len(got) != 1 || got[0] != "infra: build" {
+		t.Fatalf("rows = %v, want only the cached [infra: build]", got)
+	}
+	m.currentIndex = 0
+	m.confirmSelection()
+	if len(m.results) != 1 || m.results[0].Command != "./gradlew build" {
+		t.Errorf("results = %+v, want the cached command to run", m.results)
+	}
+}
+
+// The bottom line says what is refreshing, and stops once the result arrives.
+func TestSelector_BottomLineShowsRefresh(t *testing.T) {
+	m := NewModel(refreshingTestConfig(), Backend{})
+	m.loadCommands()
+
+	if view := m.View(); !strings.Contains(view, "refreshing gradle") {
+		t.Errorf("view lacks the refresh indicator:\n%s", view)
+	}
+
+	updated, _ := m.Update(pendingResolvedMsg{
+		index:    0,
+		commands: []config.Command{{Name: "build", Command: "./gradlew build", Type: "gradle"}, {Name: "test", Command: "./gradlew test", Type: "gradle"}},
+	})
+	m = updated.(Model)
+
+	if view := m.View(); strings.Contains(view, "refreshing") {
+		t.Errorf("refresh indicator still shown after the result arrived:\n%s", view)
+	}
+	if len(m.config.Locations[0].Refreshing) != 0 {
+		t.Errorf("Refreshing = %v, want cleared", m.config.Locations[0].Refreshing)
+	}
+	if got := rowDisplays(m); len(got) != 2 {
+		t.Errorf("rows = %v, want the refreshed list", got)
+	}
+}

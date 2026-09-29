@@ -72,6 +72,7 @@ func TestLoad_FromSubdirectory(t *testing.T) {
 
 // Defer leaves shell-backed types for the caller to resolve in the background.
 func TestLoad_DeferKeepsPendingTypes(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // the resolved make result is cached under HOME
 	dir := writeLoadFixture(t, "locations:\n  - location: .\n    type: make\n")
 	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte("build:\n\t@echo build\n"), 0644); err != nil {
 		t.Fatal(err)

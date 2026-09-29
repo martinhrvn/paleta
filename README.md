@@ -174,7 +174,7 @@ plt looks for a `.pltrc` file starting from the current directory and traversing
 locations:
   - name: "display-name"        # Optional: Display name in selection UI
     location: "path/to/project" # Required: Path to project directory
-    type: "npm"                 # Optional: Project type, or a list: [npm, docker]
+    type: "npm"                 # Optional: type or list [npm, docker]; omit to detect, `none` to opt out
     env:                        # Optional: Env vars for all commands here
       NODE_ENV: "development"
     commands:                   # Optional: Additional custom commands
@@ -195,7 +195,12 @@ locations:
   single value (`type: npm`) or a list (`type: [npm, docker]`). When more than one
   type is given, each command is labelled with its type in the selector, e.g.
   `svc: [npm] build` and `svc: [docker] build`, so commands sharing a name stay
-  distinguishable.
+  distinguishable. When `type` is omitted, types are detected from the folder's
+  files (`go.mod`, `package.json` + lockfile, `Makefile`, `build.gradle`, ...) —
+  per folder for a glob location. `type: none` turns detection off, leaving only
+  the authored commands. Types that shell out to list their commands (make,
+  gradle, maven, python) are cached in `~/.paleta/cache/types/`: the selector
+  shows the cached list at once and refreshes it in the background.
 - **commands** (optional): Additional commands to include (supports both string and object formats)
 - **include_commands** (optional): Whitelist patterns for filtering commands (glob patterns)
 - **exclude_commands** (optional): Blacklist patterns for filtering commands (glob patterns)
