@@ -120,6 +120,7 @@ func TestDefaultConfigTemplate(t *testing.T) {
 		"location:",
 		"type:",
 		"commands:",
+		"https://github.com/martinhrvn/paleta/blob/main/docs/pltrc.md",
 	}
 
 	for _, section := range expectedSections {

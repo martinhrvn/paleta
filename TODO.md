@@ -26,6 +26,7 @@
 - [ ] `focused:` matches authored keys (resolved before glob expansion), so a glob can only be focused as a whole — and `plt focus` writes keys taken from expanded locations, which then match nothing
 - [ ] No dedup when two locations resolve to the same directory (duplicate rows + ambiguous aliases); `exclude_locations` is a partial workaround
 - [ ] Unknown `.pltrc` keys are silently ignored (a typo'd `exclude_location:` does nothing) — consider `yaml.Decoder.KnownFields(true)`
+- [x] Format reference in `docs/pltrc.md` (README links to it); `plt init` headers link to it so people and LLMs editing the file can find the spec
 - [x] Config file discovery (search current dir and parents)
 - [x] Validate config file structure
 - [x] Handle malformed config gracefully

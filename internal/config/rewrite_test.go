@@ -126,6 +126,9 @@ func TestNewFile_HeaderAndRoundTrip(t *testing.T) {
 	if !strings.Contains(out, "# paleta configuration file") {
 		t.Errorf("expected the generated header comment:\n%s", out)
 	}
+	if !strings.Contains(out, "https://github.com/martinhrvn/paleta/blob/main/docs/pltrc.md") {
+		t.Errorf("expected the header to link the format reference:\n%s", out)
+	}
 	if len(parsed.Locations) != 2 || parsed.Locations[1].Location != "packages/web" ||
 		!reflect.DeepEqual(parsed.Locations[1].Types, Types{"npm"}) {
 		t.Errorf("locations not round-tripped: %+v", parsed.Locations)

@@ -221,6 +221,7 @@ func locationName(relPath string) string {
 func DefaultConfigTemplate() string {
 	return `# paleta configuration file
 # This file defines locations and commands for your project
+# Format reference: ` + config.FormatReferenceURL + `
 
 locations:
   # Example: NPM/Yarn/PNPM project with automatic script detection
