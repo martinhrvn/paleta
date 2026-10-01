@@ -561,7 +561,7 @@ var loadStages = []func(*Config) error{
 	expandGlobLocations,
 	makeLocationPathsAbsolute,
 	processProjectTypesStage,
-	func(c *Config) error { expandCommandAliases(c); return nil },
+	func(c *Config) error { _ = expandCommandAliases(c); return nil },
 	func(c *Config) error { collectConfigWarnings(c); return nil },
 }
 

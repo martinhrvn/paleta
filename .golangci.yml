@@ -8,6 +8,15 @@ run:
 linters:
   default: standard
   # standard = errcheck, govet, ineffassign, staticcheck, unused
+  exclusions:
+    presets:
+      # Unchecked errors that are conventionally ignored: fmt.Fprint* to
+      # stdout/stderr, deferred Close, os.Setenv/Remove, ...
+      - std-error-handling
+    rules:
+      # De Morgan rewrites: `!(a < b && b < c)` reads better as "not ordered".
+      - linters: [staticcheck]
+        text: "QF1001"
 
 formatters:
   enable:

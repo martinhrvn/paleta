@@ -1,7 +1,6 @@
 package parsers
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,7 +8,7 @@ import (
 
 func TestUserConfigOverride(t *testing.T) {
 	// Create a temporary directory for test
-	tmpDir, err := ioutil.TempDir("", "plt_test")
+	tmpDir, err := os.MkdirTemp("", "plt_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -38,7 +37,7 @@ func TestUserConfigOverride(t *testing.T) {
     command_template: "custom {key}"`
 
 	configPath := filepath.Join(paletaDir, "parsers.yaml")
-	if err := ioutil.WriteFile(configPath, []byte(userConfig), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(userConfig), 0644); err != nil {
 		t.Fatalf("Failed to write user config: %v", err)
 	}
 
@@ -101,7 +100,7 @@ func TestUserConfigOverride(t *testing.T) {
 
 func TestUserConfigPartialOverride(t *testing.T) {
 	// Create a temporary directory for test
-	tmpDir, err := ioutil.TempDir("", "plt_test")
+	tmpDir, err := os.MkdirTemp("", "plt_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -123,7 +122,7 @@ func TestUserConfigPartialOverride(t *testing.T) {
     builtin_parser: "go_standard"`
 
 	configPath := filepath.Join(paletaDir, "parsers.yaml")
-	if err := ioutil.WriteFile(configPath, []byte(userConfig), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(userConfig), 0644); err != nil {
 		t.Fatalf("Failed to write user config: %v", err)
 	}
 

@@ -24,9 +24,6 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
-    # Advisory: the repo has pre-existing lint debt. This job reports issues
-    # without blocking CI. Drop continue-on-error once the backlog is cleared.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -36,4 +33,4 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v2.14.0

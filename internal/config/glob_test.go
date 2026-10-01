@@ -274,7 +274,7 @@ func TestExpandGlobPatterns(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to get working directory: %v", err)
 			}
-			defer os.Chdir(oldWd)
+			defer func() { _ = os.Chdir(oldWd) }()
 
 			err = os.Chdir(tmpDir)
 			if err != nil {

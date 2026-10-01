@@ -258,7 +258,9 @@ locations:
 focused:
   - a
 `)
-	f.SetFocused([]string{"b"})
+	if err := f.SetFocused([]string{"b"}); err != nil {
+		t.Fatal(err)
+	}
 	out, parsed := render(t, f)
 	for _, want := range []string{"# keep me", "root: /srv/x", "# main"} {
 		if !strings.Contains(out, want) {
@@ -269,7 +271,9 @@ focused:
 		t.Errorf("focused = %v, want [b]", parsed.Focused)
 	}
 
-	f.SetFocused(nil)
+	if err := f.SetFocused(nil); err != nil {
+		t.Fatal(err)
+	}
 	out, _ = render(t, f)
 	if strings.Contains(out, "focused:") {
 		t.Errorf("an empty focus set should remove the key:\n%s", out)
@@ -336,7 +340,9 @@ func TestFile_SaveUpgradesDeprecatedKeys(t *testing.T) {
     include: # whitelist
       - build*
 `)
-	f.SetFocused([]string{"web"})
+	if err := f.SetFocused([]string{"web"}); err != nil {
+		t.Fatal(err)
+	}
 	out, parsed := render(t, f)
 	if !strings.Contains(out, "include_commands:") || strings.Contains(out, "\n    include:") {
 		t.Errorf("deprecated key not upgraded:\n%s", out)
@@ -388,7 +394,9 @@ func TestFile_Save_PreservesMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.SetFocused([]string{"."})
+	if err := f.SetFocused([]string{"."}); err != nil {
+		t.Fatal(err)
+	}
 	if err := f.Save(); err != nil {
 		t.Fatal(err)
 	}

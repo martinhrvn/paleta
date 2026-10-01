@@ -80,13 +80,7 @@ func TestFindConfigForEdit(t *testing.T) {
 				t.Fatalf("Setup failed: %v", err)
 			}
 
-			oldWd, err := os.Getwd()
-			if err != nil {
-				t.Fatalf("Failed to get working directory: %v", err)
-			}
-			defer os.Chdir(oldWd)
-
-			os.Chdir(tmpDir)
+			t.Chdir(tmpDir)
 
 			path, err := FindConfigForEdit()
 			if tt.wantErr {

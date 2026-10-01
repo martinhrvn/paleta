@@ -21,7 +21,7 @@ func inGlobDir(t *testing.T, dirs ...string) {
 	if err != nil {
 		t.Fatalf("failed to get working directory: %v", err)
 	}
-	t.Cleanup(func() { os.Chdir(oldWd) })
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("failed to change to temp directory: %v", err)
 	}

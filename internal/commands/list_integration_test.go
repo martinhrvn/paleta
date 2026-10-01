@@ -16,7 +16,7 @@ func TestListCommandsIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get current working directory: %v", err)
 	}
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	tests := []struct {
 		name     string
@@ -99,7 +99,7 @@ func TestFormatForFzfIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get current working directory: %v", err)
 	}
-	defer os.Chdir(originalWd)
+	defer func() { _ = os.Chdir(originalWd) }()
 
 	// Change to npm-monorepo directory
 	testDir := filepath.Join(originalWd, "../../examples/npm-monorepo")

@@ -120,7 +120,9 @@ func TestGetScore(t *testing.T) {
 	command := "go run main.go"
 
 	// Record initial execution
-	h.RecordExecution(location, command)
+	if err := h.RecordExecution(location, command); err != nil {
+		t.Fatal(err)
+	}
 
 	// Get score immediately (should be high due to recency)
 	score := h.GetScore(location, command)
@@ -168,12 +170,16 @@ func TestFrecencyScoreBalance(t *testing.T) {
 	h.timeProvider = mockClock
 
 	// Command A: executed once, very recent
-	h.RecordExecution("loc1", "cmd-recent")
+	if err := h.RecordExecution("loc1", "cmd-recent"); err != nil {
+		t.Fatal(err)
+	}
 	scoreRecent := h.GetScore("loc1", "cmd-recent")
 
 	// Command B: executed 10 times, but 30 days ago
 	for i := 0; i < 10; i++ {
-		h.RecordExecution("loc2", "cmd-frequent")
+		if err := h.RecordExecution("loc2", "cmd-frequent"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	mockClock.Set(mockClock.Now().Add(30 * 24 * time.Hour))
 	scoreFrequent := h.GetScore("loc2", "cmd-frequent")
@@ -206,19 +212,25 @@ func TestSortCommandsByScore(t *testing.T) {
 	// Create commands with different frequencies and recencies
 	// Command 1: 5 executions, just now
 	for i := 0; i < 5; i++ {
-		h.RecordExecution("loc", "cmd1")
+		if err := h.RecordExecution("loc", "cmd1"); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Command 2: 10 executions, 7 days ago
 	mockClock.Set(mockClock.Now().Add(-7 * 24 * time.Hour))
 	for i := 0; i < 10; i++ {
-		h.RecordExecution("loc", "cmd2")
+		if err := h.RecordExecution("loc", "cmd2"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	mockClock.Set(time.Now())
 
 	// Command 3: 1 execution, 1 hour ago
 	mockClock.Set(mockClock.Now().Add(-1 * time.Hour))
-	h.RecordExecution("loc", "cmd3")
+	if err := h.RecordExecution("loc", "cmd3"); err != nil {
+		t.Fatal(err)
+	}
 	mockClock.Set(time.Now())
 
 	// Get scores
@@ -246,8 +258,12 @@ func TestLoadAndSave(t *testing.T) {
 		t.Fatalf("NewHistory failed: %v", err)
 	}
 
-	h1.RecordExecution("loc1", "cmd1")
-	h1.RecordExecution("loc2", "cmd2")
+	if err := h1.RecordExecution("loc1", "cmd1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := h1.RecordExecution("loc2", "cmd2"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Save to disk
 	historyFile := filepath.Join(tempDir, "history.json")
@@ -329,7 +345,9 @@ func TestHistoryPruning(t *testing.T) {
 
 	// Add 100 commands
 	for i := 0; i < 100; i++ {
-		h.RecordExecution("loc", "cmd"+string(rune(i)))
+		if err := h.RecordExecution("loc", "cmd"+string(rune(i))); err != nil {
+			t.Fatal(err)
+		}
 		mockClock.Set(mockClock.Now().Add(1 * time.Hour))
 	}
 
@@ -375,11 +393,15 @@ func TestGetEntry(t *testing.T) {
 	}
 
 	// Record execution
-	h.RecordExecution(location, command)
+	if err := h.RecordExecution(location, command); err != nil {
+		t.Fatal(err)
+	}
 
 	// Advance time and record again
 	mockClock.Set(mockClock.Now().Add(2 * time.Hour))
-	h.RecordExecution(location, command)
+	if err := h.RecordExecution(location, command); err != nil {
+		t.Fatal(err)
+	}
 
 	// Get the entry
 	entry, exists = h.GetEntry(location, command)
@@ -418,7 +440,9 @@ func TestConcurrentAccess(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func(id int) {
 			for j := 0; j < 10; j++ {
-				h.RecordExecution("loc", "cmd")
+				if err := h.RecordExecution("loc", "cmd"); err != nil {
+					t.Error(err)
+				}
 				_ = h.GetScore("loc", "cmd")
 			}
 			done <- true

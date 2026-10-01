@@ -326,7 +326,7 @@ func TestProcessProjectTypesWithEmptyLocation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get current directory: %v", err)
 	}
-	defer os.Chdir(oldDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change directory: %v", err)
@@ -405,7 +405,7 @@ func TestLoadConfigWithEmptyLocation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() { _ = os.Chdir(oldWd) }()
 
 	err = os.Chdir(tmpDir)
 	if err != nil {
@@ -514,7 +514,7 @@ func TestLoadConfig(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to get working directory: %v", err)
 			}
-			defer os.Chdir(oldWd)
+			defer func() { _ = os.Chdir(oldWd) }()
 
 			err = os.Chdir(tmpDir)
 			if err != nil {
@@ -527,9 +527,6 @@ func TestLoadConfig(t *testing.T) {
 				if err == nil {
 					t.Errorf("Expected error but got none")
 					return
-				}
-				if tt.errContains != "" && err.Error() != "" {
-					// Just check if error occurred, don't check specific message
 				}
 				return
 			}
@@ -722,7 +719,7 @@ func TestLoadConfig_LegacyIncludeExcludeStillWorks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get current directory: %v", err)
 	}
-	defer os.Chdir(oldDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change directory: %v", err)
@@ -836,7 +833,7 @@ func TestLoadConfigWithIncludeExcludeCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get current directory: %v", err)
 	}
-	defer os.Chdir(oldDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change directory: %v", err)
 	}
@@ -908,7 +905,7 @@ func TestLoadConfig_FiltersApplyWithoutType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get current directory: %v", err)
 	}
-	defer os.Chdir(oldDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("Failed to change directory: %v", err)
 	}
@@ -953,7 +950,7 @@ func TestLoadConfig_GlobOverridesEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get current directory: %v", err)
 	}
-	defer os.Chdir(oldDir)
+	defer func() { _ = os.Chdir(oldDir) }()
 
 	pkg := `{"name":"svc","scripts":{"build":"tsc","dev":"vite","lint":"eslint ."}}`
 	for _, svc := range []string{"api", "frontend-next", "legacy"} {

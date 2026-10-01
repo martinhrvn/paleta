@@ -74,7 +74,7 @@ func TestExpandGlobPatternsPropagatesFocused(t *testing.T) {
 	}
 
 	oldWd, _ := os.Getwd()
-	defer os.Chdir(oldWd)
+	defer func() { _ = os.Chdir(oldWd) }()
 	if err := os.Chdir(tmp); err != nil {
 		t.Fatal(err)
 	}

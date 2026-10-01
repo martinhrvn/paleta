@@ -45,7 +45,7 @@ func TestProcessProjectTypes_ParserFailureDegradesToWarning(t *testing.T) {
 	}
 
 	oldWd, _ := os.Getwd()
-	defer os.Chdir(oldWd)
+	defer func() { _ = os.Chdir(oldWd) }()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}

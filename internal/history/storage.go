@@ -54,7 +54,7 @@ func (h *History) Save(filePath string) error {
 	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
 		return fmt.Errorf("failed to lock history file: %w", err)
 	}
-	defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	defer func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }()
 
 	// Write data
 	if _, err := file.Write(data); err != nil {
@@ -87,7 +87,7 @@ func LoadHistory(filePath string) (*History, error) {
 	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH); err != nil {
 		return nil, fmt.Errorf("failed to lock history file: %w", err)
 	}
-	defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	defer func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }()
 
 	// Decode JSON
 	var hf HistoryFile

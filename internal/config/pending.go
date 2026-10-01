@@ -133,6 +133,6 @@ func ResolveAllPending(cfg *Config) {
 
 	// Aliases were expanded during the load, when the deferred commands didn't
 	// exist yet; re-run both passes now that they do. Both are in-memory.
-	expandCommandAliases(cfg)
+	_ = expandCommandAliases(cfg)
 	collectConfigWarnings(cfg)
 }

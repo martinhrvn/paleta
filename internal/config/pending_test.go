@@ -23,7 +23,7 @@ func makeProject(t *testing.T, parserCommand, configYAML string) string {
 	}
 
 	oldWd, _ := os.Getwd()
-	t.Cleanup(func() { os.Chdir(oldWd) })
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestLoadConfig_CheapTypesUnaffected(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 	oldWd, _ := os.Getwd()
-	defer os.Chdir(oldWd)
+	defer func() { _ = os.Chdir(oldWd) }()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}

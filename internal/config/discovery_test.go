@@ -21,7 +21,7 @@ func TestLoadConfigFromDiscoveryNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() { _ = os.Chdir(oldWd) }()
 	if err := os.Chdir(tmpDir); err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestFindConfigFile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to get working directory: %v", err)
 			}
-			defer os.Chdir(oldWd)
+			defer func() { _ = os.Chdir(oldWd) }()
 
 			err = os.Chdir(startPath)
 			if err != nil {
@@ -222,7 +222,7 @@ func TestLoadConfigFromDiscovery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get working directory: %v", err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() { _ = os.Chdir(oldWd) }()
 
 	err = os.Chdir(nestedPath)
 	if err != nil {
@@ -566,7 +566,7 @@ locations:
 			if err != nil {
 				t.Fatalf("Failed to get working directory: %v", err)
 			}
-			defer os.Chdir(oldWd)
+			defer func() { _ = os.Chdir(oldWd) }()
 
 			err = os.Chdir(startPath)
 			if err != nil {
