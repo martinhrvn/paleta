@@ -18,8 +18,8 @@ import (
 type SelectionResult = ui.SelectionResult
 
 // RunSelector runs the interactive selector with multi-select support. The
-// config's Path (the discovered .pltrc; empty for a global-fallback config)
-// enables focus persistence and in-app project adding. When the user requests
+// config's Path (the discovered .pltrc or global project file) enables focus
+// persistence and in-app project adding. When the user requests
 // adding projects (Ctrl+N), the init wizard runs and the selector re-enters with
 // the reloaded config.
 func RunSelector(cfg *config.Config) ([]SelectionResult, error) {
@@ -27,7 +27,7 @@ func RunSelector(cfg *config.Config) ([]SelectionResult, error) {
 		model := ui.NewModel(cfg, selectorBackend(cfg))
 		results, reinit, err := model.Run()
 		if reinit {
-			if _, ierr := RunInitWizard(filepath.Dir(cfg.Path), false); ierr != nil {
+			if _, ierr := RunInitWizard(cfg.BaseDir(), cfg.Path, false); ierr != nil {
 				return nil, ierr
 			}
 			if reloaded, rerr := cfg.Reload(); rerr == nil {
@@ -46,8 +46,9 @@ func RunSelector(cfg *config.Config) ([]SelectionResult, error) {
 
 // selectorBackend wires the selector to the rest of the program: the project's
 // history (weighted per the config's frecency settings), config reloads, deferred
-// type resolution, and — when there is a writable local .pltrc — focus and queue
-// persistence. A global-fallback config has no Path, so those stay disabled.
+// type resolution, and — when the config came from a file (a .pltrc or a global
+// project file) — focus and queue persistence. A config without a Path has
+// nowhere to save to, so those stay disabled.
 func selectorBackend(cfg *config.Config) ui.Backend {
 	be := ui.Backend{
 		History:        projectHistory(cfg),
@@ -63,9 +64,9 @@ func selectorBackend(cfg *config.Config) ui.Backend {
 	be.SaveQueue = func(displayName, directory, name string, parts []string) error {
 		return AddCommandToLocation(configPath, displayName, directory, name, parts)
 	}
-	// The root location is the one at the config's own directory; cross-folder
-	// queue saves land there. Match the absolute form the loaded config uses.
-	if abs, err := filepath.Abs(filepath.Dir(configPath)); err == nil {
+	// The root location is the one at the project root the config describes
+	// (not where a global project file lives); cross-folder queue saves land there. Match the absolute form the loaded config uses.
+	if abs, err := filepath.Abs(cfg.BaseDir()); err == nil {
 		be.RootDir = abs
 	}
 	return be

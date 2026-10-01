@@ -15,7 +15,7 @@ import (
 // Every function is optional. A nil History disables frecency and the preview
 // statistics; a nil Reload keeps the current configuration after a save; a nil
 // ResolvePending leaves placeholder rows in place; nil focus or queue functions
-// disable those features (there is no writable local .pltrc).
+// disable those features (there is no config file to write to).
 type Backend struct {
 	History        *history.History
 	Reload         func() (*config.Config, error)

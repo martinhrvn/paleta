@@ -29,7 +29,7 @@ func TestRunInitWizard_BrokenConfigStops(t *testing.T) {
 	writePackage(t, filepath.Join(dir, "packages", "web"), "web")
 	called := stubWizard(t, true)
 
-	_, err := RunInitWizard(".", false)
+	_, err := RunInitWizard(".", config.ConfigFileName, false)
 	if err == nil {
 		t.Fatal("RunInitWizard() succeeded on an unparseable config")
 	}
@@ -53,7 +53,7 @@ func TestRunInitWizard_ForceStartsFresh(t *testing.T) {
 	writePackage(t, filepath.Join(dir, "packages", "web"), "web")
 	called := stubWizard(t, true)
 
-	outcome, err := RunInitWizard(".", true)
+	outcome, err := RunInitWizard(".", config.ConfigFileName, true)
 	if err != nil {
 		t.Fatalf("RunInitWizard() error = %v", err)
 	}

@@ -6,6 +6,10 @@
 
 A fast, lightweight CLI tool for managing and executing commands across multiple projects in monorepos using fuzzy search.
 
+![plt demo: fuzzy-searching and running commands across a monorepo](docs/demo/demo.gif)
+
+<sub>Recorded with [VHS](https://github.com/charmbracelet/vhs) from [`docs/demo/demo.tape`](docs/demo/demo.tape); re-render with `./docs/demo/render.sh`.</sub>
+
 ## Features
 
 - **Interactive Command Selection**: Use fuzzy search (via fzf or built-in TUI) to quickly find and run commands
@@ -166,7 +170,7 @@ export PLT_NO_ICONS=1
 
 ## Configuration
 
-plt reads a `.pltrc` YAML file. It looks in the current directory first, then in each parent directory. A minimal config:
+plt reads a `.pltrc` YAML file. It looks in the current directory first, then in each parent directory. For a repo where you'd rather not commit your personal config, `plt init --global` keeps it in `~/.config/paleta/projects/` instead (see [global project configuration](docs/pltrc.md#global-project-configuration)). A minimal config:
 
 ```yaml
 locations:

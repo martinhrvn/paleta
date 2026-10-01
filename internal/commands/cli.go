@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -65,13 +66,19 @@ func newFlagSet(name string, stderr io.Writer) *flag.FlagSet {
 
 func runInit(args []string, stdout, stderr io.Writer) int {
 	fs := newFlagSet("init", stderr)
-	var force, template bool
+	var force, template, global bool
 	fs.BoolVar(&force, "force", false, "overwrite an existing .pltrc")
 	fs.BoolVar(&force, "f", false, "shorthand for --force")
 	fs.BoolVar(&template, "template", false, "write the static starter template instead of scanning")
 	fs.BoolVar(&template, "t", false, "shorthand for --template")
+	fs.BoolVar(&global, "global", false, "keep the config in ~/.config/paleta/projects/ instead of the repo")
+	fs.BoolVar(&global, "g", false, "shorthand for --global")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+
+	if global {
+		return runInitGlobal(force, template, stdout, stderr)
 	}
 
 	if template {
@@ -85,12 +92,40 @@ func runInit(args []string, stdout, stderr io.Writer) int {
 
 	// `plt init` is explicit about where it runs: it scans and writes here, unlike
 	// a bare `plt`, which anchors to the repository root (Bootstrap).
-	return reportInitWizard(".", force, stdout, stderr)
+	return reportInitWizard(".", config.ConfigFileName, force, stdout, stderr)
 }
 
-// reportInitWizard runs the init wizard at root and reports how it went.
-func reportInitWizard(root string, force bool, stdout, stderr io.Writer) int {
-	outcome, err := RunInitWizard(root, force)
+// runInitGlobal is `plt init --global`: the wizard scans the working directory
+// as usual but writes a global project file for it, so nothing lands in a repo
+// you'd rather not commit personal tooling to.
+func runInitGlobal(force, template bool, stdout, stderr io.Writer) int {
+	if template {
+		fmt.Fprintln(stderr, "Error: --global and --template can't be combined.")
+		return 2
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+	// A local .pltrc always wins discovery, so a global file would never be read.
+	if _, err := os.Stat(filepath.Join(root, config.ConfigFileName)); err == nil {
+		fmt.Fprintf(stderr, "Error: %s already exists here and would take precedence over a global config.\n", config.ConfigFileName)
+		fmt.Fprintf(stderr, "Remove it first, or run 'plt init' to update it.\n")
+		return 1
+	}
+	configPath, err := config.GlobalProjectFile(root)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+	return reportInitWizard(root, configPath, force, stdout, stderr)
+}
+
+// reportInitWizard runs the init wizard at root, writing configPath, and reports
+// how it went.
+func reportInitWizard(root, configPath string, force bool, stdout, stderr io.Writer) int {
+	outcome, err := RunInitWizard(root, configPath, force)
 	if err != nil {
 		// A config that exists but can't be read gets the "here's the file, here's
 		// the way out" treatment; anything else is a plain failure.
@@ -105,7 +140,7 @@ func reportInitWizard(root string, force bool, stdout, stderr io.Writer) int {
 
 	switch outcome {
 	case InitWritten:
-		printInitSuccess(stdout, filepath.Join(root, config.ConfigFileName))
+		printInitSuccess(stdout, configPath)
 	case InitNoProjects:
 		fmt.Fprintln(stdout, "No projects detected in this directory tree.")
 		fmt.Fprintln(stdout, "Run 'plt init --template' to start from a sample configuration.")
@@ -113,7 +148,7 @@ func reportInitWizard(root string, force bool, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "Init canceled.")
 		return 1
 	case InitNothingSelected:
-		fmt.Fprintln(stdout, "No locations selected; .pltrc was not written.")
+		fmt.Fprintf(stdout, "No locations selected; %s was not written.\n", configPath)
 	}
 	return 0
 }
@@ -122,7 +157,7 @@ func printInitSuccess(stdout io.Writer, configPath string) {
 	fmt.Fprintf(stdout, "Wrote config file: %s\n", configPath)
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Next steps:")
-	fmt.Fprintln(stdout, "  1. Review .pltrc and tweak locations as needed")
+	fmt.Fprintln(stdout, "  1. Review it and tweak locations as needed")
 	fmt.Fprintln(stdout, "  2. Run 'plt list' to see available commands")
 	fmt.Fprintln(stdout, "  3. Run 'plt select' to interactively select and run commands")
 }
@@ -295,7 +330,7 @@ func bootstrapConfig(loadErr error, stderr io.Writer) (*config.Config, int) {
 // runLint checks the discovered .pltrc for names outside the alias-safe charset,
 // unresolved aliases, deprecated keys and unknown tools. Without --fix it reports
 // and exits non-zero when anything is found (CI-friendly). With --fix it rewrites
-// the local .pltrc, then re-validates and reports what it could not repair.
+// the config file, then re-validates and reports what it could not repair.
 func runLint(args []string, stdout, stderr io.Writer) int {
 	fs := newFlagSet("lint", stderr)
 	fix := fs.Bool("fix", false, "rewrite offending names and deprecated keys in place")
@@ -318,12 +353,12 @@ func runLint(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// lintFix repairs the local .pltrc. It requires a local file: a global-fallback
-// config has no single file to rewrite.
+// lintFix repairs the config file for the working directory: the nearest .pltrc,
+// or the matching global project file.
 func lintFix(stdout, stderr io.Writer) int {
 	configPath, err := config.FindConfigFile()
 	if err != nil {
-		fmt.Fprintln(stderr, "No local .pltrc found to fix (plt lint --fix rewrites the nearest .pltrc).")
+		fmt.Fprintln(stderr, "No config found to fix (plt lint --fix rewrites the nearest .pltrc or matching global project file).")
 		return 1
 	}
 
@@ -379,7 +414,8 @@ func usage(out io.Writer) {
 	fmt.Fprintln(out, "    init                     Interactively scan for projects and build .pltrc")
 	fmt.Fprintln(out, "    init --template          Write a static starter .pltrc template")
 	fmt.Fprintln(out, "    init --template --force  Overwrite existing .pltrc with the template")
-	fmt.Fprintln(out, "    edit                     Open nearest .pltrc in $EDITOR")
+	fmt.Fprintln(out, "    init --global            Keep the config in ~/.config/paleta/projects/ instead of the repo")
+	fmt.Fprintln(out, "    edit                     Open nearest .pltrc (or global project config) in $EDITOR")
 	fmt.Fprintln(out, "    list                     List all available location:command pairs")
 	fmt.Fprintln(out, "    list --format=fzf        List commands in fzf format")
 	fmt.Fprintln(out, "    stats                    Show command usage history (runs, recency, frecency)")

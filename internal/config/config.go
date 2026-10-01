@@ -39,9 +39,10 @@ type Config struct {
 	// surface them (the selector banner, `plt lint`) rather than failing the load.
 	// Never serialized.
 	Warnings []Warning `yaml:"-"`
-	// Path is the local .pltrc this config was loaded from, when discovery found
-	// one. Empty for a global project (which has no single file to rewrite) and
-	// for a config loaded directly by path. Never serialized.
+	// Path is the file discovery loaded this config from: the nearest .pltrc, or
+	// the matched global project file (~/.config/paleta/projects/*.yaml). Edits and
+	// saves go back to it. Empty for a config loaded directly by path. Never
+	// serialized.
 	Path string `yaml:"-"`
 	// loadOpts remembers how Load assembled this config so Reload can do it again.
 	loadOpts LoadOptions
@@ -584,6 +585,13 @@ func loadConfig(configPath string) (*Config, error) {
 	}
 
 	return &config, nil
+}
+
+// BaseDir is the directory the config's relative paths resolve against: the
+// .pltrc's own directory, or Root for a global project. It is the project root
+// the config describes, wherever the file itself lives.
+func (c *Config) BaseDir() string {
+	return c.baseDir
 }
 
 // configBaseDir is the directory a config's relative paths resolve against: a

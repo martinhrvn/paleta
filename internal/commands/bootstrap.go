@@ -72,7 +72,7 @@ func Bootstrap() (BootstrapOutcome, error) {
 		return BootstrapSkipped, nil
 	}
 
-	outcome, err := RunInitWizard(root, false)
+	outcome, err := RunInitWizard(root, filepath.Join(root, config.ConfigFileName), false)
 	switch outcome {
 	case InitWritten:
 		return BootstrapWritten, err

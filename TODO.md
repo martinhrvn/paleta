@@ -246,6 +246,9 @@ The project types we should support intitally are:
 - [x] Precedence: local .pltrc takes priority over global configs
 - [x] Global frecency settings still apply from `~/.config/paleta/config.yaml`
 - [x] Closest match preferred when multiple projects match
+- [x] Global project file is first-class: `Config.Path` points at it, so `plt edit`, `plt lint --fix`, focus, save-queue and Ctrl+N write to it
+- [x] `plt edit` finds a global project file even when its body is broken (matched on `root:` alone)
+- [x] `plt init --global` writes `~/.config/paleta/projects/<dir>.yaml` with `root` (reuses an existing file for the same root; hash suffix on name clash; refuses when a `.pltrc` exists or with `--template`)
 
 ## Release Checklist
 - [x] Release automation (GoReleaser + GitHub Actions on `v*` tags)

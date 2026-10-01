@@ -1,0 +1,10 @@
+locations:
+  - location: "apps/*"
+  - location: "services/*"
+  - name: "scripts"
+    location: "scripts"
+    commands:
+      - name: "deploy:staging"
+        command: "./deploy.sh staging"
+      - name: "deploy:production"
+        command: "./deploy.sh production"

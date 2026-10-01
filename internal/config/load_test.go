@@ -170,8 +170,8 @@ func TestLoad_GlobalProjectResolvesAgainstRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Path != "" {
-		t.Errorf("Path = %q, want empty for a global project", cfg.Path)
+	if want := filepath.Join(projectsDir, "proj.yaml"); cfg.Path != want {
+		t.Errorf("Path = %q, want the global project file %q", cfg.Path, want)
 	}
 	if len(cfg.Locations) != 1 || cfg.Locations[0].Location != filepath.Join(root, "packages", "web") {
 		t.Errorf("locations = %+v, want the glob expanded under the project root", cfg.Locations)

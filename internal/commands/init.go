@@ -32,21 +32,22 @@ var runWizard = func(items []ui.WizardItem) ([]config.Location, bool, error) {
 }
 
 // RunInitWizard scans root, lets the user pick which projects to include, and
-// writes root's .pltrc, preserving any existing config there as the starting
-// state. Scanning and writing share one root on purpose: the paths in the file
-// are relative to it, so a wizard run from somewhere else would write locations
-// that point at the wrong folders. It performs no stdout output, so it is safe to
-// call from within `plt select` (whose stdout carries the selection JSON).
-// Callers decide how to report the returned outcome.
+// writes the config at configPath (root's .pltrc, or a global project file),
+// preserving any existing config there as the starting state. The paths in the
+// file are relative to root, so a wizard run from somewhere else still writes
+// locations that point at the right folders. A file kept outside root is given a
+// root key naming it, which is how a global project file finds its project. It
+// performs no stdout output, so it is safe to call from within `plt select`
+// (whose stdout carries the selection JSON). Callers decide how to report the
+// returned outcome.
 //
 // An existing config that can't be parsed stops the run: the wizard's job is to
 // preserve what is already configured, and it can't do that from a file it can't
 // read. force ignores it and starts from the scan instead, replacing the file.
-func RunInitWizard(root string, force bool) (InitOutcome, error) {
+func RunInitWizard(root, configPath string, force bool) (InitOutcome, error) {
 	if root == "" {
 		root = "."
 	}
-	configPath := filepath.Join(root, config.ConfigFileName)
 
 	cands, err := scan.Scan(root)
 	if err != nil {
@@ -88,6 +89,15 @@ func RunInitWizard(root string, force bool) (InitOutcome, error) {
 		return InitNothingSelected, nil
 	}
 
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return InitWritten, fmt.Errorf("resolving %s: %w", root, err)
+	}
+	if absConfig, _ := filepath.Abs(configPath); filepath.Dir(absConfig) != absRoot {
+		if err := file.SetRoot(absRoot); err != nil {
+			return InitWritten, fmt.Errorf("writing config: %w", err)
+		}
+	}
 	if err := file.SetLocations(locations); err != nil {
 		return InitWritten, fmt.Errorf("writing config: %w", err)
 	}

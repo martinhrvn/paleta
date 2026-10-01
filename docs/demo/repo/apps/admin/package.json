@@ -1,0 +1,10 @@
+{
+  "name": "admin",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'vite dev server on http://localhost:5173'",
+    "build": "echo 'building admin...'",
+    "test": "echo 'running admin tests...'",
+    "lint": "echo 'linting admin...'"
+  }
+}

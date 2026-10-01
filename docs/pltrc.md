@@ -457,7 +457,8 @@ palette. Types without a `priority` sort after all types that have one.
 ## Global project configuration
 
 Instead of a `.pltrc` inside the project, you can keep the config in
-`~/.config/paleta/projects/<anything>.yaml`. It uses the same format, plus
+`~/.config/paleta/projects/<anything>.yaml`. This is useful for repos where you
+don't want to commit your personal tooling. It uses the same format, plus
 `root`:
 
 ```yaml
@@ -473,6 +474,18 @@ locations:
 2. Otherwise, plt scans `~/.config/paleta/projects/*.yaml` for configs whose
    `root` is the current directory or one of its parents.
 3. If several match, the closest (most specific) `root` wins.
+
+Relative `location` paths resolve against `root`, not against the projects
+directory.
+
+Run `plt init --global` in the project's directory to create one. It runs the
+usual init wizard but writes `~/.config/paleta/projects/<dir name>.yaml` with
+`root` set. Re-running it updates the same file. It refuses when the directory
+already has a `.pltrc`, since that would always take precedence.
+
+Once matched, a global project file is treated like a `.pltrc`. `plt edit` opens
+it, `plt lint --fix` rewrites it, and focus changes, saved queues and Ctrl+N in
+the palette are written to it.
 
 ## Checking your edits
 

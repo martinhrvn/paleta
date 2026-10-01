@@ -59,7 +59,11 @@ shell-side entries listed in the memory note on new subcommands.
   attaches tools. Nothing depends on the process working directory: relative
   paths and globs resolve against the config's own directory (`baseDir`).
   `Config.Reload()` repeats the same load. `LoadConfigFromDiscovery` is the
-  discovery step alone, used by tests.
+  discovery step alone, used by tests. `Config.Path` is the file it came from —
+  a `.pltrc` or a global project file in `~/.config/paleta/projects/` — and every
+  write goes back to it; `Config.BaseDir()` is the project root it describes.
+  `FindConfigFile` names that same file without loading it (for `plt edit` and
+  `lint --fix`), and `GlobalProjectFile` picks the one `plt init --global` writes.
 - **Rewriting**: `File` (`OpenFile`, `NewFile`) edits a `.pltrc` in place over
   its YAML node tree — `SetFocused`, `SetLocations`, `AppendCommand`,
   `AddLocation`, `Fix`, `Save`. Every write path (`plt init` merge, focus save,

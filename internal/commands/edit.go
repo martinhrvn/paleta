@@ -17,16 +17,17 @@ func GetEditor() string {
 	return "vi"
 }
 
-// FindConfigForEdit finds the nearest .pltrc file path for editing
+// FindConfigForEdit finds the config file for editing: the nearest .pltrc, or
+// the global project file matching the working directory
 func FindConfigForEdit() (string, error) {
 	configPath, err := config.FindConfigFile()
 	if err != nil {
-		return "", fmt.Errorf("no .pltrc found: %w", err)
+		return "", fmt.Errorf("no config found: %w", err)
 	}
 	return configPath, nil
 }
 
-// EditConfig finds the nearest .pltrc and opens it in the user's editor
+// EditConfig finds the config file and opens it in the user's editor
 func EditConfig() error {
 	configPath, err := FindConfigForEdit()
 	if err != nil {

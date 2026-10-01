@@ -1,0 +1,10 @@
+{
+  "name": "web",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'vite dev server on http://localhost:5173'",
+    "build": "echo 'building web...'",
+    "test": "echo 'running web tests...'",
+    "lint": "echo 'linting web...'"
+  }
+}

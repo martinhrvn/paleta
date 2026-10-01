@@ -38,6 +38,7 @@ show_usage() {
     echo "    plt run          # Same as above"
     echo "    plt init         # Build .pltrc from detected projects"
     echo "    plt init --template  # Write a static starter .pltrc"
+    echo "    plt init --global    # Keep the config in ~/.config/paleta/projects/ instead of the repo"
     echo "    plt list         # List all commands"
     echo "    plt stats        # Usage history table (--by=count|recent, --limit=N)"
     echo

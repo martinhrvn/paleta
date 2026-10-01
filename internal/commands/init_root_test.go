@@ -23,7 +23,7 @@ func TestRunInitWizard_PathsAreRelativeToRoot(t *testing.T) {
 	}
 	stubWizard(t, true)
 
-	outcome, err := RunInitWizard(root, false)
+	outcome, err := RunInitWizard(root, filepath.Join(root, config.ConfigFileName), false)
 	if err != nil {
 		t.Fatalf("RunInitWizard() error = %v", err)
 	}

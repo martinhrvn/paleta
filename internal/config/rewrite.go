@@ -130,6 +130,24 @@ func (f *File) SetFocused(keys []string) error {
 	return nil
 }
 
+// SetRoot sets the top-level root key, which ties a file kept outside its
+// project (a global project config) to the directory it describes. A new key
+// goes first in the file, where it reads as the file's subject.
+func (f *File) SetRoot(dir string) error {
+	root, err := f.root()
+	if err != nil {
+		return err
+	}
+	val := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: dir}
+	if mapValue(root, "root") != nil {
+		setMapValue(root, "root", val)
+		return nil
+	}
+	key := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "root"}
+	root.Content = append([]*yaml.Node{key, val}, root.Content...)
+	return nil
+}
+
 // SetLocations rewrites the location list to locs, in that order. A location
 // already in the file (matched by path) keeps its authored entry — comments and
 // all — with only the fields that changed replaced; entries left out are
@@ -265,11 +283,15 @@ func (f *File) Bytes() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// Save writes the file back, keeping its original permissions.
+// Save writes the file back, keeping its original permissions. A new file's
+// directory is created if needed (~/.config/paleta/projects may not exist yet).
 func (f *File) Save() error {
 	data, err := f.Bytes()
 	if err != nil {
 		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(f.path), 0o755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 	if err := os.WriteFile(f.path, data, f.perm); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
