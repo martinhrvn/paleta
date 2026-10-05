@@ -142,10 +142,12 @@ func expandSingleGlob(loc Location, baseDir string) ([]Location, []Warning, erro
 	usedOverrides := make(map[string]bool)
 	var result []Location
 	for _, match := range dirMatches {
-		// Use the directory name as the name if original name is generic
-		name := loc.Name
-		if loc.Name == "" || loc.Name == filepath.Base(filepath.Dir(loc.Location)) {
-			name = filepath.Base(match)
+		// Each folder is named after itself; an explicit name becomes a prefix
+		// (`name/folder`) so sibling folders stay distinguishable. A name that
+		// just repeats the parent directory adds nothing and is dropped.
+		name := filepath.Base(match)
+		if loc.Name != "" && loc.Name != filepath.Base(filepath.Dir(loc.Location)) {
+			name = loc.Name + "/" + name
 		}
 
 		newLoc := Location{

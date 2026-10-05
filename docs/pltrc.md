@@ -219,9 +219,10 @@ one folder, exclude it by name:
 typo or a renamed directory. Excluding a folder that still has an override is not
 reported, so you can use both keys together.
 
-Prefer leaving `name:` off a glob location. Without it, each folder is named
-after itself, which keeps `@project:command` references unambiguous. If a
-single folder needs a different name, give it one in its override.
+A `name:` on a glob location becomes a prefix: `name: "sites"` with
+`location: "web/*"` names the folders `sites/blog`, `sites/shop`, … Without it,
+each folder is named after itself. If a single folder needs a different name,
+give it one in its override (an override's `name` is used as is, unprefixed).
 
 ## Commands
 

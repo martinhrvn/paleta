@@ -42,19 +42,19 @@ func TestExpandGlobPatterns(t *testing.T) {
 			},
 			expected: []Location{
 				{
-					Name:     "services",
+					Name:     "services/backend",
 					Location: "packages/backend",
 					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start", "build"}),
 				},
 				{
-					Name:     "services",
+					Name:     "services/frontend",
 					Location: "packages/frontend",
 					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start", "build"}),
 				},
 				{
-					Name:     "services",
+					Name:     "services/shared",
 					Location: "packages/shared",
 					Types:    Types{"npm"},
 					Commands: stringsToCommands([]string{"start", "build"}),

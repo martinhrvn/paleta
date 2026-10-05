@@ -73,8 +73,9 @@ func TestLoadConfigWithGlobExpansion(t *testing.T) {
 	}
 
 	for i, loc := range config.Locations {
-		if loc.Name != "services" {
-			t.Errorf("Location[%d].Name = %q, expected %q", i, loc.Name, "services")
+		wantName := "services/" + filepath.Base(expectedLocations[i])
+		if loc.Name != wantName {
+			t.Errorf("Location[%d].Name = %q, expected %q", i, loc.Name, wantName)
 		}
 		if loc.Location != expectedLocations[i] {
 			t.Errorf("Location[%d].Location = %q, expected %q", i, loc.Location, expectedLocations[i])

@@ -22,7 +22,7 @@
   - [x] `overrides:` — per-folder additions/overrides on a glob location (commands merge by name, env merges per key, `name`/`type`/filters replace); keys matching no folder are reported by `plt lint`
 - [x] `include_commands:`/`exclude_commands:` filter a location's commands — authored and type-discovered alike
   - [x] the old `include:`/`exclude:` spellings still parse, are reported as deprecated by the selector banner and `plt lint`, and are renamed in place (comments preserved) by `plt lint --fix`
-- [ ] Glob children can share one authored `name:`, which makes `@project:command` references ambiguous and collides frecency history; an override's `name:` is the per-folder workaround
+- [x] A glob location's `name:` is a prefix for its children (`name/folder`), so `@project:command` references and frecency history stay distinct per folder; an override's `name:` is used as is
 - [ ] `focused:` matches authored keys (resolved before glob expansion), so a glob can only be focused as a whole — and `plt focus` writes keys taken from expanded locations, which then match nothing
 - [ ] No dedup when two locations resolve to the same directory (duplicate rows + ambiguous aliases); `exclude_locations` is a partial workaround
 - [ ] Unknown `.pltrc` keys are silently ignored (a typo'd `exclude_location:` does nothing) — consider `yaml.Decoder.KnownFields(true)`
