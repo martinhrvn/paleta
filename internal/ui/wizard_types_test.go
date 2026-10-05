@@ -54,7 +54,7 @@ func TestWizard_SingleTypeHasNoChildRows(t *testing.T) {
 }
 
 func TestWizard_MultiTypeExpandsToChildRows(t *testing.T) {
-	m := NewWizardModel(multiTypeItems())
+	m := tickAll(NewWizardModel(multiTypeItems()))
 	want := []string{
 		"packages/web",
 		"services/api", "services/api>pnpm", "services/api>docker",
@@ -68,7 +68,7 @@ func TestWizard_MultiTypeExpandsToChildRows(t *testing.T) {
 // TestWizard_ConfiguredNewTypeStartsUnticked: a type the location didn't declare
 // before is opt-in — ticking it changes how that location's commands are labelled.
 func TestWizard_ConfiguredNewTypeStartsUnticked(t *testing.T) {
-	m := NewWizardModel(multiTypeItems())
+	m := tickAll(NewWizardModel(multiTypeItems()))
 
 	if !m.typeSelected(2, "npm") {
 		t.Errorf("authored type npm should start ticked")
@@ -76,7 +76,7 @@ func TestWizard_ConfiguredNewTypeStartsUnticked(t *testing.T) {
 	if m.typeSelected(2, "docker") {
 		t.Errorf("newly detected type docker should start unticked on a configured location")
 	}
-	// A brand-new location takes all its detected types.
+	// A brand-new location, once ticked, takes all its detected types.
 	if !m.typeSelected(1, "pnpm") || !m.typeSelected(1, "docker") {
 		t.Errorf("a newly detected location should start with every type ticked")
 	}
@@ -88,7 +88,7 @@ func TestWizard_ConfiguredNewTypeStartsUnticked(t *testing.T) {
 }
 
 func TestWizard_SelectedLocationsUsesTickedTypes(t *testing.T) {
-	m := NewWizardModel(multiTypeItems())
+	m := tickAll(NewWizardModel(multiTypeItems()))
 	m.toggle(3) // untick services/api>docker
 	m.confirmed = true
 
@@ -110,7 +110,7 @@ func TestWizard_SelectedLocationsUsesTickedTypes(t *testing.T) {
 // TestWizard_UntickingLastTypeUnticksLocation: a location with no types left has
 // nothing to contribute, so it drops out of the selection.
 func TestWizard_UntickingLastTypeUnticksLocation(t *testing.T) {
-	m := NewWizardModel(multiTypeItems())
+	m := tickAll(NewWizardModel(multiTypeItems()))
 	m.toggle(2) // services/api>pnpm
 	m.toggle(3) // services/api>docker
 
@@ -126,7 +126,7 @@ func TestWizard_UntickingLastTypeUnticksLocation(t *testing.T) {
 }
 
 func TestWizard_TickingTypeReticksLocation(t *testing.T) {
-	m := NewWizardModel(multiTypeItems())
+	m := tickAll(NewWizardModel(multiTypeItems()))
 	m.toggle(2)
 	m.toggle(3)
 	if m.selected[1] {
@@ -148,7 +148,7 @@ func TestWizard_TickingTypeReticksLocation(t *testing.T) {
 // TestWizard_LocationToggleAppliesToItsTypes keeps the two levels consistent:
 // unticking a location clears its types, and ticking it restores them all.
 func TestWizard_LocationToggleAppliesToItsTypes(t *testing.T) {
-	m := NewWizardModel(multiTypeItems())
+	m := tickAll(NewWizardModel(multiTypeItems()))
 
 	m.toggle(1) // untick services/api itself
 	if m.typeSelected(1, "pnpm") || m.typeSelected(1, "docker") {

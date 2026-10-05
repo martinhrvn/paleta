@@ -189,3 +189,48 @@ func TestPlanGlobCollapse_ReportsMembers(t *testing.T) {
 		t.Errorf("Members = %v, want the three packages rows", plan[0].Members)
 	}
 }
+
+// TestCollapse_MixedDetectedTypesBecomeUntypedGlob: when every sibling carries
+// exactly the types detection finds in its folder, a glob without `type:` gives
+// each folder those same types back — so mixed siblings collapse after all.
+func TestCollapse_MixedDetectedTypesBecomeUntypedGlob(t *testing.T) {
+	got := CollapseSiblingsToGlobsDetected([]Location{
+		plain("sites/a", "a", "npm"),
+		plain("sites/b", "b", "npm", "docker"),
+		plain("sites/c", "c", "go"),
+	}, nil, []bool{true, true, true})
+
+	want := []Location{{Location: "sites/*"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("collapsed = %+v, want %+v", got, want)
+	}
+}
+
+// TestCollapse_MixedTypesWithHandPickedTypeStayExplicit: one sibling's types
+// were narrowed by hand, and detection would undo that, so nothing collapses.
+func TestCollapse_MixedTypesWithHandPickedTypeStayExplicit(t *testing.T) {
+	in := []Location{
+		plain("sites/a", "a", "npm"),
+		plain("sites/b", "b", "npm"), // docker also detected, but unticked
+		plain("sites/c", "c", "go"),
+	}
+	got := CollapseSiblingsToGlobsDetected(in, nil, []bool{true, false, true})
+	if !reflect.DeepEqual(got, in) {
+		t.Errorf("collapsed = %+v, want it unchanged", got)
+	}
+}
+
+// TestCollapse_UniformTypesKeepTypeWhenDetected: a uniform group still writes
+// its type explicitly, which skips detection at load time.
+func TestCollapse_UniformTypesKeepTypeWhenDetected(t *testing.T) {
+	got := CollapseSiblingsToGlobsDetected([]Location{
+		plain("packages/a", "a", "npm"),
+		plain("packages/b", "b", "npm"),
+		plain("packages/c", "c", "npm"),
+	}, nil, []bool{true, true, true})
+
+	want := []Location{{Location: "packages/*", Types: Types{"npm"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("collapsed = %+v, want %+v", got, want)
+	}
+}

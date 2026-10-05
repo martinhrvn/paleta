@@ -107,12 +107,12 @@ The project types we should support intitally are:
 - [x] automatically detect type of a location based on presence of package.json/go.mod/etc.
   - [x] interactive `plt init` wizard: scans the tree (git-aware, skips gitignored/`node_modules`/etc.), multi-select detected projects, generates `.pltrc`
   - [x] repeatable: existing `.pltrc` loaded as starting state (configured locations pre-selected & tagged, merged on save)
-  - [x] everything starts ticked, so Enter accepts the detected set; rows are tagged `(configured)` / `(new)`
+  - [x] configured locations start ticked and newly detected ones unticked (tick what to add, Ctrl+A for all); rows are tagged `(configured)` / `(new)`
   - [x] names are assigned across the whole set — the folder name when it's free, the relative path when two folders would both be called `web`
   - [x] running `plt` in a repo with no `.pltrc` opens the wizard instead of erroring out; it scans and writes at the repository root (nearest `.git`, else the working directory), and is refused in `$HOME`, above it, and at `/`, where `plt list`/`plt lint` keep printing the plain hint
   - [x] the wizard scans and writes at one root, so Ctrl+N from a subdirectory no longer writes locations relative to the wrong folder
   - [x] a `.pltrc` that exists but can't be parsed is reported by path, with the parse error and a way out (`plt edit`, or `plt init --force` to start from a fresh scan) instead of a bare `yaml: line 4`
-  - [x] three or more sibling folders are written as a glob (`packages/*`, with unticked siblings in `exclude_locations`); `^g` toggles it off, and affected rows show `→ packages/*` before you confirm
+  - [x] three or more sibling folders are written as a glob (`packages/*`, with unticked siblings in `exclude_locations`); `^g` toggles it off, and affected rows show `→ packages/*` before you confirm; siblings with differing types still collapse, into a glob without `type:`, when each keeps exactly its detected types
   - [x] static template preserved behind `plt init --template`
   - [ ] (future) drill into a selected folder to include/exclude individual detected commands
 - [x] support multiple types per location (`type: [npm, docker]`); commands from all types are merged, and when a location has >1 type each command is labelled with its type in the selector (e.g. `svc: [npm] build` / `svc: [docker] build`)

@@ -41,10 +41,10 @@ func locationPaths(locs []config.Location) []string {
 	return out
 }
 
-// TestWizard_GlobOutputIsDefault: three siblings are written as one glob without
-// the user doing anything, since that's the config they'd have written by hand.
+// TestWizard_GlobOutputIsDefault: three ticked siblings are written as one glob
+// without the user asking, since that's the config they'd have written by hand.
 func TestWizard_GlobOutputIsDefault(t *testing.T) {
-	m := confirmed(NewWizardModel(siblingItems()))
+	m := confirmed(tickAll(NewWizardModel(siblingItems())))
 
 	got := locationPaths(m.SelectedLocations())
 	want := []string{"infra", "packages/*"}
@@ -56,7 +56,7 @@ func TestWizard_GlobOutputIsDefault(t *testing.T) {
 // TestWizard_GlobToggleChangesOutput: ^g writes exactly what was ticked instead,
 // for anyone who'd rather see the folders spelled out.
 func TestWizard_GlobToggleChangesOutput(t *testing.T) {
-	m := NewWizardModel(siblingItems())
+	m := tickAll(NewWizardModel(siblingItems()))
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
 	m = confirmed(updated.(WizardModel))
@@ -78,7 +78,7 @@ func TestWizard_GlobToggleChangesOutput(t *testing.T) {
 // TestWizard_RowShowsGlobAnnotation: the rows a collapse would absorb say so, so
 // the written form is visible before Enter rather than a surprise in .pltrc.
 func TestWizard_RowShowsGlobAnnotation(t *testing.T) {
-	m := NewWizardModel(siblingItems())
+	m := tickAll(NewWizardModel(siblingItems()))
 
 	if row := m.formatRow(0); strings.Contains(row, "packages/*") {
 		t.Errorf("infra row = %q, want no glob annotation", row)
@@ -104,7 +104,7 @@ func TestWizard_UntickedSiblingBecomesExclusion(t *testing.T) {
 		TypeOptions: []string{"npm"},
 		Detected:    true,
 	})
-	m := NewWizardModel(items)
+	m := tickAll(NewWizardModel(items))
 	m.toggle(4) // untick packages/legacy
 	m = confirmed(m)
 
@@ -120,7 +120,7 @@ func TestWizard_UntickedSiblingBecomesExclusion(t *testing.T) {
 // TestWizard_HelpLineShowsGlobState: the toggle is only useful if it's on the
 // help line, and it has to say which way it's currently set.
 func TestWizard_HelpLineShowsGlobState(t *testing.T) {
-	m := NewWizardModel(siblingItems())
+	m := tickAll(NewWizardModel(siblingItems()))
 	if help := m.helpLine(); !strings.Contains(help, "^g") || !strings.Contains(help, "globs on") {
 		t.Errorf("help = %q, want a ^g entry reading 'globs on'", help)
 	}
@@ -128,5 +128,29 @@ func TestWizard_HelpLineShowsGlobState(t *testing.T) {
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
 	if help := updated.(WizardModel).helpLine(); !strings.Contains(help, "globs off") {
 		t.Errorf("help = %q, want it to read 'globs off'", help)
+	}
+}
+
+// TestWizard_MixedTypeSiblingsBecomeUntypedGlob: three sites with different
+// detected types still collapse — the glob omits `type:` and detection gives
+// each folder its own types back.
+func TestWizard_MixedTypeSiblingsBecomeUntypedGlob(t *testing.T) {
+	var items []WizardItem
+	for name, types := range map[string][]string{"a": {"npm"}, "b": {"npm", "docker"}, "c": {"go"}} {
+		items = append(items, WizardItem{
+			Location:    config.Location{Name: name, Location: "sites/" + name, Types: append(config.Types{}, types...)},
+			TypeOptions: types,
+			Detected:    true,
+		})
+	}
+	m := tickAll(NewWizardModel(items))
+	m = confirmed(m)
+
+	locs := m.SelectedLocations()
+	if got := locationPaths(locs); strings.Join(got, ",") != "sites/*" {
+		t.Fatalf("locations = %v, want [sites/*]", got)
+	}
+	if len(locs[0].Types) != 0 {
+		t.Errorf("types = %v, want none so each folder is detected", locs[0].Types)
 	}
 }

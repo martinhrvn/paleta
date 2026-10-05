@@ -27,14 +27,14 @@ func configuredFirstItems() []WizardItem {
 	}
 }
 
-// TestWizard_PreselectsEverything: the wizard opens with everything ticked, so a
-// first run is one keystroke and a repeat run reads as "add the new ones". The
-// interaction is unticking what you don't want.
-func TestWizard_PreselectsEverything(t *testing.T) {
+// TestWizard_PreselectsOnlyConfigured: already configured locations start
+// ticked (unticking them would drop them from the config on Enter), while newly
+// detected ones start unticked — you pick what to add rather than prune.
+func TestWizard_PreselectsOnlyConfigured(t *testing.T) {
 	m := NewWizardModel(wizardItems())
 	for i, it := range m.items {
-		if !m.selected[i] {
-			t.Errorf("item %d (%s) should be pre-selected", i, it.Location.Location)
+		if m.selected[i] != it.Configured {
+			t.Errorf("item %d (%s) selected = %v, want %v", i, it.Location.Location, m.selected[i], it.Configured)
 		}
 	}
 }
@@ -46,9 +46,8 @@ func TestWizard_CursorStartsAtTop(t *testing.T) {
 	}
 }
 
-// TestWizard_RowMarksNewItems: with everything preselected, the tick no longer
-// distinguishes a newly detected project from one already in the config, so the
-// row has to say which is which.
+// TestWizard_RowMarksNewItems: the row says whether a project is newly detected
+// or already in the config, not just the tick.
 func TestWizard_RowMarksNewItems(t *testing.T) {
 	m := NewWizardModel(configuredFirstItems())
 
@@ -92,25 +91,25 @@ func TestWizard_Toggle(t *testing.T) {
 
 func TestWizard_ToggleAll(t *testing.T) {
 	m := NewWizardModel(wizardItems())
-	// Everything starts selected, so Ctrl+A clears.
-	m.toggleAll()
-	for i := range m.items {
-		if m.selected[i] {
-			t.Errorf("item %d should be deselected after toggleAll", i)
-		}
-	}
-	// Ctrl+A again should select all.
+	// Only the configured items start selected, so Ctrl+A selects everything.
 	m.toggleAll()
 	for i := range m.items {
 		if !m.selected[i] {
-			t.Errorf("item %d should be selected after second toggleAll", i)
+			t.Errorf("item %d should be selected after toggleAll", i)
+		}
+	}
+	// Ctrl+A again clears.
+	m.toggleAll()
+	for i := range m.items {
+		if m.selected[i] {
+			t.Errorf("item %d should be deselected after second toggleAll", i)
 		}
 	}
 }
 
 func TestWizard_SelectedLocationsAfterConfirm(t *testing.T) {
-	m := NewWizardModel(wizardItems())
-	m.toggle(2) // everything starts ticked; drop the glob
+	m := tickAll(NewWizardModel(wizardItems()))
+	m.toggle(2) // drop the glob
 	m.confirmed = true
 
 	locs := m.SelectedLocations()
@@ -213,7 +212,7 @@ func TestWizard_ClearSearch(t *testing.T) {
 }
 
 func TestWizard_TabTogglesAndAdvances(t *testing.T) {
-	// Everything starts ticked, so Tab on the cursor row unticks it.
+	// Row 0 is configured, so it starts ticked and Tab unticks it.
 	m := NewWizardModel(configuredFirstItems())
 	if m.cursor != 0 {
 		t.Fatalf("precondition: expected cursor 0, got %d", m.cursor)
@@ -230,7 +229,7 @@ func TestWizard_TabTogglesAndAdvances(t *testing.T) {
 
 func TestWizard_SelectionPersistsAcrossFilter(t *testing.T) {
 	// Untick the "api" candidate (index 2), then filter it out of view.
-	m := NewWizardModel(configuredFirstItems())
+	m := tickAll(NewWizardModel(configuredFirstItems()))
 	m.toggle(2)
 	m = typeRunes(m, "web")
 	if len(m.filtered) != 1 {
@@ -243,4 +242,17 @@ func TestWizard_SelectionPersistsAcrossFilter(t *testing.T) {
 			t.Errorf("expected the filtered-out deselection to persist; got %+v", locs)
 		}
 	}
+}
+
+// tickAll ticks every location that starts unticked (the newly detected ones),
+// as the user would before pressing Enter. Configured locations are left as
+// they start, so their unticked new types stay unticked.
+func tickAll(m WizardModel) WizardModel {
+	for i := range m.items {
+		if m.selected[i] {
+			continue
+		}
+		m.setLocationSelected(i, true)
+	}
+	return m
 }

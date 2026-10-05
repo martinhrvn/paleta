@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -36,7 +37,15 @@ type GlobCollapse struct {
 // Locations that aren't collapsed are returned untouched and in their original
 // order, so this is safe to run over any selection.
 func CollapseSiblingsToGlobs(selected, deselected []Location) []Location {
-	plan := PlanGlobCollapse(selected, deselected)
+	return CollapseSiblingsToGlobsDetected(selected, deselected, nil)
+}
+
+// CollapseSiblingsToGlobsDetected is CollapseSiblingsToGlobs with detection
+// information: detected[i] reports that selected[i].Types is exactly what type
+// detection finds in its folder. Siblings whose types differ can then still be
+// collapsed, into a glob without `type:` that detects each folder's own types.
+func CollapseSiblingsToGlobsDetected(selected, deselected []Location, detected []bool) []Location {
+	plan := PlanGlobCollapseDetected(selected, deselected, detected)
 	if len(plan) == 0 {
 		return selected
 	}
@@ -67,7 +76,7 @@ func CollapseSiblingsToGlobs(selected, deselected []Location) []Location {
 			// folder after itself (see expandSingleGlob), which is exactly the
 			// name every member already had.
 			Location:         plan[g].Pattern,
-			Types:            append(Types{}, plan[g].Types...),
+			Types:            slices.Clone(plan[g].Types),
 			ExcludeLocations: plan[g].Exclude,
 		})
 	}
@@ -78,6 +87,12 @@ func CollapseSiblingsToGlobs(selected, deselected []Location) []Location {
 // without applying the rewrite. The wizard uses it to annotate the rows a
 // collapse would absorb, so the written form is visible before Enter.
 func PlanGlobCollapse(selected, deselected []Location) []GlobCollapse {
+	return PlanGlobCollapseDetected(selected, deselected, nil)
+}
+
+// PlanGlobCollapseDetected is PlanGlobCollapse with the detection information
+// described on CollapseSiblingsToGlobsDetected.
+func PlanGlobCollapseDetected(selected, deselected []Location, detected []bool) []GlobCollapse {
 	byParent := make(map[string][]int)
 	var parents []string // first-seen order, so the plan is deterministic
 	for i, loc := range selected {
@@ -99,7 +114,9 @@ func PlanGlobCollapse(selected, deselected []Location) []GlobCollapse {
 		}
 		// One glob carries one type list, and every folder it matches inherits it.
 		// A parent holding both an npm and a go project can't be expressed that way
-		// without relabelling every row, so it stays explicit.
+		// without relabelling every row — unless every member's types are exactly
+		// what detection finds, in which case a glob without `type:` detects each
+		// folder's own. Otherwise it stays explicit.
 		types := selected[members[0]].Types
 		uniform := true
 		for _, idx := range members[1:] {
@@ -109,7 +126,10 @@ func PlanGlobCollapse(selected, deselected []Location) []GlobCollapse {
 			}
 		}
 		if !uniform {
-			continue
+			if !allDetected(members, detected) {
+				continue
+			}
+			types = nil
 		}
 
 		// Unticked siblings have to be named explicitly — the pattern would
@@ -179,6 +199,17 @@ func excludedSiblings(parent string, deselected []Location) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// allDetected reports whether every member's types are known to match what
+// detection would find in its folder.
+func allDetected(members []int, detected []bool) bool {
+	for _, idx := range members {
+		if idx >= len(detected) || !detected[idx] {
+			return false
+		}
+	}
+	return true
 }
 
 func sameTypes(a, b Types) bool {

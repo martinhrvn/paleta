@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -64,24 +65,26 @@ type WizardModel struct {
 	quitting       bool
 }
 
-// NewWizardModel creates a wizard model with every item pre-selected, so the
-// common cases are a single keystroke: Enter on a first run takes the whole
-// detected set, and Enter on a repeat run (Ctrl+N) keeps the current config and
-// adds what's new. Rows say which items were already configured and which are
-// newly detected, since the ticks no longer distinguish them.
+// NewWizardModel creates a wizard model with the already-configured items
+// pre-selected and the newly detected ones left for the user to pick. Rows also
+// say which items were already configured and which are newly detected.
 func NewWizardModel(items []WizardItem) WizardModel {
 	si := textinput.New()
 	si.Prompt = "> "
 	si.PromptStyle = searchPromptStyle
 	si.Focus()
 
-	// Everything starts ticked: on a first run Enter accepts the whole detected
-	// set, and on a repeat run (Ctrl+N) the already-configured locations stay put
-	// while the newly detected ones come along, so the wizard reads as "add the
-	// new projects". Unticking is how you leave something out.
+	// Already-configured locations start ticked, so Enter on a repeat run keeps
+	// the current config intact; newly detected ones start unticked, so a scan
+	// that turns up dozens of folders doesn't write them all by default. Ticking
+	// is how you add something (Ctrl+A takes everything).
 	selected := make(map[int]bool, len(items))
 	types := make(map[int]map[string]bool, len(items))
 	for i, it := range items {
+		if !it.Configured {
+			types[i] = map[string]bool{}
+			continue
+		}
 		selected[i] = true
 		// A location starts with the types it already declares ticked. For a newly
 		// detected location that is everything found in its folder; for one already
@@ -230,11 +233,25 @@ func (m WizardModel) SelectedLocations() []config.Location {
 	if !m.confirmed {
 		return nil
 	}
-	locs, _ := m.selection()
+	locs, from := m.selection()
 	if !m.globs {
 		return locs
 	}
-	return config.CollapseSiblingsToGlobs(locs, m.deselection())
+	return config.CollapseSiblingsToGlobsDetected(locs, m.deselection(), m.detectedFlags(from))
+}
+
+// detectedFlags reports, per selected location (from maps it to its item), that
+// its ticked types are exactly the ones detected in its folder — so a glob
+// without `type:` would give it the same types back. Configured items don't
+// qualify: their types may include hand-written ones detection wouldn't find.
+func (m WizardModel) detectedFlags(from []int) []bool {
+	out := make([]bool, len(from))
+	for i, item := range from {
+		it := m.items[item]
+		out[i] = it.Detected && !it.Configured &&
+			slices.Equal([]string(m.selectedTypes(item)), it.TypeOptions)
+	}
+	return out
 }
 
 // selection returns the ticked locations with their ticked types applied, plus
@@ -277,7 +294,7 @@ func (m WizardModel) globAnnotations() map[int]string {
 	}
 	locs, from := m.selection()
 	out := make(map[int]string)
-	for _, group := range config.PlanGlobCollapse(locs, m.deselection()) {
+	for _, group := range config.PlanGlobCollapseDetected(locs, m.deselection(), m.detectedFlags(from)) {
 		for _, idx := range group.Members {
 			out[from[idx]] = group.Pattern
 		}
