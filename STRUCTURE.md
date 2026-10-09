@@ -47,7 +47,9 @@ fills in (history, reload, deferred-type resolution, focus and queue saves).
 `Run(version, args, stdout, stderr) int` is the whole program: one `case` per
 subcommand, each with its own `flag.FlagSet`. Everything a subcommand needs is
 called from here: `config.Load`, the selector (`RunSelector`), the init wizard
-(`RunInitWizard`, `Bootstrap`), history recording, lint. Output goes to the
+(`RunInitWizard`, `Bootstrap`), history recording, lint. `worktree.go` is the
+one place besides `scan` that shells out to git (`git worktree list`), through
+the `gitOutput` seam tests replace. Output goes to the
 writers it is given, so the entire command surface is testable without a
 process. Adding a subcommand means a case in `Run`, a line in `usage`, and the
 shell-side entries listed in the memory note on new subcommands.
@@ -58,8 +60,11 @@ shell-side entries listed in the memory note on new subcommands.
   `loadStages` pipeline, resolves deferred types unless asked not to, and
   attaches tools. Nothing depends on the process working directory: relative
   paths and globs resolve against the config's own directory (`baseDir`).
-  `Config.Reload()` repeats the same load. `LoadConfigFromDiscovery` is the
-  discovery step alone, used by tests. `Config.Path` is the file it came from —
+  `Config.Reload()` repeats the same load. `Config.ReloadAt(dir)` loads the
+  same project as it applies to another checkout (a linked git worktree): the
+  `.pltrc` at `dir` when it has one, otherwise the original file with
+  `LoadOptions.ConfigPath`/`BaseDir` resolving its paths under `dir`.
+  `LoadConfigFromDiscovery` is the discovery step alone, used by tests. `Config.Path` is the file it came from —
   a `.pltrc` or a global project file in `~/.config/paleta/projects/` — and every
   write goes back to it; `Config.BaseDir()` is the project root it describes.
   `FindConfigFile` names that same file without loading it (for `plt edit` and
@@ -82,13 +87,16 @@ shell-side entries listed in the memory note on new subcommands.
 ### `internal/ui` — the terminal views
 - `selector.go`: the palette `Model`. It is in exactly one `selectorMode` at a
   time (`modeNormal`, `modeEdit`, `modeFocusPick`, `modeQueueEdit`,
-  `modeQueueSave`); `handler()` is the single dispatch point for keys,
+  `modeQueueSave`, `modeWorktreePick`); `handler()` is the single dispatch point for keys,
   non-key messages and the view. `listHeight` is the one chrome computation the
   viewport and renderer share. The loaded rows (`commands`) are never reordered;
   `filteredCommands` is derived, with match positions cached per row.
-- `queue_editor.go`, `focus_picker.go`: sub-modes. `init_wizard.go`: a separate
-  program the selector hands off to on Ctrl+N. `list.go`: cursor and viewport
-  arithmetic shared by every list. `theme.go`: palette and styles.
+- `queue_editor.go`, `focus_picker.go`, `worktree_picker.go`: sub-modes.
+  `init_wizard.go`: a separate program the selector hands off to on Ctrl+N.
+  `Run` returns an `Outcome`: results, or a request (Ctrl+N wizard, Ctrl+W
+  worktree switch) that `commands.RunSelector` acts on before re-entering.
+  `list.go`: cursor and viewport arithmetic shared by every list. `theme.go`:
+  palette and styles.
 - `backend.go`: `Backend`, the selector's only seam to the rest of the program.
 
 ### `internal/parsers` — project types

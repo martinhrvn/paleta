@@ -514,7 +514,12 @@ func (e *InvalidConfigError) Unwrap() error { return e.Err }
 // past "the file isn't there" is an *InvalidConfigError naming the file, so
 // callers can point the user at it rather than at a line number with no file.
 func LoadConfig(configPath string) (*Config, error) {
-	cfg, err := loadConfig(configPath)
+	return loadConfigFileAt(configPath, "")
+}
+
+// loadConfigFileAt is LoadConfig with loadConfigAt's base directory override.
+func loadConfigFileAt(configPath, baseDir string) (*Config, error) {
+	cfg, err := loadConfigAt(configPath, baseDir)
 	if err == nil {
 		return cfg, nil
 	}
@@ -566,7 +571,10 @@ var loadStages = []func(*Config) error{
 	func(c *Config) error { collectConfigWarnings(c); return nil },
 }
 
-func loadConfig(configPath string) (*Config, error) {
+// loadConfigAt reads, parses and runs the load stages over one file. baseDir,
+// when non-empty, is what relative paths and globs resolve against instead of
+// the file's own directory or root (another checkout of the same project).
+func loadConfigAt(configPath, baseDir string) (*Config, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading the file: %w", err)
@@ -576,7 +584,10 @@ func loadConfig(configPath string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("parsing YAML: %w", err)
 	}
-	config.baseDir = configBaseDir(configPath, config.Root)
+	config.baseDir = baseDir
+	if config.baseDir == "" {
+		config.baseDir = configBaseDir(configPath, config.Root)
+	}
 
 	for _, stage := range loadStages {
 		if err := stage(&config); err != nil {
@@ -979,11 +990,17 @@ func MergeFrecencyConfig(global, local FrecencyConfig) FrecencyConfig {
 
 // LoadConfigWithGlobal loads both global and local configs and merges them
 func LoadConfigWithGlobal(localConfigPath string) (*Config, error) {
+	return loadConfigWithGlobalAt(localConfigPath, "")
+}
+
+// loadConfigWithGlobalAt is LoadConfigWithGlobal with loadConfigAt's base
+// directory override.
+func loadConfigWithGlobalAt(localConfigPath, baseDir string) (*Config, error) {
 	// Load global config
 	globalConfig, _ := LoadGlobalConfig()
 
 	// Load local config
-	localConfig, err := LoadConfig(localConfigPath)
+	localConfig, err := loadConfigFileAt(localConfigPath, baseDir)
 	if err != nil {
 		return nil, err
 	}

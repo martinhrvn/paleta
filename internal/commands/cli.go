@@ -264,7 +264,7 @@ func runSelect(stdout, stderr io.Writer) int {
 		}
 	}
 
-	results, err := RunSelector(cfg)
+	results, err := RunSelector(cfg, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error with selection: %v\n", err)
 		return 1

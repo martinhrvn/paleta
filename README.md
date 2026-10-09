@@ -246,6 +246,7 @@ Inside the interactive selector (`plt` / `plt select`):
 | `Ctrl+Q` | Open the queue editor |
 | `Ctrl+F` | Toggle frecency sorting |
 | `Ctrl+P` | Pick which locations are focused |
+| `Ctrl+W` | Switch to another git worktree: the same commands, re-rooted in that checkout — **shown only when the repository has more than one worktree** |
 | `Ctrl+N` | Add projects (init wizard) |
 | `Esc` / `Ctrl+C` | Clear the search, then cancel |
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"path/filepath"
 
@@ -19,28 +20,40 @@ type SelectionResult = ui.SelectionResult
 
 // RunSelector runs the interactive selector with multi-select support. The
 // config's Path (the discovered .pltrc or global project file) enables focus
-// persistence and in-app project adding. When the user requests
-// adding projects (Ctrl+N), the init wizard runs and the selector re-enters with
-// the reloaded config.
-func RunSelector(cfg *config.Config) ([]SelectionResult, error) {
+// persistence and in-app project adding. Two outcomes re-enter the selector:
+// adding projects (Ctrl+N) runs the init wizard and reloads the config, and
+// switching worktree (Ctrl+W) re-roots the config at the chosen checkout so the
+// same commands run there. stderr receives what went wrong when a switch fails;
+// the selector then re-enters unchanged.
+func RunSelector(cfg *config.Config, stderr io.Writer) ([]SelectionResult, error) {
 	for {
-		model := ui.NewModel(cfg, selectorBackend(cfg))
-		results, reinit, err := model.Run()
-		if reinit {
+		be := selectorBackend(cfg)
+		model := ui.NewModel(cfg, be)
+		outcome, err := model.Run()
+		if err != nil {
+			return nil, err
+		}
+		switch {
+		case outcome.Reinit:
 			if _, ierr := RunInitWizard(cfg.BaseDir(), cfg.Path, false); ierr != nil {
 				return nil, ierr
 			}
 			if reloaded, rerr := cfg.Reload(); rerr == nil {
 				cfg = reloaded
 			}
-			continue
+		case outcome.Worktree != "":
+			current, _ := currentWorktree(be.Worktrees)
+			target := mirrorBaseDir(current.Path, outcome.Worktree, realPath(cfg.BaseDir()))
+			if moved, merr := cfg.ReloadAt(target); merr != nil {
+				fmt.Fprintf(stderr, "Cannot switch to worktree %s: %v\n", outcome.Worktree, merr)
+			} else {
+				cfg = moved
+			}
+		default:
+			// ui.SelectionResult and commands.SelectionResult are the same type, so
+			// the model's results can be returned directly with no conversion.
+			return outcome.Results, nil
 		}
-		if err != nil {
-			return nil, err
-		}
-		// ui.SelectionResult and commands.SelectionResult are the same type, so
-		// the model's results can be returned directly with no conversion.
-		return results, nil
 	}
 }
 
@@ -54,6 +67,10 @@ func selectorBackend(cfg *config.Config) ui.Backend {
 		History:        projectHistory(cfg),
 		Reload:         cfg.Reload,
 		ResolvePending: config.ResolvePendingTypes,
+		Worktrees:      Worktrees(cfg.BaseDir()),
+	}
+	if current, ok := currentWorktree(be.Worktrees); ok {
+		be.WorktreeLabel = current.Label
 	}
 	configPath := cfg.Path
 	if configPath == "" {

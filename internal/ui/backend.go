@@ -34,4 +34,19 @@ type Backend struct {
 	// project.
 	SaveQueue func(displayName, directory, name string, parts []string) error
 	RootDir   string
+
+	// Worktree switching (Ctrl+W). Worktrees lists the repository's checkouts;
+	// nil or empty hides the picker. WorktreeLabel names the checkout the rows
+	// belong to and is shown in the status line.
+	Worktrees     []WorktreeEntry
+	WorktreeLabel string
+}
+
+// WorktreeEntry is one checkout of the repository shown in the Ctrl+W worktree
+// picker: Path is where it is, Label names it (its branch, or a detached HEAD),
+// Current marks the checkout the palette's rows currently belong to.
+type WorktreeEntry struct {
+	Path    string
+	Label   string
+	Current bool
 }

@@ -29,6 +29,14 @@ type LoadOptions struct {
 	// pending.go). Non-interactive callers leave it false and get a complete
 	// command list.
 	Defer bool
+	// ConfigPath, when set, is the file to load instead of discovering one. BaseDir
+	// then overrides the directory its relative paths and globs resolve against
+	// (the file's own directory, or a global project's root). Together they load
+	// the configuration of one checkout as it applies to another — a linked git
+	// worktree of the same project; see Config.ReloadAt. BaseDir is ignored
+	// without ConfigPath.
+	ConfigPath string
+	BaseDir    string
 }
 
 // Load is the one way to get a usable configuration. It discovers the config for
@@ -48,13 +56,23 @@ func Load(opts LoadOptions) (*Config, error) {
 		opts.Workdir = wd
 	}
 
-	projectsDir, err := globalProjectsDir()
-	if err != nil {
-		return nil, err
-	}
-	cfg, err := loadFromDiscovery(opts.Workdir, projectsDir)
-	if err != nil {
-		return nil, err
+	var cfg *Config
+	if opts.ConfigPath != "" {
+		loaded, err := loadConfigWithGlobalAt(opts.ConfigPath, opts.BaseDir)
+		if err != nil {
+			return nil, err
+		}
+		loaded.Path = opts.ConfigPath
+		cfg = loaded
+	} else {
+		projectsDir, err := globalProjectsDir()
+		if err != nil {
+			return nil, err
+		}
+		cfg, err = loadFromDiscovery(opts.Workdir, projectsDir)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	cfg.loadOpts = opts
@@ -70,6 +88,23 @@ func Load(opts LoadOptions) (*Config, error) {
 // tools attached.
 func (c *Config) Reload() (*Config, error) {
 	return Load(c.loadOpts)
+}
+
+// ReloadAt loads the configuration c describes as it applies to another checkout
+// of the same project — a linked git worktree whose mirror of c's base directory
+// is dir. The .pltrc at dir wins when that checkout has one (it may differ on
+// that branch); otherwise c's own file is loaded with its relative paths and
+// globs resolved under dir. The result remembers the move, so a later Reload
+// stays in that checkout.
+func (c *Config) ReloadAt(dir string) (*Config, error) {
+	opts := c.loadOpts
+	opts.Workdir = dir
+	opts.BaseDir = dir
+	opts.ConfigPath = c.Path
+	if own := filepath.Join(dir, ConfigFileName); exists(own) {
+		opts.ConfigPath = own
+	}
+	return Load(opts)
 }
 
 // globalProjectsDir is where centralized project configs live

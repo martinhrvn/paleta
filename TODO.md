@@ -93,6 +93,7 @@ The project types we should support intitally are:
   - [x] `Ctrl+T` toggles the focus filter (focused-only ↔ all) for the current session
   - [x] `Ctrl+P` picker to set/unset which locations are focused (with `Ctrl+A` toggle-all), persisted to `.pltrc`
   - [x] `Ctrl+N` adds projects on the fly via the `plt init` wizard, then re-enters the selector
+- [x] git worktree integration: `Ctrl+W` lists the repository's worktrees (branch + path, current marked) when there are at least two; picking one re-enters the selector with the `.pltrc` re-rooted at that checkout (its own `.pltrc` if it has one), so the same commands run there via the usual `cd <dir> && cmd`; the status line shows the current branch
 - [x] command queue for multi-select (deterministic run order)
   - [x] `Tab` enqueues the command under the cursor; the queue records selection order and persists across searches (shown as position badges in the list + `N queued` in the status)
   - [x] `Ctrl+Q` opens a queue editor: `Shift+↑/↓` reorder, `x`/`Del` remove, `Enter` run, `Esc` back

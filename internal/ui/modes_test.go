@@ -55,6 +55,16 @@ func TestModel_ModeTransitions(t *testing.T) {
 	if !m.searchInput.Focused() {
 		t.Error("search box should regain focus after the focus picker")
 	}
+
+	m.backend.Worktrees = []WorktreeEntry{{Path: "/a", Label: "main", Current: true}, {Path: "/b", Label: "wt"}}
+	step(key(tea.KeyCtrlW), modeWorktreePick)
+	if m.searchInput.Focused() {
+		t.Error("search box should be blurred while picking a worktree")
+	}
+	step(key(tea.KeyEscape), modeNormal)
+	if !m.searchInput.Focused() {
+		t.Error("search box should regain focus after the worktree picker")
+	}
 }
 
 // The viewport and the renderer share one row count, so with the warning

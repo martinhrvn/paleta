@@ -57,6 +57,11 @@ type Model struct {
 	// selector quits and the caller runs the init wizard before re-entering.
 	reinit bool
 
+	// Worktree picker (Ctrl+W): worktree is the checkout the user chose; the
+	// selector quits and the caller re-enters with the config re-rooted there.
+	worktree       string
+	worktreeCursor int
+
 	// Edit mode
 	editCommand     string
 	editDirectory   string
@@ -87,11 +92,12 @@ type Model struct {
 type selectorMode int
 
 const (
-	modeNormal    selectorMode = iota // the palette: search, cursor, queue
-	modeEdit                          // Ctrl+E: edit the command under the cursor before running
-	modeFocusPick                     // Ctrl+P: choose which locations are focused
-	modeQueueEdit                     // Ctrl+Q: reorder, remove or save the queued commands
-	modeQueueSave                     // "s" in the queue editor: name the command to save
+	modeNormal       selectorMode = iota // the palette: search, cursor, queue
+	modeEdit                             // Ctrl+E: edit the command under the cursor before running
+	modeFocusPick                        // Ctrl+P: choose which locations are focused
+	modeQueueEdit                        // Ctrl+Q: reorder, remove or save the queued commands
+	modeQueueSave                        // "s" in the queue editor: name the command to save
+	modeWorktreePick                     // Ctrl+W: switch the palette to another git worktree
 )
 
 func (s selectorMode) String() string {
@@ -106,6 +112,8 @@ func (s selectorMode) String() string {
 		return "queue-edit"
 	case modeQueueSave:
 		return "queue-save"
+	case modeWorktreePick:
+		return "worktree-pick"
 	}
 	return fmt.Sprintf("selectorMode(%d)", int(s))
 }
@@ -142,6 +150,11 @@ func (m Model) handler() modeHandler {
 			key:   Model.updateQueueSaveMode,
 			input: func(m *Model) *textinput.Model { return &m.saveInput },
 			view:  Model.renderQueueEditor,
+		}
+	case modeWorktreePick:
+		return modeHandler{
+			key:  Model.updateWorktreePickMode,
+			view: Model.renderWorktreePicker,
 		}
 	default:
 		return modeHandler{
@@ -299,6 +312,12 @@ func (m Model) updateNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.enterQueueEditor()
 		return m, nil
 
+	case tea.KeyCtrlW:
+		// Claimed here so the search box never sees it as delete-word; Ctrl+U
+		// still clears the search.
+		m.enterWorktreePicker()
+		return m, nil
+
 	case tea.KeyCtrlN:
 		m.reinit = true
 		m.quitting = true
@@ -410,8 +429,11 @@ func (m Model) View() string {
 		if m.config.AnyFocused() {
 			parts = append(parts, renderToggleHelp("^T", "focus", m.focusActive))
 		}
+		parts = append(parts, helpItem("^P", "pick"))
+		if len(m.backend.Worktrees) > 0 {
+			parts = append(parts, helpItem("^W", "worktree"))
+		}
 		parts = append(parts,
-			helpItem("^P", "pick"),
 			helpItem("^N", "add"),
 			helpItem("Esc", "cancel"),
 		)
@@ -430,6 +452,10 @@ func (m Model) renderStatus() string {
 	var parts []string
 
 	parts = append(parts, statusStyle.Render(fmt.Sprintf("%d/%d", len(m.filteredCommands), len(m.commands))))
+
+	if m.backend.WorktreeLabel != "" {
+		parts = append(parts, statusStyle.Render("⎇ "+m.backend.WorktreeLabel))
+	}
 
 	queuedCount := m.getSelectedCount()
 	if queuedCount > 0 {
@@ -1253,10 +1279,18 @@ func (m Model) generatePreview(cmd CommandInfo) string {
 	return strings.Join(lines, "\n")
 }
 
-// Run starts the TUI and returns selected commands. The returned bool is true
-// when the user requested adding projects (Ctrl+N); the caller should run the
-// init wizard and re-enter the selector.
-func (m *Model) Run() ([]SelectionResult, bool, error) {
+// Outcome is how a selector run ended: with commands to run, or with a request
+// the caller acts on before re-entering the selector — Reinit asks for the init
+// wizard (Ctrl+N), Worktree names the checkout to re-root the config at (Ctrl+W).
+// Exactly one of the three is set.
+type Outcome struct {
+	Results  []SelectionResult
+	Reinit   bool
+	Worktree string
+}
+
+// Run starts the TUI and reports how it ended; a cancelled run is an error.
+func (m *Model) Run() (Outcome, error) {
 	m.loadCommands()
 	m.updateFilteredCommands()
 
@@ -1265,7 +1299,7 @@ func (m *Model) Run() ([]SelectionResult, bool, error) {
 	// The shell integration captures stdout, so bubbletea must not write there.
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to open /dev/tty: %w", err)
+		return Outcome{}, fmt.Errorf("failed to open /dev/tty: %w", err)
 	}
 	defer tty.Close()
 
@@ -1278,18 +1312,21 @@ func (m *Model) Run() ([]SelectionResult, bool, error) {
 	p := tea.NewProgram(*m, tea.WithAltScreen(), tea.WithInput(tty), tea.WithOutput(tty))
 	finalModel, err := p.Run()
 	if err != nil {
-		return nil, false, err
+		return Outcome{}, err
 	}
 
 	fm := finalModel.(Model)
 	if fm.reinit {
-		return nil, true, nil
+		return Outcome{Reinit: true}, nil
+	}
+	if fm.worktree != "" {
+		return Outcome{Worktree: fm.worktree}, nil
 	}
 	if len(fm.results) == 0 {
-		return nil, false, fmt.Errorf("selection canceled")
+		return Outcome{}, fmt.Errorf("selection canceled")
 	}
 
-	return fm.results, false, nil
+	return Outcome{Results: fm.results}, nil
 }
 
 // loadingRowMarker stands in for the spinner frame inside a placeholder row's
