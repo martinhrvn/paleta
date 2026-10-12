@@ -72,6 +72,7 @@ func selectorBackend(cfg *config.Config) ui.Backend {
 	if current, ok := currentWorktree(be.Worktrees); ok {
 		be.WorktreeLabel = current.Label
 	}
+	wireShell(&be, config.FindProjectRoot("."))
 	configPath := cfg.Path
 	if configPath == "" {
 		return be
@@ -80,6 +81,9 @@ func selectorBackend(cfg *config.Config) ui.Backend {
 	be.SaveFocus = func(focused map[string]bool) error { return SetFocused(configPath, focused) }
 	be.SaveQueue = func(displayName, directory, name string, parts []string) error {
 		return AddCommandToLocation(configPath, displayName, directory, name, parts)
+	}
+	be.PromoteShell = func(dir, command, name string) error {
+		return PromoteShellCommand(cfg, configPath, dir, command, name)
 	}
 	// The root location is the one at the project root the config describes
 	// (not where a global project file lives); cross-folder queue saves land there. Match the absolute form the loaded config uses.
@@ -139,7 +143,22 @@ func AddCommandToLocation(configPath, displayName, directory, name string, parts
 // display name, falling back to a directory match; -1 when none match.
 func findAuthoredLocation(cfg *config.Config, displayName, directory string) int {
 	for i, loc := range cfg.Locations {
-		if loc.DisplayName() == displayName || (directory != "" && loc.Location == directory) {
+		if loc.DisplayName() == displayName {
+			return i
+		}
+	}
+	if directory == "" {
+		return -1
+	}
+	return findAuthoredByDir(cfg, directory)
+}
+
+// findAuthoredByDir returns the index of the authored location whose location:
+// is directory, compared in clean form so an entry without a location: key is
+// the root ("."); -1 when none is.
+func findAuthoredByDir(cfg *config.Config, directory string) int {
+	for i, loc := range cfg.Locations {
+		if filepath.Clean(loc.Location) == filepath.Clean(directory) {
 			return i
 		}
 	}
@@ -147,7 +166,8 @@ func findAuthoredLocation(cfg *config.Config, displayName, directory string) int
 }
 
 // selectionJSON is the wire format `plt select` prints for the shell wrapper.
-// The action field is present only when it carries meaning (edit / pane); the
+// The action field is present only when it carries meaning (edit / pane /
+// shell, the last for an ad-hoc command picked with Ctrl+R); the
 // default execute action stays absent for backward compatibility.
 type selectionJSON struct {
 	Directory   string            `json:"directory"`
@@ -164,7 +184,7 @@ func toSelectionJSON(r SelectionResult) selectionJSON {
 		DisplayName: r.DisplayName,
 		Env:         r.Env,
 	}
-	if r.Action == "edit" || r.Action == "pane" {
+	if r.Action == "edit" || r.Action == "pane" || r.Action == "shell" {
 		j.Action = r.Action
 	}
 	return j

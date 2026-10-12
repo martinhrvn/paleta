@@ -3,12 +3,14 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/martinhrvn/paleta/internal/config"
 	"github.com/martinhrvn/paleta/internal/history"
+	"github.com/martinhrvn/paleta/internal/shelllog"
 )
 
 func key(t tea.KeyType) tea.KeyMsg { return tea.KeyMsg{Type: t} }
@@ -64,6 +66,19 @@ func TestModel_ModeTransitions(t *testing.T) {
 	step(key(tea.KeyEscape), modeNormal)
 	if !m.searchInput.Focused() {
 		t.Error("search box should regain focus after the worktree picker")
+	}
+
+	m.backend.PromoteShell = func(string, string, string) error { return nil }
+	m.backend.ShellHistory = []shelllog.Record{{Time: time.Now(), Dir: "/a", Command: "make x"}}
+	step(key(tea.KeyCtrlR), modeShellPick)
+	if m.searchInput.Focused() {
+		t.Error("search box should be blurred in the shell picker")
+	}
+	step(runes("a"), modeShellPromote)
+	step(key(tea.KeyEscape), modeShellPick)
+	step(key(tea.KeyEscape), modeNormal)
+	if !m.searchInput.Focused() {
+		t.Error("search box should regain focus after the shell picker")
 	}
 }
 

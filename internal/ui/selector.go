@@ -17,6 +17,7 @@ import (
 	"github.com/martinhrvn/paleta/internal/config"
 	"github.com/martinhrvn/paleta/internal/history"
 	"github.com/martinhrvn/paleta/internal/mux"
+	"github.com/martinhrvn/paleta/internal/shelllog"
 )
 
 // Model is the bubbletea model for the fzf-style TUI selector
@@ -62,6 +63,17 @@ type Model struct {
 	worktree       string
 	worktreeCursor int
 
+	// Shell picker (Ctrl+R): recent shell commands and pinned temporary ones.
+	// shellPromote is the row being saved to .pltrc while the name prompt is up.
+	shellCursor   int
+	shellPeriod   shelllog.Period
+	shellByFolder bool
+	shellHint     string
+	shellPromote  shellRow
+
+	// now is the clock the shell picker measures ages and periods against.
+	now func() time.Time
+
 	// Edit mode
 	editCommand     string
 	editDirectory   string
@@ -98,6 +110,8 @@ const (
 	modeQueueEdit                        // Ctrl+Q: reorder, remove or save the queued commands
 	modeQueueSave                        // "s" in the queue editor: name the command to save
 	modeWorktreePick                     // Ctrl+W: switch the palette to another git worktree
+	modeShellPick                        // Ctrl+R: re-run, pin or promote a recent shell command
+	modeShellPromote                     // "a" in the shell picker: name the command to save in .pltrc
 )
 
 func (s selectorMode) String() string {
@@ -114,6 +128,10 @@ func (s selectorMode) String() string {
 		return "queue-save"
 	case modeWorktreePick:
 		return "worktree-pick"
+	case modeShellPick:
+		return "shell-pick"
+	case modeShellPromote:
+		return "shell-promote"
 	}
 	return fmt.Sprintf("selectorMode(%d)", int(s))
 }
@@ -155,6 +173,17 @@ func (m Model) handler() modeHandler {
 		return modeHandler{
 			key:  Model.updateWorktreePickMode,
 			view: Model.renderWorktreePicker,
+		}
+	case modeShellPick:
+		return modeHandler{
+			key:  Model.updateShellPickMode,
+			view: Model.renderShellPicker,
+		}
+	case modeShellPromote:
+		return modeHandler{
+			key:   Model.updateShellPromoteMode,
+			input: func(m *Model) *textinput.Model { return &m.saveInput },
+			view:  Model.renderShellPicker,
 		}
 	default:
 		return modeHandler{
@@ -204,6 +233,7 @@ func NewModel(cfg *config.Config, be Backend) Model {
 		saveInput:       sv,
 		spinner:         sp,
 		mux:             mux.DetectEnv(),
+		now:             time.Now,
 	}
 
 	return m
@@ -316,6 +346,10 @@ func (m Model) updateNormalMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Claimed here so the search box never sees it as delete-word; Ctrl+U
 		// still clears the search.
 		m.enterWorktreePicker()
+		return m, nil
+
+	case tea.KeyCtrlR:
+		m.enterShellPicker()
 		return m, nil
 
 	case tea.KeyCtrlN:
@@ -433,6 +467,7 @@ func (m Model) View() string {
 		if len(m.backend.Worktrees) > 0 {
 			parts = append(parts, helpItem("^W", "worktree"))
 		}
+		parts = append(parts, helpItem("^R", "shell"))
 		parts = append(parts,
 			helpItem("^N", "add"),
 			helpItem("Esc", "cancel"),
@@ -629,6 +664,7 @@ func (m *Model) loadCommands() {
 		}
 		m.commands = append(m.commands, info)
 	}
+	m.insertScratchRows()
 }
 
 // reloadConfig re-reads the config through the backend after a save so the list

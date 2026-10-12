@@ -3,6 +3,8 @@ package ui
 import (
 	"github.com/martinhrvn/paleta/internal/config"
 	"github.com/martinhrvn/paleta/internal/history"
+	"github.com/martinhrvn/paleta/internal/scratch"
+	"github.com/martinhrvn/paleta/internal/shelllog"
 )
 
 // Backend is everything the selector needs from outside the terminal: the
@@ -40,6 +42,23 @@ type Backend struct {
 	// belong to and is shown in the status line.
 	Worktrees     []WorktreeEntry
 	WorktreeLabel string
+
+	// Temporary commands (Ctrl+R). ShellHistory is the project's shell log as
+	// recorded by the zsh integration, oldest first; the picker filters it by
+	// ShellPeriod (a shelllog.Period string) and groups it by location, or by
+	// exact folder when ShellByFolder; SaveShellView remembers a new choice.
+	// Scratch is the pinned list, also shown in the palette as tmp rows;
+	// PinShell and UnpinShell persist changes to it (nil disables pinning).
+	// PromoteShell writes a command into .pltrc under the location containing
+	// dir (nil when there is no config file to write to).
+	ShellHistory  []shelllog.Record
+	ShellPeriod   string
+	ShellByFolder bool
+	SaveShellView func(period string, byFolder bool) error
+	Scratch       []scratch.Entry
+	PinShell      func(dir, command string) error
+	UnpinShell    func(dir, command string) error
+	PromoteShell  func(dir, command, name string) error
 }
 
 // WorktreeEntry is one checkout of the repository shown in the Ctrl+W worktree

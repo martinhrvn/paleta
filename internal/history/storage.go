@@ -112,22 +112,28 @@ func LoadHistory(filePath string) (*History, error) {
 	return h, nil
 }
 
-// GetHistoryPath returns the path to the history file for a project
-func GetHistoryPath(projectRoot string) string {
+// DataDir is the directory paleta keeps its per-user state in: ~/.paleta, or
+// /tmp/.paleta when the home directory can't be determined.
+func DataDir() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		// Fallback to /tmp if home directory can't be determined
-		return filepath.Join("/tmp", ".paleta", "history", hashProjectRoot(projectRoot)+".json")
+		return filepath.Join("/tmp", ".paleta")
 	}
-
-	historyDir := filepath.Join(homeDir, ".paleta", "history")
-	return filepath.Join(historyDir, hashProjectRoot(projectRoot)+".json")
+	return filepath.Join(homeDir, ".paleta")
 }
 
-// hashProjectRoot creates a consistent hash for a project root path
-func hashProjectRoot(projectRoot string) string {
+// GetHistoryPath returns the path to the history file for a project
+func GetHistoryPath(projectRoot string) string {
+	return filepath.Join(DataDir(), "history", ProjectKey(projectRoot)+".json")
+}
+
+// ProjectKey is the short, stable identifier every per-project file under
+// DataDir is named by: the first 16 hex characters of the project root's
+// SHA-256. The shell log and scratch list share it with the history store so
+// one project always maps to one set of files.
+func ProjectKey(projectRoot string) string {
 	hash := sha256.Sum256([]byte(projectRoot))
-	return hex.EncodeToString(hash[:])[:16] // Use first 16 chars for brevity
+	return hex.EncodeToString(hash[:])[:16]
 }
 
 // LoadOrCreateHistory loads existing history or creates a new one for a project.

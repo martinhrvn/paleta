@@ -41,6 +41,10 @@ func Run(version string, args []string, stdout, stderr io.Writer) int {
 		return runSelect(stdout, stderr)
 	case "lint":
 		return runLint(rest, stdout, stderr)
+	case "shell-record":
+		return runShellRecord(rest, stderr)
+	case "add":
+		return runAdd(rest, stdout, stderr)
 	case "record":
 		return runRecord(rest, stderr)
 	case "help":
@@ -421,6 +425,7 @@ func usage(out io.Writer) {
 	fmt.Fprintln(out, "    stats                    Show command usage history (runs, recency, frecency)")
 	fmt.Fprintln(out, "    stats --by=count         Sort stats by run count (or --by=recent)")
 	fmt.Fprintln(out, "    select                   Interactive TUI command selection (multi-select with Tab)")
+	fmt.Fprintln(out, "    add <command>            Pin a temporary command for this project (shown as tmp in the palette)")
 	fmt.Fprintln(out, "    lint                     Check .pltrc for names that can't be used as aliases")
 	fmt.Fprintln(out, "    lint --fix               Rewrite offending characters in names to '_'")
 	fmt.Fprintln(out, "    version                  Show the paleta version")

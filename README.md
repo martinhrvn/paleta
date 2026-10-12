@@ -15,6 +15,7 @@ A fast, lightweight CLI tool for managing and executing commands across multiple
 - **Interactive Command Selection**: Use fuzzy search (via fzf or built-in TUI) to quickly find and run commands
 - **Zsh Keyboard Shortcut**: Press Ctrl+P from anywhere to launch plt (auto-configured during installation)
 - **tmux / zellij Integration**: When running inside tmux or zellij, press **Ctrl+O** in the selector to run the command(s) in a new window/tab instead of the current shell
+- **Temporary Commands**: Commands you type in the shell are remembered per project. Press **Ctrl+R** in the selector to re-run one, pin it for a while (`tmp` in the palette), or save it to `.pltrc`
 - **Global Project Configuration**: Centralized config management in `~/.config/paleta/projects/` with automatic project detection
 - **Monorepo Support**: Manage commands across multiple projects in a single configuration
 - **Project Type Detection**: Automatically discovers commands from package.json, go.mod, and other project files
@@ -219,6 +220,9 @@ plt list
 # List in fzf format
 plt list --format=fzf
 
+# Pin a temporary command for this project (shown as [tmp] in the selector)
+plt add pnpm cdk diff FooStack
+
 # Show command usage history (runs, recency, frecency score)
 plt stats
 plt stats --by=count      # or --by=recent
@@ -247,6 +251,7 @@ Inside the interactive selector (`plt` / `plt select`):
 | `Ctrl+F` | Toggle frecency sorting |
 | `Ctrl+P` | Pick which locations are focused |
 | `Ctrl+W` | Switch to another git worktree: the same commands, re-rooted in that checkout — **shown only when the repository has more than one worktree** |
+| `Ctrl+R` | Recent shell commands and pinned temporary commands (see below) |
 | `Ctrl+N` | Add projects (init wizard) |
 | `Esc` / `Ctrl+C` | Clear the search, then cancel |
 
@@ -265,6 +270,54 @@ the binding is only ever offered where it can work.
 
 > **Note:** `Ctrl+O` is used instead of tmux's default prefix (`Ctrl+B`), which
 > tmux intercepts before the selector can see it.
+
+#### Temporary commands (Ctrl+R)
+
+Some commands matter only for a while: the handful of `pnpm cdk diff FooStack`
+style commands you re-run all through an infra migration, say. They don't belong
+in `.pltrc`, but retyping them gets old.
+
+With the zsh integration sourced, every command you type inside a project (a
+directory with a `.pltrc` or `.git` above it) is remembered, together with the
+directory you ran it in. Navigation and housekeeping (`cd`, `ls`, `clear`, …) and
+`plt` itself are skipped, and so are commands you run through the selector. The
+log lives in `~/.paleta/shell/`, one file per project, trimmed to the newest
+2000 commands. Set `PLT_SHELL_HISTORY=0` to turn capturing off. Capturing needs
+zsh's `preexec` hook, so bash isn't covered.
+
+**Ctrl+R** in the selector lists them, newest first, with how often each ran in
+the period. Press `f` to switch how they are grouped:
+
+- **By location** (the default): runs from anywhere inside one `.pltrc`
+  location count together. Enter runs the command from the location's
+  directory, and saving puts it in `.pltrc` as is.
+- **By folder**: each directory you ran it in is its own row with its own
+  count. Enter runs it in that directory, and saving a command from a
+  subdirectory stores it as `cd <subdir> && <command>`.
+
+A folder that no location covers is listed under its own directory either way.
+The keys:
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Run the command (from the location, or the exact folder when grouped by folder) |
+| `p` | Pin it (or unpin a pinned one) |
+| `a` / `Ctrl+S` | Save it to `.pltrc` under a name you choose |
+| `←` / `→` (or `Tab`) | Change the period: last hour, today, last 7 days, last 30 days, all time |
+| `f` | Group by location or by folder |
+| `Esc` | Back to the palette |
+
+**Pinned** commands sit at the top of the picker and appear in the main palette
+with a `[tmp]` badge, so they fuzzy-search, queue and sort by frecency like any
+other command. Pin from the picker, or from the shell with
+`plt add <command>` (it pins in the current directory). Pins, the chosen
+period and grouping are kept per project in `~/.paleta/scratch/`.
+
+**Saving to `.pltrc`** adds the command to the location containing its
+directory, keeping the file's comments. Grouped by folder, a command from a
+subdirectory of a location is saved as `cd <subdir> && <command>`. A directory
+no location covers gets a new location entry. A saved pinned command is
+unpinned, since it is a real command now.
 
 ### Enhanced Mode
 
@@ -311,6 +364,9 @@ export PLT_MODE='--enhanced'
 
 # Custom binary location (if needed)
 export PLT_BINARY="$HOME/custom/path/plt-bin"
+
+# Don't remember shell commands for the Ctrl+R picker
+export PLT_SHELL_HISTORY=0
 ```
 
 **Manual Setup:**

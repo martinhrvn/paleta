@@ -29,6 +29,7 @@ show_usage() {
     echo "    edit       Open nearest .pltrc in \$EDITOR"
     echo "    list       List all available commands"
     echo "    stats      Show command usage history (runs, recency, frecency)"
+    echo "    add        Pin a temporary command for this project (plt add pnpm cdk diff Foo)"
     echo "    lint       Check .pltrc names (add --fix to auto-repair)"
     echo "    version    Show the plt version"
     echo "    help       Show this help message"
@@ -41,6 +42,7 @@ show_usage() {
     echo "    plt init --global    # Keep the config in ~/.config/paleta/projects/ instead of the repo"
     echo "    plt list         # List all commands"
     echo "    plt stats        # Usage history table (--by=count|recent, --limit=N)"
+    echo "    plt add make deploy  # Pin a temporary command (tmp in the palette)"
     echo
     echo "CONFIGURATION:"
     echo "    plt looks for .pltrc files starting from the current directory"
@@ -114,7 +116,8 @@ plt_record() {
     local jq_cmd="${JQ_CMD:-jq}"
     local action name cmd
     action=$(echo "$selection_json" | "$jq_cmd" -r "$path.action // \"execute\"")
-    if [ "$action" = "edit" ]; then
+    # edit: a one-off edit; shell: an ad-hoc command from the Ctrl+R picker.
+    if [ "$action" = "edit" ] || [ "$action" = "shell" ]; then
         return 0
     fi
     name=$(echo "$selection_json" | "$jq_cmd" -r "$path.display_name")
@@ -330,7 +333,7 @@ plt_main() {
         version|--version|-v)
             "$PLT_BINARY" version
             ;;
-        select|record)
+        select|record|shell-record|add)
             "$PLT_BINARY" "$@"
             ;;
         lint)

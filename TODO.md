@@ -129,6 +129,16 @@ The project types we should support intitally are:
    - [x] wire configurable `recency_weight`/`frequency_weight` (global + local, normalized) into actual scoring — previously hard-coded 50/50
    - [x] fix: history was saved under an empty project-root hash when no prior file existed, so counts never accumulated across runs
 - [x] rank fuzzy matches by quality: word-boundary/contiguous/prefix matches sort to the top (best-alignment scorer), with frecency as the tiebreak, so less typing lands the intended command
+- [x] temporary commands: ad-hoc shell commands (e.g. the ones re-run during an infra migration) without putting them in `.pltrc`
+  - [x] zsh `preexec` hook captures commands typed inside a project (`plt shell-record`, backgrounded; skips plt's own runs, `cd`/`ls`/…, and `plt`; `PLT_SHELL_HISTORY=0` opts out) into `~/.paleta/shell/<key>.jsonl`
+  - [x] Ctrl+R picker in the selector: recent commands newest first, deduped; Enter runs in the recorded directory
+  - [x] tweakable period in the picker (←/→: last hour, today, 7 days, 30 days, all time), remembered per project
+  - [x] `f` toggles grouping: by location (default; subfolder runs count together, run and save from the location dir) or by folder (per-directory rows and counts; saving from a subdir adds `cd <sub> &&`), remembered per project
+  - [x] pin (`p`, or `plt add <command>`) into a per-project scratch list shown in the palette as `[tmp]` rows
+  - [x] promote (`a`/Ctrl+S) to `.pltrc` under the location containing the directory (comments kept; subdirectories get `cd <sub> &&`; uncovered dirs get a new location)
+  - [ ] bash has no `preexec`, so capture is zsh-only (bash-preexec or `PROMPT_COMMAND` would be needed)
+  - [ ] promoting from a glob child (`packages/*`) adds a separate `location: packages/web` entry, which double-lists that folder (same root cause as the location dedup item above); writing into `overrides:` instead would avoid it
+  - [ ] `shelllog.Prune` rewrites via temp+rename, so an append racing a prune can be lost (rare: prune runs only past 4000 lines)
 ### Advanced Features
 - [x] Tools: project-adjacent programs (lazygit, docker, …) surfaced at the end of the list
   - [x] enable per-project via `tools: [name]` in `.pltrc`; run in the current directory
@@ -354,3 +364,12 @@ and gave the command filters honest names:
 - **Bug fixed**: glob expansion silently dropped `Location.Env`, so location-level env
   never worked under a glob. Each expanded child now gets its own copy (a shared map
   would let one folder's override leak into its siblings).
+
+### Temporary Commands — shell capture, Ctrl+R, pin, promote (Completed)
+- `internal/shelllog`: append-only per-project JSONL log of commands typed in the shell, with `Recent` (grouped by a key, with run counts), `Ignored`, `Prune` and `Period` presets
+- `internal/scratch`: per-project pinned temporary commands and the picker's remembered period and grouping
+- `history.ProjectKey`/`DataDir` exported so all per-project files share one key
+- `plt shell-record` (hidden, fed by the zsh preexec hook) and `plt add` (pin from the shell; in usage, wrapper and completions)
+- `config.Config.LocationFor(dir)`: deepest location containing a directory (symlink-aware)
+- selector: `modeShellPick`/`modeShellPromote` (Ctrl+R), `[tmp]` rows for pins, `"shell"` selection action that the wrappers don't record in frecency history
+- `commands.PromoteShellCommand` writes through `config.File`; `findAuthoredLocation` now matches an entry without `location:` as the root

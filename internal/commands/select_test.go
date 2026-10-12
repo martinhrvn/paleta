@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -197,5 +198,16 @@ func TestMarshalSelectionSpecialChars(t *testing.T) {
 
 	if obj["command"] != tricky {
 		t.Errorf("round-trip mismatch:\n got: %q\nwant: %q", obj["command"], tricky)
+	}
+}
+
+func TestMarshalSelectionShellAction(t *testing.T) {
+	out, err := MarshalSelection([]SelectionResult{{Directory: "/p/infra", Command: "pnpm cdk diff", Action: "shell"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(out)
+	if !strings.Contains(got, `"action":"shell"`) || !strings.Contains(got, `"display_name":""`) {
+		t.Fatalf("selection JSON = %s", got)
 	}
 }

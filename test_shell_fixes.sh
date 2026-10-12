@@ -165,6 +165,139 @@ else
     echo "  SKIP: zsh not installed"
 fi
 
+
+echo ""
+echo "=== Testing shell history capture and temporary commands ==="
+
+# A fake binary that appends its arguments to $REC_LOG, so backgrounded calls
+# can be observed after the fact.
+cat > "$TMPDIR_TEST/rec-plt" << 'FAKE'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$REC_LOG"
+FAKE
+chmod +x "$TMPDIR_TEST/rec-plt"
+
+PROJ="$TMPDIR_TEST/proj"
+mkdir -p "$PROJ/infra"
+touch "$PROJ/.pltrc"
+OUTSIDE=$(mktemp -d)
+trap "rm -rf $TMPDIR_TEST $OUTSIDE" EXIT
+
+# wait_for_log FILE: the hook records in the background; give it up to 1s.
+wait_for_log() {
+    local i=0
+    while [[ $i -lt 20 ]]; do
+        [[ -s "$1" ]] && return 0
+        sleep 0.05
+        i=$((i + 1))
+    done
+    return 1
+}
+
+# run_hook DIR CMD...: source the integration in zsh, cd to DIR, and call the
+# preexec hook once per CMD; prints nothing, the fake binary logs to $REC_LOG.
+run_hook() {
+    local dir="$1"; shift
+    local calls="" c
+    for c in "$@"; do
+        calls="$calls __plt_shell_record_preexec ${c@Q};"
+    done
+    zsh -f -c "PLT_BINARY='$TMPDIR_TEST/rec-plt'; source '$SCRIPT_DIR/plt-integration.zsh' && cd '$dir' && $calls" 2>&1
+}
+
+if command -v zsh >/dev/null 2>&1; then
+    # Test 12
+    echo "Test 12: preexec hook records cwd and command inside a project"
+    export REC_LOG="$TMPDIR_TEST/rec12.log"; : > "$REC_LOG"
+    run_hook "$PROJ/infra" "pnpm cdk diff FooStack"
+    if wait_for_log "$REC_LOG" && [[ "$(cat "$REC_LOG")" == "shell-record $PROJ/infra pnpm cdk diff FooStack" ]]; then
+        pass "command recorded with its directory"
+    else
+        fail "expected 'shell-record $PROJ/infra pnpm cdk diff FooStack', got: $(cat "$REC_LOG")"
+    fi
+
+    # Test 13
+    echo "Test 13: preexec hook ignores commands outside a project, plt itself, and blanks"
+    export REC_LOG="$TMPDIR_TEST/rec13.log"; : > "$REC_LOG"
+    run_hook "$OUTSIDE" "make build"
+    run_hook "$PROJ" "plt list" "plt" "   "
+    sleep 0.3
+    if [[ ! -s "$REC_LOG" ]]; then
+        pass "nothing recorded"
+    else
+        fail "expected no records, got: $(cat "$REC_LOG")"
+    fi
+
+    # Test 14
+    echo "Test 14: the skip flag suppresses exactly one command (plt's own run)"
+    export REC_LOG="$TMPDIR_TEST/rec14.log"; : > "$REC_LOG"
+    zsh -f -c "PLT_BINARY='$TMPDIR_TEST/rec-plt'; source '$SCRIPT_DIR/plt-integration.zsh' && cd '$PROJ' && __plt_skip_record=1 && __plt_shell_record_preexec 'make one' && __plt_shell_record_preexec 'make two'" 2>&1
+    wait_for_log "$REC_LOG"; sleep 0.1
+    if [[ "$(cat "$REC_LOG")" == "shell-record $PROJ make two" ]]; then
+        pass "first command skipped, second recorded"
+    else
+        fail "expected only 'make two', got: $(cat "$REC_LOG")"
+    fi
+
+    # Test 15
+    echo "Test 15: PLT_SHELL_HISTORY=0 leaves the preexec hook unregistered"
+    output=$(zsh -f -c "PLT_SHELL_HISTORY=0 PLT_BINARY='$TMPDIR_TEST/rec-plt'; source '$SCRIPT_DIR/plt-integration.zsh'; print -r -- \${#\${(M)preexec_functions:#__plt_shell_record_preexec}}" 2>&1)
+    output_on=$(zsh -f -c "PLT_BINARY='$TMPDIR_TEST/rec-plt'; source '$SCRIPT_DIR/plt-integration.zsh'; source '$SCRIPT_DIR/plt-integration.zsh'; print -r -- \${#\${(M)preexec_functions:#__plt_shell_record_preexec}}" 2>&1)
+    if [[ "$output" == "0" && "$output_on" == "1" ]]; then
+        pass "opt-out respected; registration is idempotent"
+    else
+        fail "expected opt-out index 0 and one registration, got '$output' / '$output_on'"
+    fi
+
+    # Test 16
+    echo "Test 16: zsh __plt_record does not record a 'shell' action"
+    export REC_LOG="$TMPDIR_TEST/rec16.log"; : > "$REC_LOG"
+    shell_json='{"directory":"/p","command":"make x","display_name":"","action":"shell"}'
+    zsh -f -c "PLT_SHELL_HISTORY=0; source '$SCRIPT_DIR/plt-integration.zsh' && __plt_record '$TMPDIR_TEST/rec-plt' jq '$shell_json' ''" 2>&1
+    if [[ ! -s "$REC_LOG" ]]; then
+        pass "shell action not recorded in history"
+    else
+        fail "expected no record call, got: $(cat "$REC_LOG")"
+    fi
+else
+    echo "  SKIP: zsh not installed"
+fi
+
+# Test 17
+echo "Test 17: bash plt_record does not record a 'shell' action"
+export REC_LOG="$TMPDIR_TEST/rec17.log"; : > "$REC_LOG"
+shell_json='{"directory":"/p","command":"make x","display_name":"","action":"shell"}'
+PLT_BINARY="$TMPDIR_TEST/rec-plt" bash -c "source '$SCRIPT_DIR/plt-core.sh' && plt_record '$shell_json' ''" 2>&1
+if [[ ! -s "$REC_LOG" ]]; then
+    pass "shell action not recorded in history"
+else
+    fail "expected no record call, got: $(cat "$REC_LOG")"
+fi
+
+# Test 18
+echo "Test 18: plt_main passes 'add' and 'shell-record' through to PLT_BINARY"
+out_add=$(PLT_BINARY="$TMPDIR_TEST/fake-plt" bash -c "source '$SCRIPT_DIR/plt-core.sh' && plt_main add pnpm cdk diff" 2>&1) || true
+out_rec=$(PLT_BINARY="$TMPDIR_TEST/fake-plt" bash -c "source '$SCRIPT_DIR/plt-core.sh' && plt_main shell-record /p 'go test'" 2>&1) || true
+if [[ "$out_add" == *"CALLED_WITH: add pnpm cdk diff"* && "$out_rec" == *"CALLED_WITH: shell-record /p go test"* ]]; then
+    pass "add and shell-record route to binary"
+else
+    fail "got: '$out_add' / '$out_rec'"
+fi
+
+
+# Test 19
+echo "Test 19: palette runs set the skip flag, Ctrl+R shell runs don't"
+if command -v zsh >/dev/null 2>&1; then
+    output=$(zsh -f -c "PLT_SHELL_HISTORY=0; source '$SCRIPT_DIR/plt-integration.zsh' && __plt_mark_own_run execute && print -n \$__plt_skip_record && __plt_mark_own_run shell && print -n \$__plt_skip_record" 2>&1)
+    if [[ "$output" == "10" ]]; then
+        pass "execute marks, shell does not"
+    else
+        fail "expected '10', got: $output"
+    fi
+else
+    echo "  SKIP: zsh not installed"
+fi
+
 echo ""
 echo "=== Results ==="
 echo "Passed: $PASS"

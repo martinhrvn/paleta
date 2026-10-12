@@ -5,7 +5,7 @@ type SelectionResult struct {
 	Directory   string            // The actual directory path where command should be executed
 	Command     string            // The command to run (raw, without env)
 	DisplayName string            // The display name shown in fzf (for reference)
-	Action      string            // "" (execute, the default), "edit", or "pane"
+	Action      string            // "" (execute, the default), "edit", "pane", or "shell" (an ad-hoc command from the Ctrl+R picker)
 	Env         map[string]string // Resolved environment variables to apply when running
 }
 
@@ -28,6 +28,9 @@ type CommandInfo struct {
 	// IsTool marks a row that comes from an enabled tool rather than a location's
 	// commands. Tool rows are pinned to the end of the default list.
 	IsTool bool
+	// IsScratch marks a pinned temporary command (see Backend.Scratch): not in
+	// .pltrc, shown with a "tmp" badge, run in its own directory.
+	IsScratch bool
 	// Loading marks a placeholder standing in for a location whose project type
 	// is still being resolved in the background (a `make`/`gradle` parser has to
 	// run a shell command to list its targets). It carries no command, and is

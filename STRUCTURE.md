@@ -17,9 +17,12 @@ and the rules that keep the boundaries where they are.
 │   ├── parsers/               # project types: detection, command discovery, priority
 │   ├── scan/                  # `plt init` tree scan (git-aware) over the parsers registry
 │   ├── history/               # per-project command history and frecency scoring
+│   ├── shelllog/              # per-project log of commands typed in the shell (Ctrl+R)
+│   ├── scratch/               # per-project pinned temporary commands + picker period
 │   └── mux/                   # tmux / zellij detection
 ├── plt-core.sh                # bash wrapper logic: runs the selection the binary returns
-├── plt-integration.zsh        # zsh Ctrl+P widget doing the same inside the line editor
+├── plt-integration.zsh        # zsh Ctrl+P widget doing the same inside the line editor,
+│                              # plus the preexec hook feeding `plt shell-record`
 ├── packaging/plt              # the installed `plt` wrapper (sources plt-core.sh)
 ├── completion.bash, completion.zsh
 ├── install.sh, flake.nix, .goreleaser.yaml
@@ -31,15 +34,17 @@ and the rules that keep the boundaries where they are.
 ```
 cmd/plt ─► commands ─► ui ─► mux
               │         │
-              │         └─► config, history   (types and pure helpers only)
+              │         └─► config, history, shelllog, scratch   (types and pure helpers only)
               ├─► scan ─► parsers
               ├─► history
+              ├─► shelllog, scratch ─► history   (ProjectKey, DataDir)
               └─► config ─► parsers
 ```
 
 There are no cycles and no callbacks from a lower package into a higher one.
 `ui` reaches the outside world only through `ui.Backend`, a value `commands`
-fills in (history, reload, deferred-type resolution, focus and queue saves).
+fills in (history, reload, deferred-type resolution, focus and queue saves,
+the shell log, pins and promotion to .pltrc).
 
 ## Packages
 
@@ -47,7 +52,10 @@ fills in (history, reload, deferred-type resolution, focus and queue saves).
 `Run(version, args, stdout, stderr) int` is the whole program: one `case` per
 subcommand, each with its own `flag.FlagSet`. Everything a subcommand needs is
 called from here: `config.Load`, the selector (`RunSelector`), the init wizard
-(`RunInitWizard`, `Bootstrap`), history recording, lint. `worktree.go` is the
+(`RunInitWizard`, `Bootstrap`), history recording, lint. `shell.go` holds the
+temporary-command side: `shell-record` (hidden, called by the zsh preexec hook),
+`add`, pin/unpin, and `PromoteShellCommand`, which writes a shell command into
+the `.pltrc` location containing its directory. `worktree.go` is the
 one place besides `scan` that shells out to git (`git worktree list`), through
 the `gitOutput` seam tests replace. Output goes to the
 writers it is given, so the entire command surface is testable without a
@@ -87,11 +95,12 @@ shell-side entries listed in the memory note on new subcommands.
 ### `internal/ui` — the terminal views
 - `selector.go`: the palette `Model`. It is in exactly one `selectorMode` at a
   time (`modeNormal`, `modeEdit`, `modeFocusPick`, `modeQueueEdit`,
-  `modeQueueSave`, `modeWorktreePick`); `handler()` is the single dispatch point for keys,
+  `modeQueueSave`, `modeWorktreePick`, `modeShellPick`, `modeShellPromote`); `handler()` is the single dispatch point for keys,
   non-key messages and the view. `listHeight` is the one chrome computation the
   viewport and renderer share. The loaded rows (`commands`) are never reordered;
   `filteredCommands` is derived, with match positions cached per row.
-- `queue_editor.go`, `focus_picker.go`, `worktree_picker.go`: sub-modes.
+- `queue_editor.go`, `focus_picker.go`, `worktree_picker.go`, `shell_picker.go`:
+  sub-modes. `shell_picker.go` also adds the pinned (`tmp`) rows to the palette.
   `init_wizard.go`: a separate program the selector hands off to on Ctrl+N.
   `Run` returns an `Outcome`: results, or a request (Ctrl+N wizard, Ctrl+W
   worktree switch) that `commands.RunSelector` acts on before re-entering.
@@ -115,6 +124,16 @@ asks the registry which types each one has.
 Per-project history under `~/.paleta/history/<hash>.json`, keyed by
 `displayName:command`, with frecency scoring. It knows nothing about roots or
 configs; callers pass the project root.
+`ProjectKey(root)` and `DataDir()` name every per-project file under `~/.paleta`.
+
+### `internal/shelllog` and `internal/scratch`
+`shelllog` is the append-only JSONL log of commands typed in the shell inside a
+project (`~/.paleta/shell/<key>.jsonl`): `Append` under a lock, tolerant
+`Load`, `Recent` (grouped by a key with run counts, newest first, since a
+`Period`), `Ignored`, `Prune`.
+`scratch` is the JSON list of pinned temporary commands and the picker's
+remembered period and grouping (`~/.paleta/scratch/<key>.json`). Both are keyed like the
+history store and know nothing about configs.
 
 ## Rules that keep it this way
 1. Only `commands` performs I/O orchestration; `ui` asks its `Backend`.

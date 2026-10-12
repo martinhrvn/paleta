@@ -13,6 +13,10 @@
 # Customization:
 #   export PLT_KEYBIND='^O'           # Use Ctrl+O instead of Ctrl+P to launch plt
 #   export PLT_PANE_SHELL='zsh'       # Shell the new tmux/zellij pane lands in
+#   export PLT_SHELL_HISTORY=0        # Don't remember shell commands for the Ctrl+R picker
+#
+# Commands you type in the shell inside a project are remembered (in
+# ~/.paleta/shell/) so plt's Ctrl+R picker can re-run, pin or promote them.
 #
 
 # Function to find plt binary
@@ -85,7 +89,8 @@ __plt_segment() {
 __plt_record() {
     local plt_binary="$1" jq_cmd="$2" selection_json="$3" jq_path="$4"
     local action=$("$jq_cmd" -r "$jq_path.action // \"execute\"" <<< "$selection_json")
-    [[ "$action" = "edit" ]] && return 0
+    # edit: a one-off edit; shell: an ad-hoc command from the Ctrl+R picker.
+    [[ "$action" = "edit" || "$action" = "shell" ]] && return 0
     local name=$("$jq_cmd" -r "$jq_path.display_name" <<< "$selection_json")
     local cmd=$("$jq_cmd" -r "$jq_path.command" <<< "$selection_json")
     if [[ -n "$name" && "$name" != "null" ]]; then
@@ -196,6 +201,7 @@ __plt_select_widget() {
             if [[ "$action" = "edit" ]]; then
                 zle reset-prompt
             else
+                __plt_mark_own_run "$action"
                 zle accept-line
             fi
         else
@@ -216,6 +222,7 @@ __plt_select_widget() {
                 else
                     echo "\n\033[1;33mRunning:\033[0m $command"
                     echo "\033[1;33mIn:\033[0m $directory\n"
+                    __plt_mark_own_run "$action"
                     zle accept-line
                 fi
             else
@@ -236,3 +243,64 @@ zle -N __plt_select_widget
 
 # Bind the widget to a key (default: Ctrl+P, customizable via PLT_KEYBIND)
 bindkey "${PLT_KEYBIND:-^P}" __plt_select_widget
+
+# --- Shell history capture -------------------------------------------------
+#
+# Commands typed in the shell (not through plt) while inside a project are
+# remembered so the selector's Ctrl+R picker can re-run, pin or promote them.
+# A preexec hook hands each one to `plt shell-record` in the background, so the
+# only cost at the prompt is a fork. Set PLT_SHELL_HISTORY=0 to turn it off.
+
+typeset -gi __plt_skip_record=0
+
+# Succeeds when $PWD is inside a project: an ancestor (or itself) holding a
+# .pltrc or a .git, the same rule `plt` uses to find the project root.
+__plt_in_project() {
+    local d="$PWD"
+    while true; do
+        [[ -e "$d/.pltrc" || -e "$d/.git" ]] && return 0
+        [[ "$d" == "/" || -z "$d" ]] && return 1
+        d="${d:h}"
+    done
+}
+
+__plt_shell_record_preexec() {
+    # The palette's own runs set this so they aren't logged as ad-hoc commands.
+    if (( __plt_skip_record )); then
+        __plt_skip_record=0
+        return 0
+    fi
+    setopt localoptions extendedglob
+    local cmd="$1"
+    local trimmed="${cmd##[[:space:]]#}"
+    [[ -z "$trimmed" ]] && return 0
+    [[ "$trimmed" == plt || "$trimmed" == plt[[:space:]]* ]] && return 0
+    [[ -n "$__plt_bin" ]] || return 0
+    __plt_in_project || return 0
+    "$__plt_bin" shell-record "$PWD" "$cmd" </dev/null &>/dev/null &!
+}
+
+# Called right before the widget accepts a palette run. A command picked from
+# the Ctrl+R shell picker (action "shell") is still an ad-hoc command, so it is
+# logged again, which bumps it to the top of the picker.
+__plt_mark_own_run() {
+    if [[ "$1" == "shell" ]]; then
+        __plt_skip_record=0
+    else
+        __plt_skip_record=1
+    fi
+}
+
+# Safety net: never let a skip flag outlive the command it was meant for.
+__plt_shell_record_precmd() {
+    __plt_skip_record=0
+}
+
+if [[ "${PLT_SHELL_HISTORY:-1}" != "0" ]]; then
+    typeset -g __plt_bin
+    if __plt_bin=$(__plt_find_binary); then
+        autoload -Uz add-zsh-hook
+        add-zsh-hook preexec __plt_shell_record_preexec
+        add-zsh-hook precmd __plt_shell_record_precmd
+    fi
+fi
