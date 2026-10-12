@@ -86,6 +86,19 @@ nix profile install # install
 nix run             # or run directly
 ```
 
+With Home Manager, the flake provides a module that installs `plt`, its
+completions, and the zsh Ctrl+P integration:
+
+```nix
+# flake inputs: paleta.url = "github:martinhrvn/paleta";
+imports = [ inputs.paleta.homeManagerModules.default ];
+programs.paleta = {
+  enable = true;
+  # enableZshIntegration = false;  # package and completions only
+  # shellHistory = false;          # don't record shell commands for Ctrl+R
+};
+```
+
 ### From source (install script)
 
 ```bash
@@ -455,7 +468,8 @@ go test -cover ./...
 ├── plt-integration.zsh # zsh Ctrl+P widget
 ├── packaging/plt      # Shell wrapper script (installed as `plt`)
 ├── install.sh         # Installation script
-└── flake.nix          # Nix flake configuration
+├── flake.nix          # Nix flake configuration
+└── nix/              # Home Manager module (programs.paleta) and its flake check
 ```
 
 ## Troubleshooting

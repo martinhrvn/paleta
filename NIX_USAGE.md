@@ -125,14 +125,30 @@ Or using flakes in your system configuration:
 
 ## Home Manager Integration
 
+The flake exports a Home Manager module. It installs `plt` and its completions
+and, unless disabled, sources the zsh integration (Ctrl+P widget and the
+shell-history hook behind Ctrl+R):
+
 ```nix
-# home.nix
+# flake.nix
 {
-  home.packages = with pkgs; [
-    (import (fetchTarball "https://github.com/martinhrvn/paleta/archive/main.tar.gz")).packages.${system}.plt
-  ];
+  inputs.paleta.url = "github:martinhrvn/paleta";
+  # ...
+}
+
+# home.nix
+{ inputs, ... }: {
+  imports = [ inputs.paleta.homeManagerModules.default ];
+
+  programs.paleta = {
+    enable = true;
+    enableZshIntegration = true;  # default
+    shellHistory = true;          # default; false sets PLT_SHELL_HISTORY=0
+  };
 }
 ```
+
+Don't also source `plt-integration.zsh` yourself; the module does it.
 
 ## Cross-Platform Support
 

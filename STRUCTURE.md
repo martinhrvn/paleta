@@ -26,6 +26,7 @@ and the rules that keep the boundaries where they are.
 ├── packaging/plt              # the installed `plt` wrapper (sources plt-core.sh)
 ├── completion.bash, completion.zsh
 ├── install.sh, flake.nix, .goreleaser.yaml
+├── nix/                      # Home Manager module + its `nix flake check` test
 └── test-example/              # a sample repository with a .pltrc
 ```
 
@@ -147,5 +148,6 @@ history store and know nothing about configs.
 ```bash
 go build ./... && go vet ./... && go test ./...
 bash test_shell_fixes.sh          # wrapper behaviour
+nix flake check                   # Home Manager module
 go build -o /tmp/plt ./cmd/plt && (cd test-example && /tmp/plt list)
 ```

@@ -142,10 +142,18 @@
           };
         };
 
+        checks.hm-module = import ./nix/hm-module-test.nix {
+          inherit pkgs;
+          module = self.homeManagerModules.default;
+        };
+
         devShells.default = devShell;
 
         # For backwards compatibility
         devShell = devShell;
         defaultPackage = plt;
-      });
+      }) // {
+      # Home Manager: programs.paleta = { enable = true; };
+      homeManagerModules.default = import ./nix/hm-module.nix self;
+    };
 }
