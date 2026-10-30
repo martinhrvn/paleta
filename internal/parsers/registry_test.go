@@ -133,4 +133,7 @@ func TestType_DefersLoading(t *testing.T) {
 	if n, _ := reg.Lookup("npm"); n.DefersLoading() {
 		t.Error("npm reads package.json, so it should not defer")
 	}
+	if d, _ := reg.Lookup("devenv"); d == nil || !d.DefersLoading() {
+		t.Error("devenv evaluates devenv.nix via its built-in parser, so it should defer")
+	}
 }

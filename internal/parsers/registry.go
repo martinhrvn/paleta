@@ -45,11 +45,16 @@ func (t *Type) Commands(directory string) (map[string]string, error) {
 func (t *Type) Config() ParserConfig { return t.config }
 
 // DefersLoading reports whether this type's command list comes from running a
-// shell command (`./gradlew tasks --all`, a `make -qp` pipeline) rather than from
-// reading a file. Callers resolve these in the background instead of blocking a
-// config load on them.
+// shell command (`./gradlew tasks --all`, a `make -qp` pipeline, `devenv eval`)
+// rather than from reading a file. Callers resolve these in the background
+// instead of blocking a config load on them.
 func (t *Type) DefersLoading() bool {
-	return t.config.ParserCommand != ""
+	parser, err := GetParser(t.config)
+	if err != nil {
+		return false
+	}
+	_, ok := parser.(shellBacked)
+	return ok
 }
 
 // Registry holds every configured project type, in priority order. It is the

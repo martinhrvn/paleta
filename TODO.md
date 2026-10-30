@@ -61,7 +61,8 @@ The project types we should support intitally are:
   - [x] should allow to set the package manager to use, eg. npm, yarn, pnpm
 - [ ] go - should find go.mod and run go commands
 - [x] compose - per-file `docker compose -f` commands (`dev:up`, `dev:down`, ...) for `docker-compose.*.yml` / `compose.*.yml` variants
-- [x] Cache shell-backed type results (make, gradle, maven, python, custom `parser_command`) in `~/.paleta/cache/types/`
+- [x] devenv - `devenv.nix`; base `up`/`shell`/`test`/`update` plus `up:<process>`, `task:<task>` (skipping `devenv:*`) and `script:<name>` from `devenv eval processes scripts` + `devenv tasks list --json`; shell-backed, so deferred and cached
+- [x] Cache shell-backed type results (make, gradle, maven, python, devenv, custom `parser_command`) in `~/.paleta/cache/types/`
   - [x] the selector shows cached commands immediately and refreshes them in the background (`⠋ refreshing gradle…` in the help line); only uncached types get a spinner placeholder row
   - [x] `plt list` trusts a cached result while the type's detect files are unchanged (name/size/mtime), otherwise re-runs the parser
   - [x] a failed or timed-out refresh keeps the cached commands (with a warning) instead of dropping to base commands; failures are never cached

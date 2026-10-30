@@ -134,8 +134,9 @@ Built-in types:
 | `maven` | `pom.xml` | The maven lifecycle phases. |
 | `docker` | `Dockerfile` | `docker build` / `docker run` |
 | `compose` | `docker-compose.yml`, `compose.yml` and `*.{dev,…}.yml` variants | `up` / `down` / `build` / `logs` / `ps`. Each variant file gets its own set too: `docker-compose.dev.yaml` adds `dev:up` → `docker compose -f docker-compose.dev.yaml up`, `dev:down`, and so on. |
+| `devenv` | `devenv.nix` | `up` / `shell` / `test` / `update`, plus what `devenv.nix` defines: `up:<process>` → `devenv up <process>`, `task:<task>` → `devenv tasks run <task>` (devenv's own `devenv:*` tasks are left out), `script:<name>` → `devenv shell <name>`. |
 
-Types that run a program to list their commands (make, gradle, maven, python) are
+Types that run a program to list their commands (make, gradle, maven, python, devenv) are
 cached in `~/.paleta/cache/types/`. The selector shows the cached list
 immediately and refreshes it in the background.
 

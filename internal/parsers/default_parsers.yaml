@@ -125,3 +125,14 @@ parsers:
       clean: "mvn clean"
     parser_command: "mvn help:describe -Dcmd=compile | grep -E '^[a-zA-Z]' | cut -d' ' -f1 | sort -u"
     command_template: "mvn {key}"
+  devenv:
+    detect_files: ["devenv.nix"]
+    priority: 75
+    base_commands:
+      up: "devenv up"
+      shell: "devenv shell"
+      test: "devenv test"
+      update: "devenv update"
+    # Adds `up:<process>`, `task:<task>` and `script:<name>` by evaluating
+    # devenv.nix — slow, so the type resolves in the background and is cached.
+    builtin_parser: "devenv"

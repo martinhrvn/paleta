@@ -18,6 +18,13 @@ type commandBuilder interface {
 	BuildCommands(directory string, config ParserConfig) (map[string]string, error)
 }
 
+// shellBacked is implemented by parsers that run an external program (a parser
+// command, `devenv eval`) rather than read a file. Their types defer loading:
+// they resolve in the background and their results are cached.
+type shellBacked interface {
+	shellBacked()
+}
+
 // GetParser returns the appropriate parser based on the configuration
 func GetParser(config ParserConfig) (Parser, error) {
 	// If a built-in parser is specified, use it
@@ -29,6 +36,8 @@ func GetParser(config ParserConfig) (Parser, error) {
 			return &GoStandardParser{}, nil
 		case "compose_files":
 			return &ComposeFilesParser{}, nil
+		case "devenv":
+			return &DevenvParser{}, nil
 		default:
 			return nil, fmt.Errorf("unknown built-in parser: %s", config.BuiltinParser)
 		}

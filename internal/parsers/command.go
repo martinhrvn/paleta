@@ -28,29 +28,17 @@ const parserWaitDelay = 1 * time.Second
 // CommandParser executes a shell command to parse project commands
 type CommandParser struct{}
 
+func (c *CommandParser) shellBacked() {}
+
 func (c *CommandParser) ParseCommands(directory string, config ParserConfig) ([]string, error) {
 	if config.ParserCommand == "" {
 		return []string{}, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), ParserCommandTimeout)
-	defer cancel()
-
 	// Execute the parser command in the project directory
-	cmd := exec.CommandContext(ctx, "sh", "-c", config.ParserCommand)
-	cmd.Dir = directory
-	cmd.WaitDelay = parserWaitDelay
-
-	// Set up environment
-	cmd.Env = os.Environ()
-
-	// Execute the command
-	output, err := cmd.Output()
+	output, err := runParserProcess(directory, "sh", "-c", config.ParserCommand)
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("%w after %s: '%s'", ErrParserTimeout, ParserCommandTimeout, config.ParserCommand)
-		}
-		return nil, fmt.Errorf("failed to execute parser command '%s': %w", config.ParserCommand, err)
+		return nil, err
 	}
 
 	// Parse the output - each line is a command
@@ -69,4 +57,27 @@ func (c *CommandParser) ParseCommands(directory string, config ParserConfig) ([]
 	}
 
 	return commands, nil
+}
+
+// runParserProcess runs name with args in directory and returns its stdout,
+// abandoning it at ParserCommandTimeout. Every parser that shells out goes
+// through here so one slow project can't stall a `plt` launch.
+func runParserProcess(directory, name string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), ParserCommandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = directory
+	cmd.WaitDelay = parserWaitDelay
+	cmd.Env = os.Environ()
+
+	output, err := cmd.Output()
+	if err != nil {
+		invocation := strings.Join(append([]string{name}, args...), " ")
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("%w after %s: '%s'", ErrParserTimeout, ParserCommandTimeout, invocation)
+		}
+		return nil, fmt.Errorf("failed to execute parser command '%s': %w", invocation, err)
+	}
+	return output, nil
 }
