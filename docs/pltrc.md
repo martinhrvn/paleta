@@ -114,9 +114,11 @@ Names with other characters still work. The selector flags them, and
 `type` decides which commands plt discovers in a folder:
 
 - `type: npm` sets a single type.
-- `type: [npm, docker]` sets several. Each command is then labelled with its type
-  in the selector (e.g. `svc: [npm] build` and `svc: [docker] build`), so commands
-  with the same name stay distinguishable.
+- `type: [npm, docker]` sets several.
+- In the selector, each command that comes from a type shows the type between
+  the location and the command, in the same shape as a reference: `svc[npm]: build`
+  and `svc[docker]: build`. The type is part of the searchable text, so typing
+  part of it (e.g. `svcdo`) narrows to that type's commands.
 - If you omit `type`, plt detects types from the folder's files, separately for
   each folder of a glob.
 - `type: none` turns detection off. Only the commands you wrote remain.

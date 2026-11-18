@@ -321,7 +321,7 @@ The keys:
 | `Esc` | Back to the palette |
 
 **Pinned** commands sit at the top of the picker and appear in the main palette
-with a `[tmp]` badge, so they fuzzy-search, queue and sort by frecency like any
+as `location[tmp]: command`, so they fuzzy-search, queue and sort by frecency like any
 other command. Pin from the picker, or from the shell with
 `plt add <command>` (it pins in the current directory). Pins, the chosen
 period and grouping are kept per project in `~/.paleta/scratch/`.

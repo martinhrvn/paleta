@@ -123,6 +123,18 @@ func (r Row) CommandLabel() string {
 	return r.nameOrCommand()
 }
 
+// PaletteLabel is the row's text in the palette: like Label, but a command that
+// came from a project type reads "display[type]: name", the shape of an
+// @project[type]:command reference. Putting the type there, rather than in a
+// trailing badge, makes it part of the searchable text, so typing part of the
+// type ("foopn") picks between same-named commands of different types.
+func (r Row) PaletteLabel() string {
+	if r.Type == "" || r.IsTool {
+		return r.Label()
+	}
+	return r.DisplayName + "[" + r.Type + "]: " + r.nameOrCommand()
+}
+
 // Label is the row's plain text, "display: name-or-command". A tool with a
 // single command is labelled by the tool name alone.
 func (r Row) Label() string {

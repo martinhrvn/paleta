@@ -112,6 +112,32 @@ func TestRow_Labels(t *testing.T) {
 	}
 }
 
+// PaletteLabel reads project → type → command, in the same shape as an
+// @project[type]:command reference, so the type is part of the searchable text.
+func TestRow_PaletteLabel(t *testing.T) {
+	rows := rowsFixture().Rows(false)
+	cases := []struct {
+		i    int
+		want string
+	}{
+		{0, "web[npm]: build"},
+		{1, "web[docker]: build"},
+		{2, "web: deploy"},                 // authored, untyped
+		{3, "/repo/infra: terraform plan"}, // untyped location
+		{5, "lazygit"},                     // tool
+		{6, "docker: up"},                  // tool with a named command
+	}
+	for _, tc := range cases {
+		if got := rows[tc.i].PaletteLabel(); got != tc.want {
+			t.Errorf("row %d: PaletteLabel = %q, want %q", tc.i, got, tc.want)
+		}
+	}
+	single := (&Config{Locations: []Location{{Name: "api", Types: Types{"go"}, Commands: []Command{{Name: "build", Type: "go"}}}}}).Rows(false)
+	if got := single[0].PaletteLabel(); got != "api[go]: build" {
+		t.Errorf("single-type palette label = %q, want api[go]: build", got)
+	}
+}
+
 // Env is resolved per row: location env merged with the command's.
 func TestConfig_Rows_Env(t *testing.T) {
 	rows := rowsFixture().Rows(false)

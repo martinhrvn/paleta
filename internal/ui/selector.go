@@ -632,10 +632,9 @@ func (m *Model) loadCommands() {
 
 	for _, row := range m.config.Rows(m.focusActive) {
 		info := CommandInfo{
-			// The row shows the plain label; the project type is rendered separately
-			// as a trailing badge (see rowContent), which is what keeps same-named
-			// commands across types apart.
-			Display:       row.Label(),
+			// "api[npm]: build": the project type is part of the searchable text,
+			// which keeps same-named commands across types apart.
+			Display:       row.PaletteLabel(),
 			Directory:     row.Directory,
 			Command:       row.Command,
 			DisplayName:   row.DisplayName,
@@ -751,7 +750,7 @@ func (m Model) renderCursorRow(index, queuePos int, matched map[int]bool, width 
 	}
 	content := badgeStyle.Render(badgePlain) + rowContent(display, matched, selBaseStyle, selBaseStyle, selHlStyle, m.filteredCommands[index].Invalid, typ)
 	// Pad the surface fill to width-1; the accent bar occupies the first column.
-	if pad := (width - 1) - lipgloss.Width(badgePlain+rowPlain(display, typ)); pad > 0 {
+	if pad := (width - 1) - lipgloss.Width(badgePlain+rowPlain(display)); pad > 0 {
 		content += selBaseStyle.Render(strings.Repeat(" ", pad))
 	}
 	return selBarStyle.Render("▌") + content
@@ -769,7 +768,7 @@ func (m Model) renderQueuedRow(index, queuePos int, matched map[int]bool, width 
 	typ := m.filteredCommands[index].Type
 	badgePlain := queueBadgePlain(queuePos)
 	content := queuedBadgeStyle.Render(badgePlain) + rowContent(display, matched, queuedBaseStyle, queuedBaseStyle, queuedHlStyle, m.filteredCommands[index].Invalid, typ)
-	if pad := (width - 1) - lipgloss.Width(badgePlain+rowPlain(display, typ)); pad > 0 {
+	if pad := (width - 1) - lipgloss.Width(badgePlain+rowPlain(display)); pad > 0 {
 		content += queuedBaseStyle.Render(strings.Repeat(" ", pad))
 	}
 	return " " + content
@@ -778,52 +777,47 @@ func (m Model) renderQueuedRow(index, queuePos int, matched map[int]bool, width 
 // rowContent styles a list row's text (location + command), highlighting the
 // fuzzy-matched characters. baseLoc/baseCmd style the location and command
 // segments; hl styles matches. matched is keyed on byte offsets into display.
-// typ, when non-empty, is appended as a dim "[type]" badge so the project type
-// shows in the list (not just the preview); it is not part of display, so
-// fuzzy-match offsets are unaffected. When invalid, the row is drawn in peach
-// with an underline so an un-aliasable name (space, '*', …) stands out; the
-// style copies keep each state's background, so cursor/queued fills are preserved.
+// typ, when non-empty, is the project type the location half ends in
+// ("api[go]", see config.Row.PaletteLabel); that "[type]" suffix is drawn dim so
+// the location name stays prominent, while matches inside it still highlight.
+// When invalid, the row is drawn in peach with an underline so an un-aliasable
+// name (space, '*', …) stands out; the style copies keep each state's
+// background, so cursor/queued fills are preserved.
 func rowContent(display string, matched map[int]bool, baseLoc, baseCmd, hl lipgloss.Style, invalid bool, typ string) string {
 	if invalid {
 		baseLoc = baseLoc.Foreground(lipgloss.Color(ccPeach)).Underline(true)
 		baseCmd = baseCmd.Foreground(lipgloss.Color(ccPeach)).Underline(true)
 		hl = hl.Underline(true)
 	}
-	badge := ""
-	if typ != "" {
-		// Dim overlay foreground, keeping baseCmd's background so the badge blends
-		// into cursor/queued row fills.
-		badge = baseCmd.Foreground(lipgloss.Color(ccOverlay0)).Underline(false).Render(typeBadgePlain(typ))
+	loc, rest, ok := strings.Cut(display, ": ")
+	if !ok {
+		return highlightMatches(display, matched, baseCmd, hl)
 	}
-	if loc, rest, ok := strings.Cut(display, ": "); ok {
-		sep := len(loc) + len(": ")
-		var b strings.Builder
-		b.WriteString(baseLoc.Render(locIcon()))
-		b.WriteString(highlightMatches(loc, shiftMatched(matched, 0, len(loc)), baseLoc, hl))
-		b.WriteString(baseLoc.Render(": "))
-		b.WriteString(highlightMatches(rest, shiftMatched(matched, sep, len(display)), baseCmd, hl))
-		b.WriteString(badge)
-		return b.String()
+	name := loc
+	if suffix := "[" + typ + "]"; typ != "" && strings.HasSuffix(loc, suffix) {
+		name = strings.TrimSuffix(loc, suffix)
 	}
-	return highlightMatches(display, matched, baseCmd, hl) + badge
-}
+	// Dim overlay foreground, keeping baseLoc's background so the type blends
+	// into cursor/queued row fills.
+	dimType := baseLoc.Foreground(lipgloss.Color(ccOverlay0)).Underline(false)
+	sep := len(loc) + len(": ")
 
-// typeBadgePlain renders the trailing project-type tag (e.g. " [npm]"), or "" for
-// an empty type. Kept in sync with rowContent so rowPlain measures the same text.
-func typeBadgePlain(typ string) string {
-	if typ == "" {
-		return ""
-	}
-	return " [" + typ + "]"
+	var b strings.Builder
+	b.WriteString(baseLoc.Render(locIcon()))
+	b.WriteString(highlightMatches(name, shiftMatched(matched, 0, len(name)), baseLoc, hl))
+	b.WriteString(highlightMatches(loc[len(name):], shiftMatched(matched, len(name), len(loc)), dimType, hl))
+	b.WriteString(baseLoc.Render(": "))
+	b.WriteString(highlightMatches(rest, shiftMatched(matched, sep, len(display)), baseCmd, hl))
+	return b.String()
 }
 
 // rowPlain returns the visible (unstyled) text of a row, matching rowContent's
 // layout, for column-width measurement.
-func rowPlain(display, typ string) string {
-	if loc, rest, ok := strings.Cut(display, ": "); ok {
-		return locIcon() + loc + ": " + rest + typeBadgePlain(typ)
+func rowPlain(display string) string {
+	if _, _, ok := strings.Cut(display, ": "); ok {
+		return locIcon() + display
 	}
-	return display + typeBadgePlain(typ)
+	return display
 }
 
 // Nerd Font glyphs. Set PLT_NO_ICONS to fall back to plain ASCII for terminals
@@ -902,7 +896,7 @@ func isWordBoundary(text string, i int) bool {
 		return true
 	}
 	switch text[i-1] {
-	case ' ', ':', '-', '_', '/', '.':
+	case ' ', ':', '-', '_', '/', '.', '[':
 		return true
 	}
 	return false

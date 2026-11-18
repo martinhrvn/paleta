@@ -292,7 +292,9 @@ func (m *Model) insertScratchRows() {
 			name = loc.DisplayName()
 		}
 		info := CommandInfo{
-			Display:     name + ": " + e.Command,
+			// Same "name[type]: command" shape as typed rows, so "[tmp]" shows
+			// (dimmed) and is searchable.
+			Display:     name + "[" + scratchType + "]: " + e.Command,
 			Directory:   e.Dir,
 			Command:     e.Command,
 			DisplayName: name,

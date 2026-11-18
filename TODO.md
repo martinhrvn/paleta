@@ -44,6 +44,7 @@
   - [ ] plt get --location=X --command=Y - get execution details as JSON
   - [x] plt help - show usage and available commands
   - [x] plt lint [--fix] - check `.pltrc` for location/command names outside the alias-safe charset; `--fix` rewrites offending characters to `_` (comments/formatting preserved via yaml.Node round-trip)
+  - [x] Palette rows read `project[type]: command` (the `@project[type]:command` reference shape); the type is fuzzy-searchable, so `foopn` picks the pnpm `build` over the docker one
   - [x] Handle command-line argument parsing
 
 ### Command Execution

@@ -154,8 +154,8 @@ func TestSelector_CachedRowsAreRunnableWhileRefreshing(t *testing.T) {
 	m.loadCommands()
 	m.updateFilteredCommands()
 
-	if got := rowDisplays(m); len(got) != 1 || got[0] != "infra: build" {
-		t.Fatalf("rows = %v, want only the cached [infra: build]", got)
+	if got := rowDisplays(m); len(got) != 1 || got[0] != "infra[gradle]: build" {
+		t.Fatalf("rows = %v, want only the cached [infra[gradle]: build]", got)
 	}
 	m.currentIndex = 0
 	m.confirmSelection()

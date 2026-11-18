@@ -288,12 +288,12 @@ func TestModel_FormatListItemPlain(t *testing.T) {
 	display := m.filteredCommands[0].Display
 
 	// Unqueued item: two-space badge + plain row text.
-	if got := queueBadgePlain(0) + rowPlain(display, ""); got != "  frontend: npm start" {
+	if got := queueBadgePlain(0) + rowPlain(display); got != "  frontend: npm start" {
 		t.Errorf("expected '  frontend: npm start', got %q", got)
 	}
 
 	// Queued item: position 1 badge.
-	if got := queueBadgePlain(1) + rowPlain(display, ""); got != "1 frontend: npm start" {
+	if got := queueBadgePlain(1) + rowPlain(display); got != "1 frontend: npm start" {
 		t.Errorf("expected '1 frontend: npm start', got %q", got)
 	}
 
@@ -327,15 +327,16 @@ func TestModel_FormatListItemStyled(t *testing.T) {
 // longer prefix the command with a terminal glyph.
 func TestRowPlain_DropsCommandIcon(t *testing.T) {
 	t.Setenv("PLT_NO_ICONS", "") // icons enabled
-	got := rowPlain("frontend: npm start", "")
+	got := rowPlain("frontend: npm start")
 	want := locIcon() + "frontend: " + "npm start"
 	if got != want {
 		t.Errorf("rowPlain = %q, want %q (command icon should be removed)", got, want)
 	}
 }
 
-// The project type appears in the list row as a trailing "[type]" badge, so it's
-// visible without opening the preview.
+// The project type appears in the list row between the location and the
+// command (`api[go]: build`, the @project[type]:command shape), so it's visible
+// without opening the preview.
 func TestModel_ListRowShowsType(t *testing.T) {
 	t.Setenv("PLT_NO_ICONS", "1")
 	cfg := &config.Config{
@@ -347,14 +348,12 @@ func TestModel_ListRowShowsType(t *testing.T) {
 	}
 	m := createTestModel(cfg)
 
-	// Plain (measurement) text includes the badge.
-	if got := rowPlain(m.filteredCommands[0].Display, m.filteredCommands[0].Type); got != "api: build [go]" {
-		t.Errorf("rowPlain = %q, want %q", got, "api: build [go]")
+	if got := rowPlain(m.filteredCommands[0].Display); got != "api[go]: build" {
+		t.Errorf("rowPlain = %q, want %q", got, "api[go]: build")
 	}
-	// Styled row renders the badge too.
-	visible := ansi.Strip(m.formatListItem(0, 0, nil))
-	if !contains(visible, "[go]") {
-		t.Errorf("styled row should show type badge '[go]', got %q", visible)
+	// The styled row shows the same text, with no trailing badge.
+	if visible := ansi.Strip(m.formatListItem(0, 0, nil)); visible != "  api[go]: build" {
+		t.Errorf("styled row = %q, want %q", visible, "  api[go]: build")
 	}
 }
 
@@ -1045,24 +1044,72 @@ func TestModel_LoadCommands_MultiType(t *testing.T) {
 	if build == nil || up == nil {
 		t.Fatalf("expected both commands loaded, got %+v", m.commands)
 	}
-	// The type is no longer folded into Display; it renders as a trailing badge
-	// (see rowContent / rowPlain), so Display carries just the bare name.
-	if build.Display != "dotfiles: build" {
-		t.Errorf("build display = %q, want 'dotfiles: build'", build.Display)
+	// The type sits between location and command, so it is part of the
+	// searchable text and same-named commands across types stay apart.
+	if build.Display != "dotfiles[npm]: build" {
+		t.Errorf("build display = %q, want 'dotfiles[npm]: build'", build.Display)
 	}
-	if up.Display != "dotfiles: up" {
-		t.Errorf("up display = %q, want 'dotfiles: up'", up.Display)
+	if up.Display != "dotfiles[compose]: up" {
+		t.Errorf("up display = %q, want 'dotfiles[compose]: up'", up.Display)
 	}
-	// CommandInfo.Type is per-command, driving both the type badge and the preview.
+	// CommandInfo.Type is per-command, driving the type styling and the preview.
 	if build.Type != "npm" || up.Type != "compose" {
 		t.Errorf("per-command types = %q/%q, want npm/compose", build.Type, up.Type)
 	}
-	// The disambiguating type shows in the row via the badge.
-	if got := rowPlain(build.Display, build.Type); got != "dotfiles: build [npm]" {
-		t.Errorf("build row = %q, want 'dotfiles: build [npm]'", got)
+}
+
+// multiTypeBuilds is a location whose pnpm and docker types both have a `build`.
+func multiTypeBuilds() *config.Config {
+	return &config.Config{
+		Locations: []config.Location{{
+			Name:  "foo",
+			Types: config.Types{"pnpm", "docker"},
+			Commands: []config.Command{
+				{Name: "build", Command: "docker build .", Type: "docker"},
+				{Name: "build", Command: "pnpm build", Type: "pnpm"},
+			},
+		}},
 	}
-	if got := rowPlain(up.Display, up.Type); got != "dotfiles: up [compose]" {
-		t.Errorf("up row = %q, want 'dotfiles: up [compose]'", got)
+}
+
+// Typing part of the type picks between same-named commands of different types.
+func TestModel_FilterByType(t *testing.T) {
+	for _, tc := range []struct{ query, want string }{
+		{"foopn", "pnpm build"},
+		{"foodo", "docker build ."},
+		{"foopnbuild", "pnpm build"},
+		{"foo[dobu", "docker build ."},
+	} {
+		m := createTestModel(multiTypeBuilds())
+		m.searchInput.SetValue(tc.query)
+		m.updateFilteredCommands()
+		if len(m.filteredCommands) == 0 || m.filteredCommands[0].Command != tc.want {
+			t.Errorf("query %q: got %+v, want %q first", tc.query, m.filteredCommands, tc.want)
+		}
+	}
+}
+
+// The characters matched inside "[type]" are part of the match, so the row
+// highlights them, and the visible row text is unchanged by the highlighting.
+func TestModel_TypeMatchHighlighted(t *testing.T) {
+	t.Setenv("PLT_NO_ICONS", "1")
+	m := createTestModel(multiTypeBuilds())
+	m.searchInput.SetValue("foopn")
+	m.updateFilteredCommands()
+
+	row := m.filteredCommands[0]
+	open, closing := strings.Index(row.Display, "["), strings.Index(row.Display, "]")
+	inType := 0
+	for _, p := range row.matched {
+		if p > open && p < closing {
+			inType++
+		}
+	}
+	if inType != 2 {
+		t.Fatalf("matched %v in %q, want 'p','n' inside the type", row.matched, row.Display)
+	}
+	if got := ansi.Strip(m.formatListItem(0, 0, matchedFrom(row.matched))); got != "  foo[pnpm]: build" {
+		t.Errorf("visible row = %q, want %q", got, "  foo[pnpm]: build")
 	}
 }
 
@@ -1126,6 +1173,7 @@ func TestFuzzyScore_PrefersWordMatches(t *testing.T) {
 		{"contiguous word beats scattered", "run", "npm run dev", "return value"},
 		{"prefix beats later word", "npm", "npm test", "run npm"},
 		{"word boundary beats mid-word", "test", "go test ./...", "latest build"},
+		{"type after '[' is a word start", "pn", "a[pnpm]: build", "apn: build"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
