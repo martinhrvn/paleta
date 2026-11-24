@@ -5,7 +5,7 @@ type SelectionResult struct {
 	Directory   string            // The actual directory path where command should be executed
 	Command     string            // The command to run (raw, without env)
 	DisplayName string            // The display name shown in fzf (for reference)
-	Action      string            // "" (execute, the default), "edit", "pane", or "shell" (an ad-hoc command from the Ctrl+R picker)
+	Action      string            // "" (execute, the default), "edit", "pane", "shell" (an ad-hoc command from the Ctrl+R picker), or "cd" (move the shell into Directory, a worktree from Ctrl+W; no Command)
 	Env         map[string]string // Resolved environment variables to apply when running
 }
 

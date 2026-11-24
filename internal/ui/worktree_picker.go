@@ -37,6 +37,12 @@ func (m Model) updateWorktreePickMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		return m, m.confirmWorktreePicker()
 
+	case tea.KeyRunes:
+		if string(msg.Runes) == "c" {
+			return m, m.confirmWorktreeCd()
+		}
+		return m, nil
+
 	case tea.KeyEscape:
 		m.leaveMode()
 		return m, nil
@@ -62,10 +68,29 @@ func (m *Model) confirmWorktreePicker() tea.Cmd {
 	return tea.Quit
 }
 
+// confirmWorktreeCd ends the program with a "cd" result for the checkout under
+// the cursor, so the shell wrapper changes the shell's directory there (the
+// caller keeps your place inside the repository). Choosing the current checkout
+// just returns to the palette.
+func (m *Model) confirmWorktreeCd() tea.Cmd {
+	if m.worktreeCursor < 0 || m.worktreeCursor >= len(m.backend.Worktrees) {
+		m.leaveMode()
+		return nil
+	}
+	chosen := m.backend.Worktrees[m.worktreeCursor]
+	if chosen.Current {
+		m.leaveMode()
+		return nil
+	}
+	m.results = []SelectionResult{{Directory: chosen.Path, DisplayName: chosen.Label, Action: "cd"}}
+	m.quitting = true
+	return tea.Quit
+}
+
 func (m Model) renderWorktreePicker() string {
 	var lines []string
 	lines = append(lines, previewTitleStyle.Render("Switch worktree"))
-	lines = append(lines, statusStyle.Render("Show this project's commands as they run in another checkout."))
+	lines = append(lines, statusStyle.Render("Enter shows this project's commands in another checkout; c moves your shell there."))
 	lines = append(lines, "")
 
 	for i, wt := range m.backend.Worktrees {
@@ -84,6 +109,7 @@ func (m Model) renderWorktreePicker() string {
 	lines = append(lines, "")
 	lines = append(lines, m.renderHelp([][2]string{
 		{"Enter", "switch"},
+		{"c", "cd there"},
 		{"Esc", "cancel"},
 	}))
 

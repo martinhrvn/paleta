@@ -225,6 +225,17 @@ run_command() {
         return $?
     fi
 
+    # "cd": a worktree picked with Ctrl+W then c. This wrapper runs as its own
+    # process, so it cannot move the calling shell; print the line to run (the
+    # zsh Ctrl+P widget does the cd itself).
+    if [ "$action" = "cd" ]; then
+        local cd_dir
+        cd_dir=$(echo "$selection_json" | "$jq_cmd" -r '.directory')
+        print_info "plt can't change your shell's directory from here (the zsh Ctrl+P widget can). Run:"
+        printf 'cd %q\n' "$cd_dir"
+        return 0
+    fi
+
     if [ "$first_char" = "[" ]; then
         # Multi-select: JSON array, run as one compound command in queue order.
         local count

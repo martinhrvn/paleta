@@ -263,7 +263,7 @@ Inside the interactive selector (`plt` / `plt select`):
 | `Ctrl+Q` | Open the queue editor |
 | `Ctrl+F` | Toggle frecency sorting |
 | `Ctrl+P` | Pick which locations are focused |
-| `Ctrl+W` | Switch to another git worktree: the same commands, re-rooted in that checkout — **shown only when the repository has more than one worktree** |
+| `Ctrl+W` | Switch to another git worktree: the same commands, re-rooted in that checkout (`Enter`), or `c` to `cd` your shell there, keeping your subfolder when it exists (zsh `Ctrl+P` widget; the `plt` command prints the `cd` line) — **shown only when the repository has more than one worktree** |
 | `Ctrl+R` | Recent shell commands and pinned temporary commands (see below) |
 | `Ctrl+N` | Add projects (init wizard) |
 | `Esc` / `Ctrl+C` | Clear the search, then cancel |

@@ -105,6 +105,8 @@ shell-side entries listed in the memory note on new subcommands.
   `init_wizard.go`: a separate program the selector hands off to on Ctrl+N.
   `Run` returns an `Outcome`: results, or a request (Ctrl+N wizard, Ctrl+W
   worktree switch) that `commands.RunSelector` acts on before re-entering.
+  A worktree picked with `c` instead comes back as a `cd` result, which
+  `RunSelector` points at the matching subfolder before the wrapper changes into it.
   `list.go`: cursor and viewport arithmetic shared by every list. `theme.go`:
   palette and styles.
 - `backend.go`: `Backend`, the selector's only seam to the rest of the program.

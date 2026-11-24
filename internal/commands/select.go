@@ -50,6 +50,7 @@ func RunSelector(cfg *config.Config, stderr io.Writer) ([]SelectionResult, error
 				cfg = moved
 			}
 		default:
+			cdIntoWorktree(outcome.Results, be.Worktrees)
 			// ui.SelectionResult and commands.SelectionResult are the same type, so
 			// the model's results can be returned directly with no conversion.
 			return outcome.Results, nil
@@ -167,7 +168,8 @@ func findAuthoredByDir(cfg *config.Config, directory string) int {
 
 // selectionJSON is the wire format `plt select` prints for the shell wrapper.
 // The action field is present only when it carries meaning (edit / pane /
-// shell, the last for an ad-hoc command picked with Ctrl+R); the
+// shell, for an ad-hoc command picked with Ctrl+R / cd, for a worktree picked
+// with Ctrl+W, which carries no command); the
 // default execute action stays absent for backward compatibility.
 type selectionJSON struct {
 	Directory   string            `json:"directory"`
@@ -184,7 +186,7 @@ func toSelectionJSON(r SelectionResult) selectionJSON {
 		DisplayName: r.DisplayName,
 		Env:         r.Env,
 	}
-	if r.Action == "edit" || r.Action == "pane" || r.Action == "shell" {
+	if r.Action == "edit" || r.Action == "pane" || r.Action == "shell" || r.Action == "cd" {
 		j.Action = r.Action
 	}
 	return j

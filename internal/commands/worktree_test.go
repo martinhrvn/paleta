@@ -141,3 +141,28 @@ func TestMirrorBaseDir(t *testing.T) {
 		}
 	}
 }
+
+// Changing into another checkout keeps your place in the repository when the
+// same folder exists there, and falls back to the checkout's root when it does
+// not (or when you are outside the current checkout).
+func TestWorktreeCdDir(t *testing.T) {
+	root := t.TempDir()
+	cur := filepath.Join(root, "repo")
+	target := filepath.Join(root, "repo-wt")
+	for _, d := range []string{filepath.Join(cur, "apps", "web"), filepath.Join(cur, "apps", "new"), filepath.Join(target, "apps", "web")} {
+		if err := os.MkdirAll(d, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tests := []struct{ cwd, want string }{
+		{cur, target},
+		{filepath.Join(cur, "apps", "web"), filepath.Join(target, "apps", "web")},
+		{filepath.Join(cur, "apps", "new"), target},
+		{filepath.Join(root, "elsewhere"), target},
+	}
+	for _, tc := range tests {
+		if got := worktreeCdDir(cur, target, tc.cwd); got != tc.want {
+			t.Errorf("worktreeCdDir(cwd=%q) = %q, want %q", tc.cwd, got, tc.want)
+		}
+	}
+}

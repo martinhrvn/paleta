@@ -178,6 +178,19 @@ __plt_select_widget() {
             zle reset-prompt
             return 0
         fi
+        # "cd": a worktree picked with Ctrl+W then c. Run the cd as a command
+        # line so prompt hooks (precmd/chpwd) see the new directory.
+        if [[ "$action" = "cd" ]]; then
+            local cd_dir=$("$jq_cmd" -r '.directory' <<< "$selection_json")
+            if [[ "$cd_dir" = "null" || ! -d "$cd_dir" ]]; then
+                echo "\nWorktree directory not found: $cd_dir" >&2
+                zle reset-prompt
+                return 1
+            fi
+            BUFFER="cd -- ${(q)cd_dir}"
+            zle accept-line
+            return 0
+        fi
 
         if [[ "$first_char" = "[" ]]; then
             # Multi-select: JSON array - one compound command, env included, exactly

@@ -112,3 +112,35 @@ func TestWorktreePicker_EnterOnCurrentJustLeaves(t *testing.T) {
 		t.Errorf("worktree = %q quitting = %v, want no switch", m.worktree, m.quitting)
 	}
 }
+
+// `c` changes the shell's directory to the checkout under the cursor instead of
+// re-rooting the palette: the program ends with a single "cd" result for the
+// wrapper to act on.
+func TestWorktreePicker_CdSwitchesShell(t *testing.T) {
+	m := worktreeTestModel()
+	m, _ = press(t, m, key(tea.KeyCtrlW))
+	if view := ansi.Strip(m.View()); !strings.Contains(view, "cd there") {
+		t.Errorf("picker help should advertise c:\n%s", view)
+	}
+	m, _ = press(t, m, key(tea.KeyUp))
+	m, cmd := press(t, m, runes("c"))
+	if !m.quitting || cmd == nil {
+		t.Fatal("c should quit the program")
+	}
+	if m.worktree != "" {
+		t.Errorf("worktree = %q, want no palette re-root", m.worktree)
+	}
+	if len(m.results) != 1 || m.results[0].Action != "cd" || m.results[0].Directory != "/repo" || m.results[0].Command != "" {
+		t.Errorf("results = %+v, want one cd to /repo", m.results)
+	}
+}
+
+// `c` on the checkout you are already in has nowhere to go: back to the palette.
+func TestWorktreePicker_CdOnCurrentJustLeaves(t *testing.T) {
+	m := worktreeTestModel()
+	m, _ = press(t, m, key(tea.KeyCtrlW))
+	m, _ = press(t, m, runes("c"))
+	if m.mode != modeNormal || m.quitting || len(m.results) != 0 {
+		t.Errorf("mode = %v quitting = %v results = %+v, want back in the palette", m.mode, m.quitting, m.results)
+	}
+}

@@ -211,3 +211,15 @@ func TestMarshalSelectionShellAction(t *testing.T) {
 		t.Fatalf("selection JSON = %s", got)
 	}
 }
+
+// A worktree cd carries only the directory and the action; the wrapper changes
+// into it rather than running anything.
+func TestMarshalSelectionCdAction(t *testing.T) {
+	out, err := MarshalSelection([]SelectionResult{{Directory: "/repo-wt", Action: "cd"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(out); !strings.Contains(got, `"action":"cd"`) || !strings.Contains(got, `"directory":"/repo-wt"`) {
+		t.Fatalf("selection JSON = %s", got)
+	}
+}

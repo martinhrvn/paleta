@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -114,6 +115,32 @@ func mirrorBaseDir(current, target, baseDir string) string {
 		return target
 	}
 	return filepath.Join(target, rel)
+}
+
+// cdIntoWorktree points each "cd" result (a checkout picked with Ctrl+W) at the
+// working directory's counterpart inside that checkout.
+func cdIntoWorktree(results []ui.SelectionResult, worktrees []ui.WorktreeEntry) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	current, _ := currentWorktree(worktrees)
+	for i := range results {
+		if results[i].Action == "cd" {
+			results[i].Directory = worktreeCdDir(current.Path, results[i].Directory, cwd)
+		}
+	}
+}
+
+// worktreeCdDir is where changing into the target checkout lands: the folder
+// matching cwd's place in the current checkout when the target has it, else
+// the target's root.
+func worktreeCdDir(current, target, cwd string) string {
+	dir := mirrorBaseDir(current, target, realPath(cwd))
+	if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		return dir
+	}
+	return target
 }
 
 // isWithin reports whether path is root or lies under it.
